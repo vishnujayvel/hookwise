@@ -1,0 +1,42 @@
+# hookwise.yaml -- Minimal Configuration
+# ========================================
+# Guards-only setup. Blocks dangerous commands and requires confirmation
+# for potentially destructive operations. No coaching, analytics, or
+# status line -- just safety rails.
+#
+# Usage: Copy this file to your project root as hookwise.yaml
+#        then run: hookwise init --force
+
+version: 1
+
+# Guard rules: evaluated on every PreToolUse event.
+# First matching rule wins. If no rule matches, the tool call is allowed.
+guards:
+  # Block recursive deletion of root or home directories
+  - match: "Bash"
+    action: block
+    when: 'tool_input.command contains "rm -rf /"'
+    reason: "Blocked: recursive delete of root directory"
+
+  - match: "Bash"
+    action: block
+    when: 'tool_input.command contains "rm -rf ~"'
+    reason: "Blocked: recursive delete of home directory"
+
+  # Require confirmation for force pushes
+  - match: "Bash"
+    action: confirm
+    when: 'tool_input.command contains "force push"'
+    reason: "Force push requires confirmation"
+
+  # Require confirmation for any --force flag
+  - match: "Bash"
+    action: confirm
+    when: 'tool_input.command contains "--force"'
+    reason: "Force flag detected, please confirm"
+
+  # Warn when reading .env files
+  - match: "Read"
+    action: warn
+    when: 'tool_input.file_path ends_with ".env"'
+    reason: "Accessing .env file - may contain secrets"

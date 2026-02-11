@@ -1,0 +1,17 @@
+guards:
+  - match: "Bash"
+    action: block
+    when: 'tool_input.command contains "rm -rf /"'
+    reason: "Blocked: recursive delete of root directory"
+  - match: "Bash"
+    action: block
+    when: 'tool_input.command contains "rm -rf ~"'
+    reason: "Blocked: recursive delete of home directory"
+  - match: "Bash"
+    action: confirm
+    when: 'tool_input.command contains "force push"'
+    reason: "Force push requires confirmation"
+  - match: "Bash"
+    action: confirm
+    when: 'tool_input.command contains "--force"'
+    reason: "Force flag detected, please confirm"

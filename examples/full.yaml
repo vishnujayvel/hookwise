@@ -1,0 +1,104 @@
+# hookwise.yaml -- Full Configuration
+# =====================================
+# All features enabled with sensible defaults. This is the kitchen-sink
+# config -- guards, coaching, analytics, cost tracking, transcript backup,
+# and a comprehensive status line.
+#
+# Usage: Copy this file to your project root as hookwise.yaml
+#        Customize thresholds and budgets to match your workflow.
+
+version: 1
+
+# Guard rules: safety rails for tool calls
+guards:
+  # Destructive command protection
+  - match: "Bash"
+    action: block
+    when: 'tool_input.command contains "rm -rf /"'
+    reason: "Blocked: recursive delete of root directory"
+
+  - match: "Bash"
+    action: block
+    when: 'tool_input.command contains "rm -rf ~"'
+    reason: "Blocked: recursive delete of home directory"
+
+  # Force operation confirmation
+  - match: "Bash"
+    action: confirm
+    when: 'tool_input.command contains "force push"'
+    reason: "Force push requires confirmation"
+
+  - match: "Bash"
+    action: confirm
+    when: 'tool_input.command contains "--force"'
+    reason: "Force flag detected, please confirm"
+
+  # Secret file protection
+  - match: "Read"
+    action: warn
+    when: 'tool_input.file_path ends_with ".env"'
+    reason: "Accessing .env file - may contain secrets"
+
+  - match: "Read"
+    action: warn
+    when: 'tool_input.file_path contains "credentials"'
+    reason: "Accessing credentials file"
+
+  - match: "Write"
+    action: confirm
+    when: 'tool_input.file_path ends_with ".env"'
+    reason: "Writing to .env file - verify no secrets are exposed"
+
+# Coaching: behavioral nudges and self-awareness tools
+coaching:
+  enabled: true
+
+  # Metacognition prompts every 5 minutes
+  metacognition:
+    enabled: true
+    interval_minutes: 5
+
+  # Builder trap detection with escalating alerts
+  builder_trap:
+    enabled: true
+    yellow_threshold_minutes: 30
+    orange_threshold_minutes: 60
+    red_threshold_minutes: 90
+
+  # Communication coach (disable if not doing interview prep)
+  communication_coach:
+    enabled: false
+
+# Analytics: usage tracking and authorship metrics
+analytics:
+  enabled: true
+  track_sessions: true
+  track_tool_calls: true
+  track_authorship: true
+
+# Cost tracking: monitor API usage spending
+cost_tracking:
+  enabled: true
+  daily_budget_usd: 10.00    # daily spending limit in USD
+  warn_at_percent: 80        # warn when reaching this % of budget
+
+# Transcript backup: save session transcripts for review
+transcript_backup:
+  enabled: true
+  max_dir_size_mb: 100       # maximum backup directory size in MB
+
+# Status line: comprehensive metrics display
+status_line:
+  enabled: true
+  segments:
+    - ai_ratio       # AI vs human authorship percentage
+    - session        # session duration and tool call count
+    - builder_trap   # builder trap status indicator
+    - cost           # current cost vs daily budget
+
+# Global settings
+settings:
+  # Handler timeout in seconds (applies to script handlers)
+  timeout: 10
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  log_level: INFO

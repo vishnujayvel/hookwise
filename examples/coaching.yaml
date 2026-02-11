@@ -1,0 +1,60 @@
+# hookwise.yaml -- Coaching Configuration
+# =========================================
+# Guards plus behavioral coaching features: metacognition prompts and
+# builder trap detection. Includes a status line showing session info
+# and coaching indicators.
+#
+# Usage: Copy this file to your project root as hookwise.yaml
+
+version: 1
+
+# Guard rules for safety
+guards:
+  - match: "Bash"
+    action: block
+    when: 'tool_input.command contains "rm -rf /"'
+    reason: "Blocked: recursive delete of root directory"
+
+  - match: "Bash"
+    action: block
+    when: 'tool_input.command contains "rm -rf ~"'
+    reason: "Blocked: recursive delete of home directory"
+
+  - match: "Bash"
+    action: confirm
+    when: 'tool_input.command contains "force push"'
+    reason: "Force push requires confirmation"
+
+  - match: "Bash"
+    action: confirm
+    when: 'tool_input.command contains "--force"'
+    reason: "Force flag detected, please confirm"
+
+# Coaching module: behavioral nudges and self-awareness tools
+coaching:
+  enabled: true
+
+  # Metacognition prompts: periodic questions to encourage reflection
+  metacognition:
+    enabled: true
+    # How often to show a metacognition prompt (in minutes)
+    interval_minutes: 5
+
+  # Builder trap detection: alerts when you've been building too long
+  # without stepping back to think about design or architecture
+  builder_trap:
+    enabled: true
+    yellow_threshold_minutes: 30   # first gentle nudge
+    orange_threshold_minutes: 60   # stronger nudge
+    red_threshold_minutes: 90      # urgent: take a break
+
+  # Communication coach: disabled by default, enable for interview prep
+  communication_coach:
+    enabled: false
+
+# Status line: shows coaching indicators at the bottom of Claude Code
+status_line:
+  enabled: true
+  segments:
+    - session        # session duration
+    - builder_trap   # builder trap status indicator

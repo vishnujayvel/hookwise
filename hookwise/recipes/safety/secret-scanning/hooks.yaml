@@ -1,0 +1,13 @@
+guards:
+  - match: "Read"
+    action: warn
+    when: 'tool_input.file_path ends_with ".env"'
+    reason: "Accessing .env file - may contain secrets"
+  - match: "Read"
+    action: warn
+    when: 'tool_input.file_path contains "credentials"'
+    reason: "Accessing credentials file"
+  - match: "Write"
+    action: confirm
+    when: 'tool_input.file_path ends_with ".env"'
+    reason: "Writing to .env file - verify no secrets are exposed"

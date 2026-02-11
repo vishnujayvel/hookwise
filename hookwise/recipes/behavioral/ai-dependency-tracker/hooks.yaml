@@ -1,0 +1,9 @@
+analytics:
+  enabled: true
+  track_authorship: true
+  track_sessions: true
+status_line:
+  enabled: true
+  segments:
+    - ai_ratio
+    - session
