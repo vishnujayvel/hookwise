@@ -1,0 +1,44 @@
+# v0.1.0 hookwise config — backward compatibility fixture
+version: 1
+
+guards:
+  - match: "tool_name:Bash"
+    action: block
+    reason: "Bash blocked for safety"
+    when: "tool_input.command contains 'rm -rf'"
+  - match: "tool_name:Write"
+    action: warn
+    reason: "Write operation detected"
+
+coaching:
+  metacognition:
+    enabled: true
+    interval_seconds: 300
+  builder_trap:
+    enabled: true
+    thresholds:
+      yellow: 30
+      orange: 60
+      red: 90
+    tooling_patterns:
+      - npm
+      - pip
+    practice_tools:
+      - vitest
+      - pytest
+
+handlers:
+  - name: old-python-guard
+    type: script
+    events:
+      - PreToolUse
+    command: hooks/guard.py
+  - name: analytics-collector
+    type: script
+    events:
+      - Stop
+    command: python3 hooks/analytics.py
+
+settings:
+  log_level: debug
+  handler_timeout_seconds: 15

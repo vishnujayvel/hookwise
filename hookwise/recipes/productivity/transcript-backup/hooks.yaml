@@ -1,3 +1,0 @@
-transcript_backup:
-  enabled: true
-  max_dir_size_mb: 100

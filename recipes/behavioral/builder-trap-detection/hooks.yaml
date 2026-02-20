@@ -1,0 +1,30 @@
+name: builder-trap-detection
+version: "1.0.0"
+description: Detect when the developer is spending too much time on tooling/infrastructure instead of core work.
+events:
+  - PostToolUse
+  - Stop
+config:
+  enabled: true
+  thresholds:
+    yellow: 30
+    orange: 60
+    red: 90
+  toolingPatterns:
+    - npm
+    - pip
+    - brew
+    - cargo
+    - apt
+    - docker
+    - webpack
+    - vite
+    - tsup
+    - rollup
+    - eslint
+    - prettier
+  practiceTools:
+    - vitest
+    - jest
+    - pytest
+    - mocha

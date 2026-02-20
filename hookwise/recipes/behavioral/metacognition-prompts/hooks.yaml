@@ -1,7 +1,0 @@
-coaching:
-  enabled: true
-  metacognition:
-    enabled: true
-    interval_minutes: 5
-  communication_coach:
-    enabled: false

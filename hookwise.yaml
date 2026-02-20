@@ -1,0 +1,13 @@
+# hookwise.yaml -- minimal configuration
+# Docs: https://github.com/hookwise/hookwise
+version: 1
+
+guards:
+  - match: "Bash"
+    action: block
+    when: 'tool_input.command contains "rm -rf"'
+    reason: "Dangerous command blocked"
+  - match: "Bash"
+    action: confirm
+    when: 'tool_input.command contains "force push"'
+    reason: "Force push requires confirmation"

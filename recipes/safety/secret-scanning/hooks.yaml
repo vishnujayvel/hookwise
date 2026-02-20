@@ -1,0 +1,26 @@
+name: secret-scanning
+version: "1.0.0"
+description: Warn when Write tool creates or modifies files that may contain secrets (.env, credentials, .pem, API keys).
+events:
+  - PreToolUse
+config:
+  enabled: true
+  sensitiveFilePatterns:
+    - ".env"
+    - ".env.local"
+    - ".env.production"
+    - "credentials"
+    - "credentials.json"
+    - "secrets"
+    - ".pem"
+    - ".key"
+    - ".p12"
+    - ".pfx"
+    - "id_rsa"
+    - "id_ed25519"
+  apiKeyPatterns:
+    - "AKIA[0-9A-Z]{16}"
+    - "sk-[a-zA-Z0-9]{48}"
+    - "ghp_[a-zA-Z0-9]{36}"
+    - "glpat-[a-zA-Z0-9_-]{20}"
+    - "xoxb-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24}"

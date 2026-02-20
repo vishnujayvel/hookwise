@@ -1,0 +1,18 @@
+name: metacognition-prompts
+version: "1.0.0"
+description: Time-gated cognitive nudges that encourage reflective thinking during coding sessions.
+events:
+  - PostToolUse
+  - Stop
+config:
+  enabled: true
+  intervalSeconds: 300
+  prompts:
+    - "Are you solving the right problem, or the most interesting one?"
+    - "What would you do differently if you had to explain this to a junior dev?"
+    - "Is this complexity necessary, or are you over-engineering?"
+    - "When was the last time you ran the tests?"
+    - "Are you building what was asked for, or what you think should be built?"
+    - "Take a breath. What is the simplest thing that could work?"
+    - "Is this a rabbit hole? What was the original goal?"
+    - "Would you approve this in a code review?"

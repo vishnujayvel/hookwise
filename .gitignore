@@ -1,22 +1,9 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg-info/
+# Node.js / TypeScript
+node_modules/
 dist/
-build/
-*.egg
-
-# Virtual environments
-.venv/
-venv/
-ENV/
-
-# Testing
-.coverage
-.pytest_cache/
-htmlcov/
+*.tsbuildinfo
+.turbo/
+coverage/
 
 # IDE
 .idea/
@@ -30,3 +17,10 @@ Thumbs.db
 
 # Hookwise state (user-specific)
 ~/.hookwise/
+
+# Python (legacy v0.1.0)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage

@@ -1,0 +1,15 @@
+name: commit-without-tests
+version: "1.0.0"
+description: Block or warn on git commit if no tests have been run in the current session.
+events:
+  - PreToolUse
+  - PostToolUse
+config:
+  enabled: true
+  testPatterns:
+    - vitest
+    - jest
+    - pytest
+    - "npm test"
+    - "bun test"
+  action: block

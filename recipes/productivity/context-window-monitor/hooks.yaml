@@ -1,0 +1,11 @@
+name: context-window-monitor
+version: "1.0.0"
+description: Track estimated context window usage and warn at configurable thresholds.
+events:
+  - PostToolUse
+  - PreCompact
+config:
+  enabled: true
+  warningThreshold: 0.6
+  criticalThreshold: 0.8
+  maxTokens: 200000

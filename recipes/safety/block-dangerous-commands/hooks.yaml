@@ -1,0 +1,63 @@
+name: block-dangerous-commands
+version: "1.0.0"
+description: Guard rules that block destructive shell commands like rm -rf, force push, git reset --hard, and DROP TABLE.
+events:
+  - PreToolUse
+config:
+  enabled: true
+  patterns:
+    - "rm -rf"
+    - "rm -fr"
+    - "--force"
+    - "force push"
+    - "git reset --hard"
+    - "git clean -fd"
+    - "git checkout ."
+    - "DROP TABLE"
+    - "DROP DATABASE"
+    - "TRUNCATE TABLE"
+    - "> /dev/null"
+    - "mkfs."
+    - "dd if="
+    - ":(){:|:&};:"
+guards:
+  - match: Bash
+    action: block
+    reason: "Blocked: rm -rf is a destructive command"
+    when: 'command contains "rm -rf"'
+  - match: Bash
+    action: block
+    reason: "Blocked: rm -fr is a destructive command"
+    when: 'command contains "rm -fr"'
+  - match: Bash
+    action: block
+    reason: "Blocked: force push can overwrite remote history"
+    when: 'command contains "force push"'
+  - match: Bash
+    action: block
+    reason: "Blocked: --force push can overwrite remote history"
+    when: 'command contains "push --force"'
+  - match: Bash
+    action: block
+    reason: "Blocked: git reset --hard discards uncommitted changes"
+    when: 'command contains "git reset --hard"'
+  - match: Bash
+    action: block
+    reason: "Blocked: git clean -fd deletes untracked files"
+    when: 'command contains "git clean -fd"'
+  - match: Bash
+    action: block
+    reason: "Blocked: git checkout . discards all working tree changes"
+    when: 'command contains "git checkout ."'
+  - match: Bash
+    action: block
+    reason: "Blocked: DROP TABLE is a destructive SQL command"
+    when: 'command contains "DROP TABLE"'
+  - match: Bash
+    action: block
+    reason: "Blocked: DROP DATABASE is a destructive SQL command"
+    when: 'command contains "DROP DATABASE"'
+  - match: Bash
+    action: block
+    reason: "Blocked: TRUNCATE TABLE is a destructive SQL command"
+    when: 'command contains "TRUNCATE TABLE"'

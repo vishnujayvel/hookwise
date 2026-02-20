@@ -1,0 +1,14 @@
+name: ai-dependency-tracker
+version: "1.0.0"
+description: Track the ratio of AI-authored vs human-authored code changes using the authorship ledger.
+events:
+  - PostToolUse
+  - Stop
+config:
+  enabled: true
+  aiRatioThreshold: 0.8
+  warnOnHighRatio: true
+  trackTools:
+    - Write
+    - Edit
+    - NotebookEdit

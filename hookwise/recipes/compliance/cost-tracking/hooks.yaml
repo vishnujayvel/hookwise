@@ -1,8 +1,0 @@
-cost_tracking:
-  enabled: true
-  daily_budget_usd: 10.00
-  warn_at_percent: 80
-status_line:
-  enabled: true
-  segments:
-    - cost

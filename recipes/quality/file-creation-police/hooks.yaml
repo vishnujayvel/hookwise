@@ -1,0 +1,16 @@
+name: file-creation-police
+version: "1.0.0"
+description: Track file creation events and warn when too many new files are created. Detect similar-named files.
+events:
+  - PreToolUse
+  - PostToolUse
+config:
+  enabled: true
+  maxNewFiles: 5
+  ignorePatterns:
+    - "*.test.ts"
+    - "*.test.tsx"
+    - "*.spec.ts"
+    - "*.spec.tsx"
+    - "*.test.js"
+    - "*.spec.js"

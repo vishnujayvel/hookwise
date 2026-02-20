@@ -1,0 +1,13 @@
+name: cost-tracking
+version: "1.0.0"
+description: Token estimation and budget enforcement for Claude Code sessions.
+events:
+  - PostToolUse
+  - Stop
+config:
+  enabled: true
+  rates:
+    claude-sonnet: 0.003
+    claude-opus: 0.015
+  dailyBudget: 10
+  enforcement: warn

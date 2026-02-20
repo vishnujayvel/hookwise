@@ -1,0 +1,9 @@
+name: transcript-backup
+version: "1.0.0"
+description: Archive PreCompact events for transcript backup before context window compaction.
+events:
+  - PreCompact
+config:
+  enabled: true
+  backupDir: ~/.hookwise/transcripts
+  maxSizeMb: 100

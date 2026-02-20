@@ -1,0 +1,17 @@
+name: streak-tracker
+version: "1.0.0"
+description: Track daily activity streaks for coding, testing, and AI ratio. Celebrate milestones.
+events:
+  - PostToolUse
+  - Stop
+  - SessionStart
+config:
+  enabled: true
+  aiRatioThreshold: 0.8
+  milestones:
+    - 7
+    - 14
+    - 30
+    - 60
+    - 90
+    - 365
