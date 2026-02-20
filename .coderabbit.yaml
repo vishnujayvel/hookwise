@@ -1,0 +1,36 @@
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "src/**/*.ts"
+      instructions: >
+        Core hookwise TypeScript source. Review for proper error handling,
+        guard/context/side-effect phase separation, and consistency with
+        the YAML-configured dispatcher architecture. Check that first-match-wins
+        logic is maintained in guard evaluation.
+    - path: "src/recipes/**"
+      instructions: >
+        Built-in hookwise recipes. Verify each recipe has proper category
+        (safety/behavioral/compliance/productivity), clear documentation,
+        and follows the composable recipe pattern.
+    - path: "tests/**/*.test.ts"
+      instructions: >
+        Tests using vitest. Check for proper use of HookRunner (subprocess)
+        and GuardTester (in-process) patterns. Ensure assertions use
+        HookResult helpers (assert_allowed/blocked/asks/warns/silent).
+    - path: "hookwise.yaml"
+      instructions: >
+        Main configuration file. Verify YAML structure matches the schema,
+        guard patterns use valid globs, and conditions are well-formed.
+
+chat:
+  auto_reply: true
