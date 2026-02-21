@@ -21,6 +21,7 @@ import type {
 import { isEventType, isHookPayload } from "./types.js";
 import { safeDispatch, logError, logDebug } from "./errors.js";
 import { loadConfig, getHandlersForEvent, getDefaultConfig } from "./config.js";
+import { evaluate } from "./guards.js";
 
 // --- Stdin Reading ---
 
@@ -374,12 +375,48 @@ export function dispatch(
     // Get handlers for this event
     const handlers = getHandlersForEvent(config, eventType);
 
-    // No handlers -> exit 0
-    if (handlers.length === 0) {
+    // No handlers AND no declarative guards -> exit 0
+    if (handlers.length === 0 && config.guards.length === 0) {
       return { stdout: null, stderr: null, exitCode: 0 };
     }
 
-    // Phase 1: Blocking Guards
+    // Phase 1a: Declarative guard rules (config.guards[])
+    // Evaluated on PreToolUse events only — first match wins
+    if (eventType === "PreToolUse" && config.guards.length > 0) {
+      try {
+        const toolName = payload.tool_name ?? "";
+        // Pass full payload so field paths like "tool_input.command" resolve correctly
+        const guardEval = evaluate(toolName, payload as Record<string, unknown>, config.guards);
+
+        if (guardEval.action === "block") {
+          const stdout = JSON.stringify({
+            decision: "block",
+            reason: guardEval.reason ?? "Blocked by guard rule",
+          });
+          return { stdout, stderr: null, exitCode: 0 };
+        }
+
+        if (guardEval.action === "confirm") {
+          const stdout = JSON.stringify({
+            decision: "block",
+            reason: guardEval.reason ?? "Requires confirmation",
+          });
+          return { stdout, stderr: null, exitCode: 0 };
+        }
+
+        if (guardEval.action === "warn" && guardEval.reason) {
+          logDebug(`Guard warning: ${guardEval.reason}`);
+        }
+      } catch (error) {
+        logError(
+          error instanceof Error ? error : new Error(String(error)),
+          { context: "declarativeGuardEvaluation" }
+        );
+        // Fail-open: guard error -> continue
+      }
+    }
+
+    // Phase 1b: Handler-based guards (handlers with phase: "guard")
     const guardResult = executeGuardPhase(handlers, payload);
     if (guardResult) {
       return guardResult;
