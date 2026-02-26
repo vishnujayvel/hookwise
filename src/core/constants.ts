@@ -47,3 +47,15 @@ export const PROJECT_CONFIG_FILE = "hookwise.yaml";
 
 /** Global config file path: ~/.hookwise/config.yaml */
 export const GLOBAL_CONFIG_PATH = join(DEFAULT_STATE_DIR, "config.yaml");
+
+/** Default daemon PID file path: ~/.hookwise/daemon.pid */
+export const DEFAULT_PID_PATH = join(DEFAULT_STATE_DIR, "daemon.pid");
+
+/** Default daemon log file path: ~/.hookwise/daemon.log */
+export const DEFAULT_DAEMON_LOG_PATH = join(DEFAULT_STATE_DIR, "daemon.log");
+
+/** Default calendar credentials path: ~/.hookwise/calendar-credentials.json */
+export const DEFAULT_CALENDAR_CREDENTIALS_PATH = join(DEFAULT_STATE_DIR, "calendar-credentials.json");
+
+/** Default feed timeout in seconds */
+export const DEFAULT_FEED_TIMEOUT = 10; // seconds

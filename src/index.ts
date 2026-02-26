@@ -1,8 +1,8 @@
 /**
- * hookwise v1.0 — Public API exports
+ * hookwise v1.1 — Public API exports
  *
  * Config-driven hook framework for Claude Code with guards,
- * analytics, coaching, and interactive TUI.
+ * analytics, coaching, feed platform, and interactive TUI.
  */
 
 // Core types
@@ -53,6 +53,16 @@ export type {
   FileConflict,
   TestScenario,
   ScenarioResult,
+  FeedProducer,
+  FeedDefinition,
+  FeedsConfig,
+  DaemonConfig,
+  PulseFeedConfig,
+  ProjectFeedConfig,
+  CalendarFeedConfig,
+  NewsFeedConfig,
+  CustomFeedConfig,
+  CacheEntry,
 } from "./core/types.js";
 
 // Type guards and constants
@@ -86,6 +96,9 @@ export {
   DEFAULT_TRANSCRIPT_DIR,
   PROJECT_CONFIG_FILE,
   GLOBAL_CONFIG_PATH,
+  DEFAULT_PID_PATH,
+  DEFAULT_DAEMON_LOG_PATH,
+  DEFAULT_CALENDAR_CREDENTIALS_PATH,
 } from "./core/constants.js";
 
 // Config engine
@@ -141,6 +154,9 @@ export {
 
 // Status Line
 export { render as renderStatusLine, BUILTIN_SEGMENTS } from "./core/status-line/index.js";
+export { renderTwoTier, DEFAULT_TWO_TIER_CONFIG } from "./core/status-line/index.js";
+export type { TwoTierConfig } from "./core/status-line/index.js";
+export { color, strip, RED, GREEN, YELLOW, BLUE, CYAN, DIM, BOLD } from "./core/status-line/index.js";
 
 // Greeting
 export { selectQuote } from "./core/greeting.js";
@@ -171,6 +187,61 @@ export {
   validateRecipe,
   mergeRecipeConfig,
 } from "./core/recipes.js";
+
+// Feed Platform — cache bus
+export {
+  isFresh,
+  mergeKey,
+  readKey,
+  readAll,
+} from "./core/feeds/index.js";
+
+// Feed Platform — registry and producers
+export {
+  createFeedRegistry,
+  createCommandProducer,
+  createPulseProducer,
+  mapElapsedToEmoji,
+  createProjectProducer,
+  createNewsProducer,
+  createCalendarProducer,
+  stripHtmlTags,
+  createInsightsProducer,
+  aggregateInsights,
+} from "./core/feeds/index.js";
+
+// Feed Platform — daemon lifecycle
+export {
+  isRunning,
+  startDaemon,
+  stopDaemon,
+  getDaemonStatus,
+} from "./core/feeds/index.js";
+
+// Feed Platform — daemon process internals
+export {
+  runDaemon,
+  daemonLog,
+  rotateLog,
+  registerBuiltinFeeds,
+  registerCustomFeeds,
+} from "./core/feeds/index.js";
+
+// Feed Platform — types
+export type {
+  FeedRegistry,
+  PulseData,
+  ProjectData,
+  NewsStory,
+  NewsData,
+  CalendarEvent,
+  CalendarData,
+  DaemonStartResult,
+  DaemonStopResult,
+  DaemonStatus,
+  FeedHealth,
+  InsightsData,
+} from "./core/feeds/index.js";
 
 // Testing
 export { HookRunner } from "./testing/hook-runner.js";

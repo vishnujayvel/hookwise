@@ -27,6 +27,7 @@ import {
   DEFAULT_HANDLER_TIMEOUT,
   DEFAULT_STATUS_DELIMITER,
   DEFAULT_TRANSCRIPT_DIR,
+  DEFAULT_DAEMON_LOG_PATH,
   PROJECT_CONFIG_FILE,
   GLOBAL_CONFIG_PATH,
 } from "./constants.js";
@@ -216,6 +217,45 @@ export function getDefaultConfig(): HooksConfig {
       stateDir: DEFAULT_STATE_DIR,
     },
     includes: [],
+    feeds: {
+      pulse: {
+        enabled: true,
+        intervalSeconds: 30,
+        thresholds: { green: 0, yellow: 30, orange: 60, red: 120, skull: 180 },
+      },
+      project: {
+        enabled: true,
+        intervalSeconds: 60,
+        showBranch: true,
+        showLastCommit: true,
+      },
+      calendar: {
+        enabled: false,
+        intervalSeconds: 300,
+        lookaheadMinutes: 120,
+        calendars: ["primary"],
+      },
+      news: {
+        enabled: false,
+        source: "hackernews",
+        rssUrl: null,
+        intervalSeconds: 1800,
+        maxStories: 5,
+        rotationMinutes: 30,
+      },
+      insights: {
+        enabled: true,
+        intervalSeconds: 120,
+        stalenessDays: 30,
+        usageDataPath: "~/.claude/usage-data",
+      },
+      custom: [],
+    },
+    daemon: {
+      autoStart: true,
+      inactivityTimeoutMinutes: 120,
+      logFile: DEFAULT_DAEMON_LOG_PATH,
+    },
   };
 }
 
@@ -425,6 +465,8 @@ const KNOWN_SECTIONS = new Set([
   "handlers",
   "settings",
   "includes",
+  "feeds",
+  "daemon",
 ]);
 
 /** Known top-level sections in snake_case (for YAML) */
@@ -441,6 +483,8 @@ const KNOWN_SECTIONS_SNAKE = new Set([
   "handlers",
   "settings",
   "includes",
+  "feeds",
+  "daemon",
 ]);
 
 /**
@@ -593,6 +637,177 @@ export function validateConfig(raw: Record<string, unknown>): ValidationResult {
         path: "includes",
         message: "includes must be an array of file paths",
         suggestion: "Use: includes: ['./recipes/safety.yaml']",
+      });
+    }
+  }
+
+  // Validate feeds
+  if (raw.feeds !== undefined && typeof raw.feeds === "object" && raw.feeds !== null) {
+    const feeds = raw.feeds as Record<string, unknown>;
+
+    // Validate feeds.pulse
+    if (feeds.pulse !== undefined && typeof feeds.pulse === "object" && feeds.pulse !== null) {
+      const pulse = feeds.pulse as Record<string, unknown>;
+      const interval = (pulse.interval_seconds ?? pulse.intervalSeconds) as number | undefined;
+      if (interval !== undefined && (typeof interval !== "number" || interval <= 0)) {
+        errors.push({
+          path: "feeds.pulse.interval_seconds",
+          message: "interval_seconds must be a positive number",
+          suggestion: "Set interval_seconds: 30",
+        });
+      }
+      // Validate thresholds are ascending
+      if (pulse.thresholds !== undefined && typeof pulse.thresholds === "object" && pulse.thresholds !== null) {
+        const t = pulse.thresholds as Record<string, unknown>;
+        const green = t.green as number | undefined;
+        const yellow = t.yellow as number | undefined;
+        const orange = t.orange as number | undefined;
+        const red = t.red as number | undefined;
+        const skull = t.skull as number | undefined;
+        if (
+          green !== undefined && yellow !== undefined && orange !== undefined &&
+          red !== undefined && skull !== undefined
+        ) {
+          if (!(green < yellow && yellow < orange && orange < red && red < skull)) {
+            errors.push({
+              path: "feeds.pulse.thresholds",
+              message: "Pulse thresholds must be ascending: green < yellow < orange < red < skull",
+              suggestion: "Example: green: 0, yellow: 30, orange: 60, red: 120, skull: 180",
+            });
+          }
+        }
+      }
+    }
+
+    // Validate feeds.project
+    if (feeds.project !== undefined && typeof feeds.project === "object" && feeds.project !== null) {
+      const project = feeds.project as Record<string, unknown>;
+      const interval = (project.interval_seconds ?? project.intervalSeconds) as number | undefined;
+      if (interval !== undefined && (typeof interval !== "number" || interval <= 0)) {
+        errors.push({
+          path: "feeds.project.interval_seconds",
+          message: "interval_seconds must be a positive number",
+          suggestion: "Set interval_seconds: 60",
+        });
+      }
+    }
+
+    // Validate feeds.calendar
+    if (feeds.calendar !== undefined && typeof feeds.calendar === "object" && feeds.calendar !== null) {
+      const calendar = feeds.calendar as Record<string, unknown>;
+      const interval = (calendar.interval_seconds ?? calendar.intervalSeconds) as number | undefined;
+      if (interval !== undefined && (typeof interval !== "number" || interval <= 0)) {
+        errors.push({
+          path: "feeds.calendar.interval_seconds",
+          message: "interval_seconds must be a positive number",
+          suggestion: "Set interval_seconds: 300",
+        });
+      }
+    }
+
+    // Validate feeds.news
+    if (feeds.news !== undefined && typeof feeds.news === "object" && feeds.news !== null) {
+      const news = feeds.news as Record<string, unknown>;
+      const interval = (news.interval_seconds ?? news.intervalSeconds) as number | undefined;
+      if (interval !== undefined && (typeof interval !== "number" || interval <= 0)) {
+        errors.push({
+          path: "feeds.news.interval_seconds",
+          message: "interval_seconds must be a positive number",
+          suggestion: "Set interval_seconds: 1800",
+        });
+      }
+      if (news.source !== undefined && news.source !== "hackernews" && news.source !== "rss") {
+        errors.push({
+          path: "feeds.news.source",
+          message: `Invalid news source: "${news.source}"`,
+          suggestion: "Use one of: hackernews, rss",
+        });
+      }
+      // Cross-field: source "rss" requires rss_url
+      if (news.source === "rss") {
+        const rssUrl = (news.rss_url ?? news.rssUrl) as string | null | undefined;
+        if (!rssUrl || typeof rssUrl !== "string") {
+          errors.push({
+            path: "feeds.news.rss_url",
+            message: "rss_url is required when source is 'rss'",
+            suggestion: "Set rss_url: 'https://example.com/feed.xml'",
+          });
+        }
+      }
+    }
+
+    // Validate feeds.insights
+    if (feeds.insights !== undefined && typeof feeds.insights === "object" && feeds.insights !== null) {
+      const insights = feeds.insights as Record<string, unknown>;
+      const interval = (insights.interval_seconds ?? insights.intervalSeconds) as number | undefined;
+      if (interval !== undefined && (typeof interval !== "number" || interval <= 0)) {
+        errors.push({
+          path: "feeds.insights.interval_seconds",
+          message: "interval_seconds must be a positive number",
+          suggestion: "Set interval_seconds: 120",
+        });
+      }
+      const stalenessDays = (insights.staleness_days ?? insights.stalenessDays) as number | undefined;
+      if (stalenessDays !== undefined && (typeof stalenessDays !== "number" || stalenessDays <= 0)) {
+        errors.push({
+          path: "feeds.insights.staleness_days",
+          message: "staleness_days must be a positive number",
+          suggestion: "Set staleness_days: 30",
+        });
+      }
+    }
+
+    // Validate feeds.custom
+    if (feeds.custom !== undefined) {
+      if (!Array.isArray(feeds.custom)) {
+        errors.push({
+          path: "feeds.custom",
+          message: "feeds.custom must be an array",
+          suggestion: "Use: custom: [{name: '...', command: '...', interval_seconds: 60}]",
+        });
+      } else {
+        for (let i = 0; i < feeds.custom.length; i++) {
+          const entry = feeds.custom[i] as Record<string, unknown> | undefined;
+          if (!entry || typeof entry !== "object") {
+            errors.push({
+              path: `feeds.custom[${i}]`,
+              message: "custom feed entry must be an object",
+            });
+            continue;
+          }
+          if (!entry.name || typeof entry.name !== "string") {
+            errors.push({
+              path: `feeds.custom[${i}].name`,
+              message: "custom feed must have a 'name' string",
+            });
+          }
+          if (!entry.command || typeof entry.command !== "string") {
+            errors.push({
+              path: `feeds.custom[${i}].command`,
+              message: "custom feed must have a 'command' string",
+            });
+          }
+          const customInterval = (entry.interval_seconds ?? entry.intervalSeconds) as number | undefined;
+          if (customInterval !== undefined && (typeof customInterval !== "number" || customInterval <= 0)) {
+            errors.push({
+              path: `feeds.custom[${i}].interval_seconds`,
+              message: "interval_seconds must be a positive number",
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Validate daemon
+  if (raw.daemon !== undefined && typeof raw.daemon === "object" && raw.daemon !== null) {
+    const daemon = raw.daemon as Record<string, unknown>;
+    const timeout = (daemon.inactivity_timeout_minutes ?? daemon.inactivityTimeoutMinutes) as number | undefined;
+    if (timeout !== undefined && (typeof timeout !== "number" || timeout <= 0)) {
+      errors.push({
+        path: "daemon.inactivity_timeout_minutes",
+        message: "inactivity_timeout_minutes must be a positive number",
+        suggestion: "Set inactivity_timeout_minutes: 120",
       });
     }
   }

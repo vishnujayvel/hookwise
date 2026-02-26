@@ -22,6 +22,8 @@ import { isEventType, isHookPayload } from "./types.js";
 import { safeDispatch, logError, logDebug } from "./errors.js";
 import { loadConfig, getHandlersForEvent, getDefaultConfig } from "./config.js";
 import { evaluate } from "./guards.js";
+import { mergeKey } from "./feeds/cache-bus.js";
+import { isRunning, startDaemon } from "./feeds/daemon-manager.js";
 
 // --- Stdin Reading ---
 
@@ -372,6 +374,26 @@ export function dispatch(
       }
     }
 
+    // Feed platform: write heartbeat + CWD for daemon consumption (on every dispatch)
+    try {
+      const cachePath = config.statusLine.cachePath;
+      mergeKey(cachePath, "_heartbeat", { value: Date.now() }, 999999);
+      mergeKey(cachePath, "_cwd", { value: process.cwd() }, 999999);
+    } catch {
+      // Fail-open: feed cache write errors must never affect dispatch result
+    }
+
+    // Feed platform: auto-start daemon on SessionStart
+    if (eventType === "SessionStart" && config.daemon?.autoStart) {
+      try {
+        if (!isRunning()) {
+          startDaemon(options?.projectDir ?? process.cwd());
+        }
+      } catch {
+        // Fail-open: daemon start failure must never affect dispatch
+      }
+    }
+
     // Get handlers for this event
     const handlers = getHandlersForEvent(config, eventType);
 
@@ -379,6 +401,9 @@ export function dispatch(
     if (handlers.length === 0 && config.guards.length === 0) {
       return { stdout: null, stderr: null, exitCode: 0 };
     }
+
+    // Track warn context from declarative guards (surfaced to user in output)
+    let warnContext: string | null = null;
 
     // Phase 1a: Declarative guard rules (config.guards[])
     // Evaluated on PreToolUse events only — first match wins
@@ -390,22 +415,29 @@ export function dispatch(
 
         if (guardEval.action === "block") {
           const stdout = JSON.stringify({
-            decision: "block",
-            reason: guardEval.reason ?? "Blocked by guard rule",
+            hookSpecificOutput: {
+              hookEventName: "PreToolUse",
+              permissionDecision: "deny",
+              permissionDecisionReason: guardEval.reason ?? "Blocked by guard rule",
+            },
           });
           return { stdout, stderr: null, exitCode: 0 };
         }
 
         if (guardEval.action === "confirm") {
           const stdout = JSON.stringify({
-            decision: "block",
-            reason: guardEval.reason ?? "Requires confirmation",
+            hookSpecificOutput: {
+              hookEventName: "PreToolUse",
+              permissionDecision: "ask",
+              permissionDecisionReason: guardEval.reason ?? "Requires confirmation",
+            },
           });
           return { stdout, stderr: null, exitCode: 0 };
         }
 
         if (guardEval.action === "warn" && guardEval.reason) {
           logDebug(`Guard warning: ${guardEval.reason}`);
+          warnContext = `\u26a0\ufe0f Guard warning: ${guardEval.reason}`;
         }
       } catch (error) {
         logError(
@@ -428,8 +460,40 @@ export function dispatch(
     // Phase 3: Non-Blocking Side Effects (after stdout decided)
     executeSideEffectPhase(handlers, payload);
 
+    // Merge warn context with Phase 2 context output
+    let finalStdout: string | null = contextStdout;
+
+    if (warnContext) {
+      if (contextStdout) {
+        // Merge: parse existing context, combine additionalContext strings
+        try {
+          const existing = JSON.parse(contextStdout) as {
+            hookSpecificOutput?: { additionalContext?: string };
+          };
+          const existingContext =
+            existing.hookSpecificOutput?.additionalContext ?? "";
+          const merged = existingContext
+            ? `${warnContext}\n\n${existingContext}`
+            : warnContext;
+          finalStdout = JSON.stringify({
+            hookSpecificOutput: { additionalContext: merged },
+          });
+        } catch {
+          // If parsing fails, just use warn context alone
+          finalStdout = JSON.stringify({
+            hookSpecificOutput: { additionalContext: warnContext },
+          });
+        }
+      } else {
+        // No Phase 2 context — output warn context as stdout
+        finalStdout = JSON.stringify({
+          hookSpecificOutput: { additionalContext: warnContext },
+        });
+      }
+    }
+
     return {
-      stdout: contextStdout,
+      stdout: finalStdout,
       stderr: null,
       exitCode: 0,
     };

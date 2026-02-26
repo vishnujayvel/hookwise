@@ -32,6 +32,20 @@ export class HookResult {
   }
 
   /**
+   * Extract permissionDecision from hookSpecificOutput, if present.
+   * Returns null if not in hookSpecificOutput format.
+   */
+  get permissionDecision(): string | null {
+    const parsed = this.json;
+    if (!parsed) return null;
+    const hso = parsed.hookSpecificOutput as Record<string, unknown> | undefined;
+    if (hso && typeof hso === "object") {
+      return (hso.permissionDecision as string) ?? null;
+    }
+    return null;
+  }
+
+  /**
    * Parse stdout as JSON, caching the result.
    * Returns null if stdout is not valid JSON.
    */
@@ -74,6 +88,20 @@ export class HookResult {
           `stdout: ${this.stdout}`
       );
     }
+
+    const pd = this.permissionDecision;
+    if (pd === "deny") {
+      throw new Error(
+        `Expected hook to allow, but got permissionDecision: "deny"\n` +
+          `stdout: ${this.stdout}`
+      );
+    }
+    if (pd === "ask") {
+      throw new Error(
+        `Expected hook to allow, but got permissionDecision: "ask" (confirmation required)\n` +
+          `stdout: ${this.stdout}`
+      );
+    }
   }
 
   /**
@@ -84,15 +112,22 @@ export class HookResult {
    */
   assertBlocked(reasonContains?: string): void {
     const parsed = this.json;
-    if (!parsed || parsed.decision !== "block") {
+    const isLegacyBlock = parsed?.decision === "block";
+    const isNativeBlock = this.permissionDecision === "deny";
+
+    if (!parsed || (!isLegacyBlock && !isNativeBlock)) {
       throw new Error(
-        `Expected hook to block, but got decision: ${parsed?.decision ?? "none"}\n` +
+        `Expected hook to block (decision: "block" or permissionDecision: "deny"), ` +
+          `but got: ${JSON.stringify(parsed)}\n` +
           `stdout: ${this.stdout}\nstderr: ${this.stderr}`
       );
     }
 
     if (reasonContains) {
-      const reason = String(parsed.reason ?? "");
+      const hso = parsed.hookSpecificOutput as Record<string, unknown> | undefined;
+      const reason = String(
+        (isNativeBlock && hso ? hso.permissionDecisionReason : parsed.reason) ?? ""
+      );
       if (!reason.includes(reasonContains)) {
         throw new Error(
           `Expected block reason to contain "${reasonContains}", but got: "${reason}"`
@@ -155,16 +190,33 @@ export class HookResult {
 
   /**
    * Assert the hook requested confirmation.
-   * Expects stdout to contain a confirm decision.
+   * Expects stdout to contain permissionDecision: "ask" or legacy decision: "confirm".
+   *
+   * @param reasonContains - Optional substring to check in the reason
    */
-  assertAsks(): void {
+  assertAsks(reasonContains?: string): void {
     const parsed = this.json;
-    if (!parsed || parsed.decision !== "confirm") {
+    const isLegacyConfirm = parsed?.decision === "confirm";
+    const isNativeAsk = this.permissionDecision === "ask";
+
+    if (!parsed || (!isLegacyConfirm && !isNativeAsk)) {
       throw new Error(
-        `Expected hook to ask for confirmation (decision: "confirm"), ` +
-          `but got decision: ${parsed?.decision ?? "none"}\n` +
+        `Expected hook to ask for confirmation (permissionDecision: "ask" or decision: "confirm"), ` +
+          `but got: ${JSON.stringify(parsed)}\n` +
           `stdout: ${this.stdout}\nstderr: ${this.stderr}`
       );
+    }
+
+    if (reasonContains) {
+      const hso = parsed.hookSpecificOutput as Record<string, unknown> | undefined;
+      const reason = String(
+        (isNativeAsk && hso ? hso.permissionDecisionReason : parsed.reason) ?? ""
+      );
+      if (!reason.includes(reasonContains)) {
+        throw new Error(
+          `Expected ask reason to contain "${reasonContains}", but got: "${reason}"`
+        );
+      }
     }
   }
 }
