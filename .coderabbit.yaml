@@ -82,6 +82,8 @@ reviews:
         5. Doctor command checks must be kept in sync with actual requirements.
 
     - path: "src/core/recipes.ts"
+      # Note: this file also matches src/core/*.ts — intentionally receives
+      # both core invariants (three-phase, fail-open) and recipe-specific rules.
       instructions: >
         Built-in recipe registry and definitions (12 recipes). Review for:
 
