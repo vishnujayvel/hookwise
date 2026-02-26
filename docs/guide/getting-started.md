@@ -168,7 +168,47 @@ includes:
   - recipes/compliance/cost-tracking
 ```
 
-See [Creating a Recipe](creating-a-recipe.md) for writing your own.
+See [Creating a Recipe](./creating-a-recipe.md) for writing your own.
+
+## Feeds and Insights
+
+hookwise v1.2 includes a feed platform with a background daemon that aggregates data from multiple sources:
+
+```yaml
+feeds:
+  pulse:
+    enabled: true
+    interval_seconds: 30
+  project:
+    enabled: true
+    interval_seconds: 60
+  calendar:
+    enabled: true
+    interval_seconds: 300
+  news:
+    enabled: true
+    source: hackernews
+    interval_seconds: 600
+  insights:
+    enabled: true
+    interval_seconds: 120
+```
+
+Start the daemon to begin collecting feeds:
+
+```bash
+hookwise daemon start
+```
+
+Check feed health:
+
+```bash
+hookwise feeds
+```
+
+The insights producer reads your Claude Code usage data from `~/.claude/usage-data/` and surfaces metrics like session frequency, tool friction, and pace trends in your status line.
+
+See the [Feeds Guide](./feeds-guide.md) for a deep dive into the feed platform architecture.
 
 ## Environment Variables
 
@@ -187,7 +227,9 @@ export HOOKWISE_STATE_DIR=/custom/path
 
 ## Next Steps
 
-- Browse the [Hook Events Reference](hook-events-reference.md) to understand all 13 event types
-- Explore the [TUI Guide](tui-guide.md) for the interactive terminal interface
-- Read about [Creating a Recipe](creating-a-recipe.md) to share your patterns
-- If migrating from v0.1.0, see [Migration from Python](migration-from-python.md)
+- Browse the [Hook Events Reference](/reference/hook-events) to understand all 13 event types
+- Explore the [TUI Guide](/reference/tui-guide) for the interactive terminal interface
+- Read about [Creating a Recipe](./creating-a-recipe.md) to share your patterns
+- Learn about the [Feed Platform](./feeds-guide.md) and the background daemon
+- Explore [Analytics](./analytics-guide.md) for session tracking and AI authorship metrics
+- If migrating from v0.1.0, see [Migration](/reference/migration)

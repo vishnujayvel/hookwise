@@ -51,41 +51,37 @@ guards:
 
 # Coaching: behavioral nudges and self-awareness tools
 coaching:
-  enabled: true
-
-  # Metacognition prompts every 5 minutes
+  # Metacognition prompts every 5 minutes (300 seconds)
   metacognition:
     enabled: true
-    interval_minutes: 5
+    interval_seconds: 300
 
   # Builder trap detection with escalating alerts
   builder_trap:
     enabled: true
-    yellow_threshold_minutes: 30
-    orange_threshold_minutes: 60
-    red_threshold_minutes: 90
+    thresholds:
+      yellow: 30
+      orange: 60
+      red: 90
 
   # Communication coach (disable if not doing interview prep)
-  communication_coach:
+  communication:
     enabled: false
 
 # Analytics: usage tracking and authorship metrics
 analytics:
   enabled: true
-  track_sessions: true
-  track_tool_calls: true
-  track_authorship: true
 
 # Cost tracking: monitor API usage spending
 cost_tracking:
   enabled: true
-  daily_budget_usd: 10.00    # daily spending limit in USD
-  warn_at_percent: 80        # warn when reaching this % of budget
+  daily_budget: 10.00    # daily spending limit in USD
+  enforcement: warn      # "warn" or "enforce"
 
 # Transcript backup: save session transcripts for review
 transcript_backup:
   enabled: true
-  max_dir_size_mb: 100       # maximum backup directory size in MB
+  max_size_mb: 100       # maximum backup directory size in MB
 
 # Status line: comprehensive metrics display
 status_line:
@@ -99,6 +95,6 @@ status_line:
 # Global settings
 settings:
   # Handler timeout in seconds (applies to script handlers)
-  timeout: 10
-  # Log level: DEBUG, INFO, WARNING, ERROR
-  log_level: INFO
+  handler_timeout_seconds: 10
+  # Log level: debug, info, warn, error
+  log_level: info

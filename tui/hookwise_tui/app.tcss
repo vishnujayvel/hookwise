@@ -1,0 +1,234 @@
+/* Hookwise TUI — Dark theme with vibrant accents */
+
+Screen {
+    background: $surface;
+}
+
+Header {
+    background: $primary;
+    color: $text;
+}
+
+Footer {
+    background: $primary;
+}
+
+/* Tab styling */
+TabbedContent {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 1 2;
+}
+
+/* Feature cards */
+FeatureCard {
+    height: auto;
+    margin: 0 0 1 0;
+    padding: 1 2;
+    border: round $accent;
+    background: $surface-darken-1;
+}
+
+FeatureCard.enabled {
+    border: round $success;
+}
+
+FeatureCard.disabled {
+    border: round $error;
+    opacity: 0.7;
+}
+
+FeatureCard .card-title {
+    text-style: bold;
+    color: $text;
+}
+
+FeatureCard .card-description {
+    color: $text-muted;
+    margin-top: 1;
+}
+
+FeatureCard .card-badge {
+    dock: right;
+    width: auto;
+    padding: 0 1;
+}
+
+FeatureCard .card-badge.on {
+    color: $success;
+    text-style: bold;
+}
+
+FeatureCard .card-badge.off {
+    color: $error;
+}
+
+/* Data tables */
+DataTable {
+    height: auto;
+    max-height: 20;
+    margin: 1 0;
+}
+
+DataTable > .datatable--header {
+    background: $primary-darken-1;
+    color: $text;
+    text-style: bold;
+}
+
+/* Section headers */
+.section-header {
+    text-style: bold;
+    color: $accent;
+    margin: 1 0 0 0;
+    padding: 0 0 0 0;
+}
+
+.section-description {
+    color: $text-muted;
+    margin: 0 0 1 0;
+}
+
+/* Metric cards */
+.metric-card {
+    height: auto;
+    padding: 1 2;
+    margin: 0 1 1 0;
+    border: round $primary;
+    background: $surface-darken-1;
+    min-width: 20;
+}
+
+.metric-value {
+    text-style: bold;
+    color: $accent;
+}
+
+.metric-label {
+    color: $text-muted;
+}
+
+/* Feed health indicators */
+.feed-healthy {
+    color: $success;
+}
+
+.feed-stale {
+    color: $error;
+}
+
+.feed-disabled {
+    color: $text-muted;
+    text-style: italic;
+}
+
+/* Timer display */
+.timer {
+    dock: right;
+    color: $warning;
+    text-style: italic;
+}
+
+/* Guard action badges */
+.action-block {
+    color: $error;
+    text-style: bold;
+}
+
+.action-warn {
+    color: $warning;
+    text-style: bold;
+}
+
+.action-confirm {
+    color: $accent;
+    text-style: bold;
+}
+
+/* Sparkline area */
+.sparkline-container {
+    height: 5;
+    margin: 1 0;
+    border: round $primary;
+    padding: 0 1;
+}
+
+/* Coaching feature explanation */
+.coaching-explanation {
+    color: $text-muted;
+    margin: 0 0 1 2;
+    text-style: italic;
+}
+
+/* Summary panel */
+.summary-panel {
+    border: round $accent;
+    padding: 1 2;
+    margin: 1 0;
+    background: $surface-darken-1;
+}
+
+.summary-title {
+    text-style: bold;
+    color: $warning;
+}
+
+/* Horizontal layout */
+.horizontal {
+    layout: horizontal;
+    height: auto;
+}
+
+.column {
+    width: 1fr;
+}
+
+/* Status line preview */
+.status-preview {
+    padding: 1 2;
+    margin: 1 0;
+    border: heavy $accent;
+    background: $surface-darken-2;
+    text-style: bold;
+}
+
+/* Recipe tree */
+.recipe-active {
+    color: $success;
+}
+
+.recipe-inactive {
+    color: $text-muted;
+}
+
+/* Grid layout for cards */
+.card-grid {
+    layout: grid;
+    grid-size: 2;
+    grid-gutter: 1;
+    height: auto;
+}
+
+/* Three-column grid for metrics */
+.metric-grid {
+    layout: grid;
+    grid-size: 4;
+    grid-gutter: 1;
+    height: auto;
+}
+
+/* LLM summary */
+.llm-summary {
+    border: round $warning;
+    padding: 1 2;
+    margin: 1 0;
+    background: $surface-darken-1;
+}
+
+/* Refresh button */
+.refresh-btn {
+    dock: right;
+    margin: 0 0 0 2;
+}
