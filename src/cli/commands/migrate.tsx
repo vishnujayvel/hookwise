@@ -184,8 +184,8 @@ export function MigrateCommand({
       </Text>
 
       <Box flexDirection="column" marginTop={1}>
-        {result.entries.map((entry, i) => (
-          <Box key={i} flexDirection="column" marginBottom={1}>
+        {result.entries.map((entry) => (
+          <Box key={`${entry.eventType}-${entry.oldCommand}`} flexDirection="column" marginBottom={1}>
             <Text bold>[{entry.eventType}]</Text>
             <Text color="red">  - {entry.oldCommand}</Text>
             <Text color="green">  + {entry.newCommand}</Text>

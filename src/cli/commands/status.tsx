@@ -16,8 +16,14 @@ export interface StatusCommandProps {
   configPath?: string;
 }
 
+interface FeedInfo {
+  name: string;
+  enabled: boolean;
+}
+
 interface StatusInfo {
   guardCount: number;
+  includeCount: number;
   coaching: {
     metacognition: boolean;
     builderTrap: boolean;
@@ -30,11 +36,13 @@ interface StatusInfo {
   costTracking: boolean;
   transcriptBackup: boolean;
   handlerCount: number;
+  feeds: FeedInfo[];
 }
 
 function getStatusInfo(config: HooksConfig): StatusInfo {
   return {
     guardCount: config.guards.length,
+    includeCount: config.includes.length,
     coaching: {
       metacognition: config.coaching.metacognition.enabled,
       builderTrap: config.coaching.builderTrap.enabled,
@@ -47,6 +55,13 @@ function getStatusInfo(config: HooksConfig): StatusInfo {
     costTracking: config.costTracking.enabled,
     transcriptBackup: config.transcriptBackup.enabled,
     handlerCount: config.handlers.length,
+    feeds: [
+      { name: "Pulse", enabled: config.feeds.pulse.enabled },
+      { name: "Project", enabled: config.feeds.project.enabled },
+      { name: "Calendar", enabled: config.feeds.calendar.enabled },
+      { name: "News", enabled: config.feeds.news.enabled },
+      { name: "Insights", enabled: config.feeds.insights.enabled },
+    ],
   };
 }
 
@@ -101,6 +116,9 @@ export function StatusCommand({
       <Box flexDirection="column" marginTop={1}>
         <Text bold underline>Guards</Text>
         <Text>  {info.guardCount} rule(s) configured</Text>
+        {info.includeCount > 0 && (
+          <Text dimColor>  ({info.includeCount} include(s) configured)</Text>
+        )}
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
@@ -133,6 +151,15 @@ export function StatusCommand({
             enabled={info.transcriptBackup}
             label="Transcript Backup"
           />
+        </Box>
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Text bold underline>Feeds</Text>
+        <Box flexDirection="column" paddingLeft={2}>
+          {info.feeds.map((feed) => (
+            <EnabledBadge key={feed.name} enabled={feed.enabled} label={feed.name} />
+          ))}
         </Box>
       </Box>
 

@@ -1,0 +1,8 @@
+name: friction-alert
+version: "1.0.0"
+description: Warn when friction patterns are detected in recent Claude Code sessions.
+events:
+  - Stop
+config:
+  enabled: true
+  threshold: 3

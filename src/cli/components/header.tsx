@@ -11,7 +11,7 @@ export interface HeaderProps {
   version?: string;
 }
 
-export function Header({ version = "1.0.0" }: HeaderProps): React.ReactElement {
+export function Header({ version = "1.1.0" }: HeaderProps): React.ReactElement {
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text bold color="cyan">
