@@ -3,7 +3,7 @@ early_access: false
 
 reviews:
   profile: "assertive"
-  request_changes_workflow: false
+  request_changes_workflow: true
   high_level_summary: true
   poem: false
   review_status: true
@@ -11,26 +11,140 @@ reviews:
     enabled: true
     drafts: false
   path_instructions:
-    - path: "src/**/*.ts"
+    - path: "src/core/*.ts"
       instructions: >
-        Core hookwise TypeScript source. Review for proper error handling,
-        guard/context/side-effect phase separation, and consistency with
-        the YAML-configured dispatcher architecture. Check that first-match-wins
-        logic is maintained in guard evaluation.
-    - path: "src/recipes/**"
+        Core dispatcher and guard engine. Enforce these invariants:
+
+        1. Three-phase separation: guards → context → side effects. No phase
+           may perform work belonging to another phase. Guards must never
+           produce side effects. Context enrichers must never block.
+
+        2. Fail-open guarantee: any uncaught error during hook execution MUST
+           result in exit 0. Never block the user's git operation. Check that
+           every catch/finally path preserves this contract.
+
+        3. First-match-wins: guard evaluation stops at the first matching rule.
+           Flag any code that could cause accidental fall-through or evaluate
+           multiple guards when one has already matched.
+
+        4. Guard decision output format: must be valid JSON matching
+           {"decision": "block"|"warn"|"confirm"|null}. Flag any path that
+           could emit malformed or non-JSON guard output.
+
+        5. Error handling must distinguish between user-facing errors (shown
+           via stderr) and internal errors (logged, then fail-open).
+
+        Categorize issues as Critical (breaks invariants 1-4), Important
+        (error handling gaps, type safety), or Minor (style, naming).
+
+    - path: "src/core/feeds/**"
       instructions: >
-        Built-in hookwise recipes. Verify each recipe has proper category
-        (safety/behavioral/compliance/productivity), clear documentation,
-        and follows the composable recipe pattern.
-    - path: "tests/**/*.test.ts"
+        Feed platform (cache bus, registry, 5 producers, daemon manager).
+        Review against these architecture rules:
+
+        1. Producers must be stateless — all persistence goes through the
+           cache bus. Flag any producer that writes directly to disk or
+           holds mutable state between invocations.
+
+        2. Cache bus is the single source of truth for feed data. Check that
+           reads and writes go through the bus API, not around it.
+
+        3. Daemon lifecycle: PID file management, stale PID cleanup on
+           startup, inactivity timeout shutdown. Flag missing cleanup paths
+           or PID file races.
+
+        4. Producer registration must go through the registry. Flag any
+           hard-coded producer references outside the registry.
+
+        5. Each producer must handle its own errors gracefully — a failing
+           producer must not crash the daemon or block other producers.
+
+    - path: "src/core/status-line/**"
       instructions: >
-        Tests using vitest. Check for proper use of HookRunner (subprocess)
-        and GuardTester (in-process) patterns. Ensure assertions use
-        HookResult helpers (assert_allowed/blocked/asks/warns/silent).
+        Status line segments (19 segments across 5 feed producers).
+        Check that:
+
+        1. Segment output conforms to the status line format contract.
+        2. Segments are pure functions of cache bus data — no direct I/O.
+        3. Missing or stale cache data produces a sensible fallback, not
+           an error or empty string.
+        4. New segments are registered in the segment manifest.
+
+    - path: "src/cli/**"
+      instructions: >
+        CLI commands (init, doctor, status, stats, daemon, tui, etc.).
+        Review for:
+
+        1. User-facing error messages must be clear and actionable.
+        2. Exit codes: 0 for success, 1 for user error, 2 for internal error.
+        3. Commands must not import from feed internals — use the public API.
+        4. Interactive prompts must have non-interactive fallbacks for CI.
+        5. Doctor command checks must be kept in sync with actual requirements.
+
+    - path: "src/core/recipes.ts"
+      # Note: this file also matches src/core/*.ts — intentionally receives
+      # both core invariants (three-phase, fail-open) and recipe-specific rules.
+      instructions: >
+        Built-in recipe registry and definitions (12 recipes). Review for:
+
+        1. Every recipe must have a valid category
+           (safety/behavioral/compliance/productivity).
+        2. Complete documentation (description, when-to-use, configuration).
+        3. Composability — recipes must work independently and in combination
+           without conflicts. Flag recipes that assume exclusive ownership
+           of a hook event.
+        4. Recipe definitions must not import internal modules beyond the
+           core types — they are part of the public API surface.
+
+    - path: "src/testing/**"
+      instructions: >
+        Test utilities (HookRunner, GuardTester, HookResult helpers).
+        These are part of the public API for recipe authors. Review for:
+
+        1. HookRunner (subprocess-based) must isolate each test run.
+        2. GuardTester (in-process) must reset state between evaluations.
+        3. HookResult assertion helpers (assert_allowed, assert_blocked,
+           assert_asks, assert_warns, assert_silent) must produce clear
+           failure messages with actual vs expected values.
+        4. Breaking changes to test utilities require a migration note.
+
+    - path: "tests/**"
+      instructions: >
+        Test suite (vitest). Enforce these testing standards:
+
+        1. Tests must test logic, not mock implementations. Flag tests where
+           the mock setup is more complex than the assertion.
+        2. Use HookRunner for integration tests (subprocess, real YAML config)
+           and GuardTester for unit tests (in-process, fast).
+        3. Every guard must have both positive (blocks) and negative (allows)
+           test cases. Flag one-sided guard tests.
+        4. E2E tests (tests/e2e/) must use real git repos, not mocked fs.
+        5. Performance tests must have explicit thresholds, not just "runs
+           without error."
+        6. Test file names must mirror source file paths
+           (src/core/foo.ts → tests/core/foo.test.ts).
+
     - path: "hookwise.yaml"
       instructions: >
-        Main configuration file. Verify YAML structure matches the schema,
-        guard patterns use valid globs, and conditions are well-formed.
+        Main configuration file. This is the reference config for all
+        documentation and tests. Verify:
+
+        1. YAML structure matches the schema defined in src/core/config.ts.
+        2. Guard patterns use valid globs (test with micromatch semantics).
+        3. Conditions reference valid environment variables or git state.
+        4. No duplicate hook-event + guard-pattern combinations.
+        5. Comments explain non-obvious configuration choices.
+
+    - path: "docs/**"
+      instructions: >
+        User-facing documentation. Check for:
+
+        1. Architecture descriptions match current code (v1.2, feed platform,
+           19 segments, 5 producers). Flag stale version references.
+        2. Code examples must be runnable — no pseudo-code without labeling.
+        3. Links to source files must use relative paths and point to files
+           that exist.
+        4. Diagrams (Excalidraw) must have alt-text descriptions.
 
 chat:
   auto_reply: true
