@@ -49,7 +49,7 @@ const mantra: SegmentRenderer = (cache) => {
 };
 
 const builder_trap: SegmentRenderer = (cache) => {
-  const btData = cache.builderTrap as
+  const btData = cache.builder_trap as
     | { alertLevel?: string; toolingMinutes?: number }
     | undefined;
   if (!btData?.alertLevel || btData.alertLevel === "none") return "";

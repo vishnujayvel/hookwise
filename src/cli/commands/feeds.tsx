@@ -76,6 +76,12 @@ export function FeedsCommand({ configPath, once }: FeedsCommandProps): React.Rea
     }
   });
 
+  useEffect(() => {
+    if (!config) {
+      process.exitCode = 1;
+    }
+  }, [config]);
+
   if (!config) {
     return (
       <Box flexDirection="column">

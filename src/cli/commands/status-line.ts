@@ -9,10 +9,9 @@
  */
 
 import { readFileSync } from "node:fs";
-import { safeReadJSON } from "../../core/state.js";
+import { safeReadJSON, atomicWriteJSON } from "../../core/state.js";
 import { DEFAULT_CACHE_PATH } from "../../core/constants.js";
 import { renderTwoTier, DEFAULT_TWO_TIER_CONFIG } from "../../core/status-line/two-tier.js";
-import { atomicWriteJSON } from "../../core/state.js";
 
 /**
  * Stdin data shape from Claude Code's status line protocol.

@@ -2,7 +2,7 @@
  * Tests for the two-tier status line renderer.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { renderTwoTier, DEFAULT_TWO_TIER_CONFIG } from "../../../src/core/status-line/two-tier.js";
 import type { TwoTierConfig } from "../../../src/core/status-line/two-tier.js";
 import { strip } from "../../../src/core/status-line/ansi.js";

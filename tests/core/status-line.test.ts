@@ -190,33 +190,33 @@ describe("mantra segment", () => {
 describe("builder_trap segment", () => {
   it("returns empty for alert level none", () => {
     const result = BUILTIN_SEGMENTS.builder_trap(
-      { builderTrap: { alertLevel: "none", toolingMinutes: 10 } }, {}
+      { builder_trap: { alertLevel: "none", toolingMinutes: 10 } }, {}
     );
     expect(result).toBe("");
   });
 
   it("returns yellow warning", () => {
     const result = BUILTIN_SEGMENTS.builder_trap(
-      { builderTrap: { alertLevel: "yellow", toolingMinutes: 30 } }, {}
+      { builder_trap: { alertLevel: "yellow", toolingMinutes: 30 } }, {}
     );
     expect(result).toContain("30m tooling");
   });
 
   it("returns orange warning", () => {
     const result = BUILTIN_SEGMENTS.builder_trap(
-      { builderTrap: { alertLevel: "orange", toolingMinutes: 60 } }, {}
+      { builder_trap: { alertLevel: "orange", toolingMinutes: 60 } }, {}
     );
     expect(result).toContain("60m tooling");
   });
 
   it("returns red warning", () => {
     const result = BUILTIN_SEGMENTS.builder_trap(
-      { builderTrap: { alertLevel: "red", toolingMinutes: 95 } }, {}
+      { builder_trap: { alertLevel: "red", toolingMinutes: 95 } }, {}
     );
     expect(result).toContain("95m tooling");
   });
 
-  it("returns empty when no builderTrap in cache", () => {
+  it("returns empty when no builder_trap in cache", () => {
     const result = BUILTIN_SEGMENTS.builder_trap({}, {});
     expect(result).toBe("");
   });

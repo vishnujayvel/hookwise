@@ -19,7 +19,7 @@ describe("CLI shared components", () => {
       const { lastFrame } = render(<Header />);
       const frame = lastFrame()!;
       expect(frame).toContain("hookwise");
-      expect(frame).toContain("1.1.0");
+      expect(frame).toContain("1.2.0");
     });
 
     it("renders custom version", () => {
@@ -187,6 +187,6 @@ describe("SubcommandHelp", () => {
     );
     const frame = lastFrame()!;
     expect(frame).toContain("hookwise");
-    expect(frame).toContain("1.1.0");
+    expect(frame).toContain("1.2.0");
   });
 });

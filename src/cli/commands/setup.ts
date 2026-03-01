@@ -65,6 +65,7 @@ async function setupCalendar(): Promise<void> {
     console.log("     export HOOKWISE_GOOGLE_CLIENT_ID=<your-client-id>");
     console.log("     export HOOKWISE_GOOGLE_CLIENT_SECRET=<your-client-secret>\n");
     console.log("  6. Run 'hookwise setup calendar' again");
+    process.exitCode = 1;
     return;
   }
 

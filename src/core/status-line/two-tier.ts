@@ -8,7 +8,7 @@
  */
 
 import { BUILTIN_SEGMENTS } from "./segments.js";
-import { color, GREEN, YELLOW, RED, DIM, CYAN, BOLD } from "./ansi.js";
+import { color, GREEN, YELLOW, RED, DIM, CYAN } from "./ansi.js";
 
 /**
  * Configuration for the two-tier renderer.
@@ -56,7 +56,7 @@ function colorizeSegment(name: string, text: string, cache: Record<string, unkno
     case "duration":
       return color(text, DIM);
     case "builder_trap": {
-      const btData = cache.builderTrap as { alertLevel?: string } | undefined;
+      const btData = cache.builder_trap as { alertLevel?: string } | undefined;
       if (btData?.alertLevel === "red") return color(text, RED);
       if (btData?.alertLevel === "orange") return color(text, YELLOW);
       if (btData?.alertLevel === "yellow") return color(text, YELLOW);

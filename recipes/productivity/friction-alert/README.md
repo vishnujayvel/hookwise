@@ -11,7 +11,7 @@ Productivity recipe that warns when friction patterns are detected in recent Cla
 
 ## Example Output
 
-```
+```text
 ⚡ Pattern detected: 5 friction events in last session. Top friction: wrong_approach. Consider research-first prompting.
 ```
 
