@@ -45,7 +45,7 @@ describe("status-line CLI command - integration", () => {
 
     const stdinJson = JSON.stringify({
       session_id: "test-session",
-      context_window: { used_percentage: 0.67 },
+      context_window: { used_percentage: 67 },
       cost: { total_cost_usd: 5.23, total_duration_ms: 2_700_000 },
     });
 
@@ -78,7 +78,7 @@ describe("status-line CLI command - integration", () => {
 
     const stdinJson = JSON.stringify({
       session_id: "test",
-      context_window: { used_percentage: 0.3 },
+      context_window: { used_percentage: 30 },
     });
 
     const result = execSync(

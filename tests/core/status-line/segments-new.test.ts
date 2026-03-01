@@ -8,7 +8,7 @@ import { BUILTIN_SEGMENTS } from "../../../src/core/status-line/segments.js";
 
 describe("context_bar segment", () => {
   it("renders progress bar from stdin context_window", () => {
-    const cache = { _stdin: { context_window: { used_percentage: 0.67 } } };
+    const cache = { _stdin: { context_window: { used_percentage: 67 } } };
     const result = BUILTIN_SEGMENTS.context_bar(cache, {});
     expect(result).toContain("67%");
     // Should have block chars (10-wide bar)
@@ -22,13 +22,13 @@ describe("context_bar segment", () => {
   });
 
   it("renders 100% for full usage", () => {
-    const cache = { _stdin: { context_window: { used_percentage: 1.0 } } };
+    const cache = { _stdin: { context_window: { used_percentage: 100 } } };
     const result = BUILTIN_SEGMENTS.context_bar(cache, {});
     expect(result).toContain("100%");
   });
 
-  it("clamps values above 1", () => {
-    const cache = { _stdin: { context_window: { used_percentage: 1.5 } } };
+  it("clamps values above 100", () => {
+    const cache = { _stdin: { context_window: { used_percentage: 150 } } };
     const result = BUILTIN_SEGMENTS.context_bar(cache, {});
     expect(result).toContain("100%");
   });
@@ -77,6 +77,12 @@ describe("mode_badge segment", () => {
 
   it("returns empty when current_mode is empty", () => {
     const cache = { builder_trap: { current_mode: "" } };
+    const result = BUILTIN_SEGMENTS.mode_badge(cache, {});
+    expect(result).toBe("");
+  });
+
+  it("returns empty when current_mode is neutral (uninformative)", () => {
+    const cache = { builder_trap: { current_mode: "neutral" } };
     const result = BUILTIN_SEGMENTS.mode_badge(cache, {});
     expect(result).toBe("");
   });

@@ -126,10 +126,10 @@ const context_bar: SegmentRenderer = (cache) => {
   const pct = stdin?.context_window?.used_percentage;
   if (pct === undefined || pct === null) return "";
 
-  const ratio = Math.min(1, Math.max(0, pct));
+  const clamped = Math.min(100, Math.max(0, pct));
+  const ratio = clamped / 100;
   const bar = renderBar(ratio, 10);
-  const display = Math.round(ratio * 100);
-  return `${bar} ${display}%`;
+  return `${bar} ${Math.round(clamped)}%`;
 };
 
 const mode_badge: SegmentRenderer = (cache) => {
@@ -137,7 +137,7 @@ const mode_badge: SegmentRenderer = (cache) => {
     | { current_mode?: string }
     | undefined;
   const mode = btData?.current_mode;
-  if (!mode) return "";
+  if (!mode || mode === "neutral") return "";
 
   return `[${mode}]`;
 };
