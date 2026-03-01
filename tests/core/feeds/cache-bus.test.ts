@@ -176,15 +176,16 @@ describe("mergeKey", () => {
   });
 
   it("overwrites same key with new data and fresh timestamp (FR-3.4)", () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    vi.setSystemTime(now);
+
     mergeKey(cachePath, "pulse", { idle_minutes: 3 }, 30);
     const firstCache = JSON.parse(readFileSync(cachePath, "utf-8"));
     const firstTimestamp = firstCache.pulse.updated_at;
 
-    // Small delay to ensure different timestamp
-    const later = Date.now() + 10;
-    while (Date.now() < later) {
-      /* busy wait */
-    }
+    // Advance time to ensure different timestamp
+    vi.setSystemTime(now + 10);
 
     mergeKey(cachePath, "pulse", { idle_minutes: 10, extra: "new" }, 60);
     const secondCache = JSON.parse(readFileSync(cachePath, "utf-8"));
@@ -194,6 +195,8 @@ describe("mergeKey", () => {
     expect(secondCache.pulse.ttl_seconds).toBe(60);
     // Timestamp should be updated
     expect(secondCache.pulse.updated_at).not.toBe(firstTimestamp);
+
+    vi.useRealTimers();
   });
 
   it("handles corrupt cache file — fail-open, starts fresh (FR-3.6)", () => {

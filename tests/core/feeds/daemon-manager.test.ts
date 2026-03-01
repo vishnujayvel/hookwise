@@ -174,7 +174,7 @@ describe("startDaemon", () => {
     expect(mockedWriteFileSync).toHaveBeenCalledWith(
       TEST_PID_PATH,
       "42",
-      "utf-8",
+      { encoding: "utf-8", flag: "wx" },
     );
   });
 

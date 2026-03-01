@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   mkdtempSync,
-  writeFileSync,
   rmSync,
   mkdirSync,
-  readFileSync,
   copyFileSync,
 } from "node:fs";
 import { join } from "node:path";

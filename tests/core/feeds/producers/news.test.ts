@@ -13,6 +13,23 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+// Mock cache-bus so the producer can read/write rotation state between calls.
+// We store the last producer output and return it from readKey on subsequent calls.
+let lastNewsResult: Record<string, unknown> | null = null;
+vi.mock("../../../../src/core/feeds/cache-bus.js", () => ({
+  readKey: vi.fn((_cachePath: string, key: string) => {
+    if (key === "news" && lastNewsResult) {
+      return {
+        ...lastNewsResult,
+        updated_at: new Date().toISOString(),
+        ttl_seconds: 300,
+      };
+    }
+    return null;
+  }),
+}));
+
 import { createNewsProducer } from "../../../../src/core/feeds/producers/news.js";
 import type { NewsFeedConfig } from "../../../../src/core/types.js";
 import type { NewsData } from "../../../../src/core/feeds/producers/news.js";
@@ -115,10 +132,21 @@ function mockRSSFetch(xml = RSS_XML, ok = true) {
 
 // --- Tests ---
 
+/**
+ * Call the producer and store the result for cache-bus readKey mock.
+ * Simulates the daemon loop: producer runs → result written to cache → next call reads it.
+ */
+async function callAndStore(producer: () => Promise<Record<string, unknown> | null>): Promise<NewsData | null> {
+  const result = await producer();
+  lastNewsResult = result;
+  return result as NewsData | null;
+}
+
 describe("createNewsProducer — HN mode", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-02-22T12:00:00Z"));
+    lastNewsResult = null;
   });
 
   afterEach(() => {
@@ -198,12 +226,12 @@ describe("createNewsProducer — HN mode", () => {
     const producer = createNewsProducer(config);
 
     // First call — index 0
-    const r1 = (await producer()) as NewsData | null;
+    const r1 = await callAndStore(producer);
     expect(r1!.current_index).toBe(0);
 
     // Advance 5 minutes (less than 10)
     vi.advanceTimersByTime(5 * 60_000);
-    const r2 = (await producer()) as NewsData | null;
+    const r2 = await callAndStore(producer);
     expect(r2!.current_index).toBe(0);
   });
 
@@ -213,11 +241,11 @@ describe("createNewsProducer — HN mode", () => {
     const producer = createNewsProducer(config);
 
     // First call — index 0
-    await producer();
+    await callAndStore(producer);
 
     // Advance 10 minutes
     vi.advanceTimersByTime(10 * 60_000);
-    const r2 = (await producer()) as NewsData | null;
+    const r2 = await callAndStore(producer);
     expect(r2!.current_index).toBe(1);
     expect(r2!.current_story).toEqual(r2!.stories[1]);
   });
@@ -228,19 +256,19 @@ describe("createNewsProducer — HN mode", () => {
     const producer = createNewsProducer(config);
 
     // index 0
-    await producer();
+    await callAndStore(producer);
 
     // Rotate to index 1
     vi.advanceTimersByTime(1 * 60_000);
-    await producer();
+    await callAndStore(producer);
 
     // Rotate to index 2
     vi.advanceTimersByTime(1 * 60_000);
-    await producer();
+    await callAndStore(producer);
 
     // Rotate to index 0 (wrap around, 3 stories)
     vi.advanceTimersByTime(1 * 60_000);
-    const r4 = (await producer()) as NewsData | null;
+    const r4 = await callAndStore(producer);
     expect(r4!.current_index).toBe(0);
     expect(r4!.current_story).toEqual(r4!.stories[0]);
   });
@@ -328,6 +356,7 @@ describe("createNewsProducer — RSS mode", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-02-22T12:00:00Z"));
+    lastNewsResult = null;
   });
 
   afterEach(() => {
@@ -428,22 +457,22 @@ describe("createNewsProducer — RSS mode", () => {
     const producer = createNewsProducer(config);
 
     // Index 0
-    const r1 = (await producer()) as NewsData | null;
+    const r1 = await callAndStore(producer);
     expect(r1!.current_index).toBe(0);
 
     // Advance 5 minutes -> rotate to index 1
     vi.advanceTimersByTime(5 * 60_000);
-    const r2 = (await producer()) as NewsData | null;
+    const r2 = await callAndStore(producer);
     expect(r2!.current_index).toBe(1);
 
     // Advance 5 minutes -> rotate to index 2
     vi.advanceTimersByTime(5 * 60_000);
-    const r3 = (await producer()) as NewsData | null;
+    const r3 = await callAndStore(producer);
     expect(r3!.current_index).toBe(2);
 
     // Advance 5 minutes -> wrap to index 0
     vi.advanceTimersByTime(5 * 60_000);
-    const r4 = (await producer()) as NewsData | null;
+    const r4 = await callAndStore(producer);
     expect(r4!.current_index).toBe(0);
   });
 

@@ -218,7 +218,7 @@ export {
   getDaemonStatus,
 } from "./core/feeds/index.js";
 
-// Feed Platform — daemon process internals
+/** @internal Daemon process internals — not part of the public API. */
 export {
   runDaemon,
   daemonLog,

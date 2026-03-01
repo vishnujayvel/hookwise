@@ -16,6 +16,9 @@
  */
 
 import type { NewsFeedConfig, FeedProducer } from "../../types.js";
+import { readKey } from "../cache-bus.js";
+import type { CacheEntry } from "../../types.js";
+import { DEFAULT_CACHE_PATH } from "../../constants.js";
 
 export interface NewsStory {
   title: string;
@@ -47,28 +50,33 @@ async function fetchHNStories(maxStories: number): Promise<NewsStory[] | null> {
   const ids = (await response.json()) as number[];
   const topIds = ids.slice(0, maxStories);
 
-  const stories: NewsStory[] = [];
+  const stories = (await Promise.all(
+    topIds.map(async (id): Promise<NewsStory | null> => {
+      try {
+        const itemResponse = await fetch(`${HN_ITEM_URL}/${id}.json`);
+        if (!itemResponse.ok) return null;
 
-  for (const id of topIds) {
-    const itemResponse = await fetch(`${HN_ITEM_URL}/${id}.json`);
-    if (!itemResponse.ok) continue;
+        const item = (await itemResponse.json()) as {
+          title?: string;
+          score?: number;
+          url?: string;
+          id?: number;
+        };
 
-    const item = (await itemResponse.json()) as {
-      title?: string;
-      score?: number;
-      url?: string;
-      id?: number;
-    };
-
-    if (item && item.title) {
-      stories.push({
-        title: item.title,
-        score: item.score ?? 0,
-        url: item.url ?? "",
-        id: item.id ?? id,
-      });
-    }
-  }
+        if (item && item.title) {
+          return {
+            title: item.title,
+            score: item.score ?? 0,
+            url: item.url ?? "",
+            id: item.id ?? id,
+          };
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    }),
+  )).filter((s): s is NewsStory => s !== null);
 
   return stories.length > 0 ? stories : null;
 }
@@ -107,15 +115,14 @@ async function fetchRSSStories(rssUrl: string, maxStories: number): Promise<News
 /**
  * Create a FeedProducer for the news feed.
  *
- * Maintains internal rotation state: a current_index that advances
- * through the fetched stories every `rotationMinutes` minutes.
+ * Rotation state (current_index, last_rotation) is read from and written
+ * back to the cache bus entry, keeping the producer stateless. This allows
+ * the daemon to restart without losing rotation position.
  *
  * @param config - News feed configuration
+ * @param cachePath - Path to the cache bus file (for reading previous state)
  */
-export function createNewsProducer(config: NewsFeedConfig): FeedProducer {
-  let currentIndex = 0;
-  let lastRotation: string | null = null; // lazy: set on first successful fetch
-
+export function createNewsProducer(config: NewsFeedConfig, cachePath: string = DEFAULT_CACHE_PATH): FeedProducer {
   return async (): Promise<Record<string, unknown> | null> => {
     try {
       let stories: NewsStory[] | null;
@@ -130,10 +137,10 @@ export function createNewsProducer(config: NewsFeedConfig): FeedProducer {
 
       const now = Date.now();
 
-      // Lazy init: first successful fetch sets the rotation baseline
-      if (lastRotation === null) {
-        lastRotation = new Date(now).toISOString();
-      }
+      // Read previous rotation state from cache bus
+      const previous = readKey<CacheEntry & { current_index?: number; last_rotation?: string }>(cachePath, "news");
+      let currentIndex = previous?.current_index ?? 0;
+      let lastRotation = previous?.last_rotation ?? new Date(now).toISOString();
 
       // Advance rotation if enough time has elapsed
       const lastRotationTime = Date.parse(lastRotation);

@@ -97,7 +97,7 @@ export function rotateLog(logFile: string = DEFAULT_DAEMON_LOG_PATH): void {
 // --- Feed Registration ---
 
 /**
- * Register the four built-in feeds (pulse, project, calendar, news)
+ * Register the five built-in feeds (pulse, project, calendar, news, insights)
  * based on the config.
  */
 export function registerBuiltinFeeds(
@@ -133,7 +133,7 @@ export function registerBuiltinFeeds(
   registry.register({
     name: "news",
     intervalSeconds: config.feeds.news.intervalSeconds,
-    producer: createNewsProducer(config.feeds.news),
+    producer: createNewsProducer(config.feeds.news, cachePath),
     enabled: config.feeds.news.enabled,
   });
 
@@ -231,7 +231,7 @@ export async function runDaemon(projectDir: string): Promise<void> {
 
   // Step 4: Start staggered intervals for enabled feeds
   const enabledFeeds = registry.getEnabled();
-  const intervalTimers: ReturnType<typeof setInterval>[] = [];
+  const intervalTimers: NodeJS.Timeout[] = [];
 
   for (let i = 0; i < enabledFeeds.length; i++) {
     const feed = enabledFeeds[i];
@@ -251,7 +251,7 @@ export async function runDaemon(projectDir: string): Promise<void> {
     }, staggerMs);
 
     // Track the timeout as well for cleanup
-    intervalTimers.push(initialTimeout as unknown as ReturnType<typeof setInterval>);
+    intervalTimers.push(initialTimeout);
   }
 
   daemonLog(`Started ${enabledFeeds.length} feed(s) with staggered intervals`, logFile);
@@ -291,7 +291,7 @@ export async function runDaemon(projectDir: string): Promise<void> {
     // Clear all intervals and timeouts
     for (const timer of intervalTimers) {
       clearInterval(timer);
-      clearTimeout(timer as unknown as ReturnType<typeof setTimeout>);
+      clearTimeout(timer);
     }
     intervalTimers.length = 0;
 

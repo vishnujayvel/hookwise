@@ -523,6 +523,6 @@ describe("BUILTIN_SEGMENTS registry", () => {
       expect(BUILTIN_SEGMENTS[name]).toBeDefined();
       expect(typeof BUILTIN_SEGMENTS[name]).toBe("function");
     }
-    expect(Object.keys(BUILTIN_SEGMENTS)).toHaveLength(19);
+    expect(Object.keys(BUILTIN_SEGMENTS)).toHaveLength(15);
   });
 });

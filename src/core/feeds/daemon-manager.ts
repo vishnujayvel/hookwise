@@ -74,11 +74,28 @@ function readPid(pidPath: string = DEFAULT_PID_PATH): number | null {
 }
 
 /**
- * Write a PID to the PID file.
+ * Write a PID to the PID file atomically.
+ * Uses O_EXCL flag to prevent TOCTOU races between isRunning() and spawn().
+ * If the file already exists (EEXIST), re-checks process liveness before overwriting.
  */
 function writePid(pid: number, pidPath: string = DEFAULT_PID_PATH): void {
   ensureDir(dirname(pidPath));
-  writeFileSync(pidPath, String(pid), "utf-8");
+  try {
+    writeFileSync(pidPath, String(pid), { encoding: "utf-8", flag: "wx" });
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      // Another process may have created the file between our check and write.
+      // Re-check: if the existing PID is alive, don't overwrite.
+      const existingPid = readPid(pidPath);
+      if (existingPid !== null && isProcessAlive(existingPid)) {
+        return; // Another daemon is running — don't overwrite
+      }
+      // Stale PID file — safe to overwrite
+      writeFileSync(pidPath, String(pid), "utf-8");
+    } else {
+      throw err;
+    }
+  }
 }
 
 /**

@@ -87,6 +87,7 @@ import {
   writeFileSync,
   appendFileSync,
   mkdirSync,
+  unlinkSync,
 } from "node:fs";
 import { mergeKey } from "../../../src/core/feeds/cache-bus.js";
 import { createPulseProducer } from "../../../src/core/feeds/producers/pulse.js";
@@ -207,7 +208,7 @@ describe("rotateLog", () => {
 // --- registerBuiltinFeeds ---
 
 describe("registerBuiltinFeeds", () => {
-  it("registers all 4 built-in feeds (FR-2.3)", () => {
+  it("registers all 5 built-in feeds (FR-2.3)", () => {
     const registry = createFeedRegistry();
     const config = makeTestConfig();
 
@@ -244,7 +245,7 @@ describe("registerBuiltinFeeds", () => {
 
     expect(createPulseProducer).toHaveBeenCalledWith(TEST_CACHE_PATH, config.feeds.pulse);
     expect(createProjectProducer).toHaveBeenCalledWith(TEST_CACHE_PATH);
-    expect(createNewsProducer).toHaveBeenCalledWith(config.feeds.news);
+    expect(createNewsProducer).toHaveBeenCalledWith(config.feeds.news, TEST_CACHE_PATH);
     expect(createCalendarProducer).toHaveBeenCalledWith(
       expect.stringContaining("calendar-credentials.json"),
       config.feeds.calendar,
@@ -515,8 +516,7 @@ describe("signal handling", () => {
     function cleanup(): void {
       try {
         if (existsSync(pidPath)) {
-          // Use the fs module unlinkSync directly
-          require("node:fs").unlinkSync(pidPath);
+          unlinkSync(pidPath);
         }
       } catch {
         // Ignore
