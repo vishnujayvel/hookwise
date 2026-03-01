@@ -154,6 +154,7 @@ def read_analytics(db_path: Path | None = None, days: int = 7) -> AnalyticsData:
     if not path.exists():
         return AnalyticsData()
 
+    conn = None
     try:
         conn = sqlite3.connect(str(path), timeout=5)
         conn.row_factory = sqlite3.Row
@@ -247,11 +248,13 @@ def read_analytics(db_path: Path | None = None, days: int = 7) -> AnalyticsData:
             breakdown=breakdown,
         )
 
-        conn.close()
         return AnalyticsData(daily=daily, tools=tools, authorship=authorship)
 
     except Exception:
         return AnalyticsData()
+    finally:
+        if conn:
+            conn.close()
 
 
 # --- Daemon status ---
@@ -601,7 +604,12 @@ Respond in exactly this JSON format:
             messages=[{"role": "user", "content": prompt}],
         )
 
+        if not response.content:
+            return None
         text = response.content[0].text.strip()
+        # Strip markdown code fences if present
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         data = json.loads(text)
 
         summary = InsightsSummary(
