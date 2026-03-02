@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
+import { strip } from "../../src/core/status-line/ansi.js";
 
 function tempDir(): string {
   const dir = join(tmpdir(), `hookwise-test-${randomBytes(6).toString("hex")}`);
@@ -56,7 +57,7 @@ describe("status-line CLI command - integration", () => {
 
     // Should contain context percentage
     // Strip ANSI for assertion
-    const stripped = result.replace(/\x1b\[\d+m/g, "");
+    const stripped = strip(result);
     expect(stripped).toContain("67%");
   });
 
@@ -85,7 +86,7 @@ describe("status-line CLI command - integration", () => {
       { encoding: "utf-8", timeout: 5000 },
     );
 
-    const stripped = result.replace(/\x1b\[\d+m/g, "");
+    const stripped = strip(result);
     expect(stripped).toContain("30%");
   });
 });

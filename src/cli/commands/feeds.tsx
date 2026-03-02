@@ -44,13 +44,23 @@ function formatAge(isoDate: string | null): string {
 
 export function FeedsCommand({ configPath, once }: FeedsCommandProps): React.ReactElement {
   const { exit } = useApp();
-  const [config] = useState<HooksConfig | null>(() => {
+  const [configResult] = useState<{ config: HooksConfig | null; error: string | null }>(() => {
     try {
-      return loadConfig(configPath);
-    } catch {
-      return null;
+      return { config: loadConfig(configPath), error: null };
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "ENOENT") return { config: null, error: "Config file not found" };
+        if (code === "EACCES") return { config: null, error: "Permission denied" };
+        if (err instanceof SyntaxError || err.message.includes("JSON") || err.message.includes("YAML") || err.message.includes("parse")) {
+          return { config: null, error: "Config file has invalid syntax" };
+        }
+      }
+      return { config: null, error: "Config file not found" };
     }
   });
+  const config = configResult.config;
+  const configError = configResult.error;
   const [status, setStatus] = useState<DaemonStatus | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -70,6 +80,12 @@ export function FeedsCommand({ configPath, once }: FeedsCommandProps): React.Rea
     return () => clearInterval(interval);
   }, [config, once]);
 
+  useEffect(() => {
+    if (once && status) {
+      exit();
+    }
+  }, [once, status, exit]);
+
   useInput((input, key) => {
     if (input === "q" || key.escape) {
       exit();
@@ -86,7 +102,7 @@ export function FeedsCommand({ configPath, once }: FeedsCommandProps): React.Rea
     return (
       <Box flexDirection="column">
         <Header />
-        <Text color="red">No hookwise.yaml found. Run "hookwise init" first.</Text>
+        <Text color="red">{configError ?? 'No hookwise.yaml found'}. Run "hookwise init" first.</Text>
       </Box>
     );
   }

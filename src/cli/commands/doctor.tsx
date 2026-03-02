@@ -172,7 +172,7 @@ function runChecks(dir: string): Check[] {
 
   // Check 7: Insights usage data (only if insights feed is enabled)
   if (loadedConfig?.feeds?.insights?.enabled) {
-    const usageDataPath = join(homedir(), ".claude", "usage-data");
+    const usageDataPath = loadedConfig.feeds.insights.usageDataPath || join(homedir(), ".claude", "usage-data");
     const sessionMetaPath = join(usageDataPath, "session-meta");
     if (!existsSync(usageDataPath)) {
       results.push({

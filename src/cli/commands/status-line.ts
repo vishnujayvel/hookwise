@@ -34,6 +34,7 @@ interface ClaudeCodeStdinData {
  */
 function readStdin(): string {
   try {
+    if (process.stdin.isTTY) return "";
     return readFileSync(0, "utf-8");
   } catch {
     return "";

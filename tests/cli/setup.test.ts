@@ -64,6 +64,7 @@ describe("setup CLI command", () => {
       expect(allOutput).toContain("console.cloud.google.com");
       expect(allOutput).toContain("HOOKWISE_GOOGLE_CLIENT_ID");
       expect(allOutput).toContain("HOOKWISE_GOOGLE_CLIENT_SECRET");
+      expect(process.exitCode).toBe(1);
     });
 
     it("prints not implemented when client ID is present", async () => {

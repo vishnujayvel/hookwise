@@ -84,9 +84,13 @@ export function renderTwoTier(
     for (const name of config.fixedSegments) {
       const renderer = BUILTIN_SEGMENTS[name];
       if (!renderer) continue;
-      const raw = renderer(cache, {});
-      if (raw) {
-        line1Parts.push(colorizeSegment(name, raw, cache));
+      try {
+        const raw = renderer(cache, {});
+        if (raw) {
+          line1Parts.push(colorizeSegment(name, raw, cache));
+        }
+      } catch {
+        // Skip failing segment — don't blank the entire line
       }
     }
 
@@ -102,10 +106,14 @@ export function renderTwoTier(
         const name = rotatingNames[idx];
         const renderer = BUILTIN_SEGMENTS[name];
         if (!renderer) continue;
-        const raw = renderer(cache, {});
-        if (raw) {
-          line2 = colorizeSegment(name, raw, cache);
-          break;
+        try {
+          const raw = renderer(cache, {});
+          if (raw) {
+            line2 = colorizeSegment(name, raw, cache);
+            break;
+          }
+        } catch {
+          // Skip failing segment — try next one
         }
       }
     }

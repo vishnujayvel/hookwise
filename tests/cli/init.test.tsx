@@ -177,7 +177,7 @@ describe("InitCommand", () => {
 
   // --- Feed preset tests (Task 8.2) ---
 
-  it("full preset enables all 4 feeds", async () => {
+  it("full preset enables all 5 feeds", async () => {
     render(<InitCommand preset="full" projectDir={tempDir} />);
 
     const { loadConfig } = await import("../../src/core/config.js");
@@ -186,6 +186,7 @@ describe("InitCommand", () => {
     expect(config.feeds.project.enabled).toBe(true);
     expect(config.feeds.calendar.enabled).toBe(true);
     expect(config.feeds.news.enabled).toBe(true);
+    expect(config.feeds.insights.enabled).toBe(true);
   });
 
   it("full preset enables daemon autoStart", async () => {
