@@ -39,8 +39,8 @@ function colorizeSegment(name: string, text: string, cache: Record<string, unkno
     case "context_bar": {
       const stdin = cache._stdin as { context_window?: { used_percentage?: number } } | undefined;
       const pct = stdin?.context_window?.used_percentage ?? 0;
-      if (pct >= 0.75) return color(text, RED);
-      if (pct >= 0.50) return color(text, YELLOW);
+      if (pct >= 75) return color(text, RED);
+      if (pct >= 50) return color(text, YELLOW);
       return color(text, GREEN);
     }
     case "mode_badge": {

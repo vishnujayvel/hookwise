@@ -98,7 +98,7 @@ const COMMAND_HELP: Record<string, CommandHelp> = {
   },
   "status-line": {
     description: "Render two-tier status line (reads stdin JSON from Claude Code)",
-    usage: 'echo \'{"session_id":"test","context_window":{"used_percentage":0.67}}\' | hookwise status-line',
+    usage: 'echo \'{"session_id":"test","context_window":{"used_percentage":67}}\' | hookwise status-line',
   },
 };
 

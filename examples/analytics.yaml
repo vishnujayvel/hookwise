@@ -32,18 +32,10 @@ guards:
     reason: "Accessing .env file - may contain secrets"
 
 # Analytics module: tracks tool usage, session metrics, and authorship
+# All tracking (sessions, tool calls, authorship) is enabled automatically
+# when analytics is enabled. Data is stored in ~/.hookwise/analytics.db.
 analytics:
   enabled: true
-
-  # Track session start/end times and duration
-  track_sessions: true
-
-  # Track which tools are called and how often
-  track_tool_calls: true
-
-  # Track AI-authored vs human-edited lines of code
-  # Used to compute the AI ratio shown in the status line
-  track_authorship: true
 
 # Status line: shows analytics metrics at the bottom of Claude Code
 status_line:

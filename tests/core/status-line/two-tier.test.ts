@@ -15,7 +15,7 @@ describe("renderTwoTier - line 1 (fixed)", () => {
   it("renders context_bar and cost on line 1", () => {
     const cache = {
       _stdin: {
-        context_window: { used_percentage: 0.5 },
+        context_window: { used_percentage: 50 },
         cost: { total_cost_usd: 3.45, total_duration_ms: 2_700_000 },
       },
       cost: { sessionCostUsd: 3.45 },
@@ -34,7 +34,7 @@ describe("renderTwoTier - line 1 (fixed)", () => {
 
   it("skips empty fixed segments", () => {
     const cache = {
-      _stdin: { context_window: { used_percentage: 0.3 } },
+      _stdin: { context_window: { used_percentage: 30 } },
       // No builder_trap, no cost, no duration
     };
     const config = makeConfig();
@@ -49,7 +49,7 @@ describe("renderTwoTier - line 1 (fixed)", () => {
   it("uses configured delimiter between fixed segments", () => {
     const cache = {
       _stdin: {
-        context_window: { used_percentage: 0.5 },
+        context_window: { used_percentage: 50 },
         cost: { total_duration_ms: 600_000 },
       },
       builder_trap: { current_mode: "practice" },
@@ -64,7 +64,7 @@ describe("renderTwoTier - line 1 (fixed)", () => {
 describe("renderTwoTier - line 2 (rotating)", () => {
   it("picks the first non-empty rotating segment", () => {
     const cache = {
-      _stdin: { context_window: { used_percentage: 0.3 } },
+      _stdin: { context_window: { used_percentage: 30 } },
       mantra: { text: "Stay focused" },
       _rotation_index: 0,
     };
@@ -79,7 +79,7 @@ describe("renderTwoTier - line 2 (rotating)", () => {
 
   it("skips empty rotating segments and finds next", () => {
     const cache = {
-      _stdin: { context_window: { used_percentage: 0.3 } },
+      _stdin: { context_window: { used_percentage: 30 } },
       // news is empty (no data), but mantra has data
       mantra: { text: "Ship it" },
       _rotation_index: 0,
@@ -94,7 +94,7 @@ describe("renderTwoTier - line 2 (rotating)", () => {
 
   it("wraps around rotation index", () => {
     const cache = {
-      _stdin: { context_window: { used_percentage: 0.3 } },
+      _stdin: { context_window: { used_percentage: 30 } },
       mantra: { text: "Focus" },
       _rotation_index: 100, // Way past array bounds, should wrap
     };
@@ -108,7 +108,7 @@ describe("renderTwoTier - line 2 (rotating)", () => {
 
   it("renders single line when all rotating segments empty", () => {
     const cache = {
-      _stdin: { context_window: { used_percentage: 0.5 } },
+      _stdin: { context_window: { used_percentage: 50 } },
       _rotation_index: 0,
     };
     const config = makeConfig({
@@ -156,7 +156,7 @@ describe("renderTwoTier - edge cases", () => {
 
   it("handles unknown segment names in config", () => {
     const cache = {
-      _stdin: { context_window: { used_percentage: 0.3 } },
+      _stdin: { context_window: { used_percentage: 30 } },
     };
     const config = makeConfig({
       fixedSegments: ["nonexistent", "context_bar"],
@@ -171,7 +171,7 @@ describe("renderTwoTier - edge cases", () => {
 describe("renderTwoTier - ANSI coloring", () => {
   it("colors context_bar green when under 50%", () => {
     const cache = {
-      _stdin: { context_window: { used_percentage: 0.3 } },
+      _stdin: { context_window: { used_percentage: 30 } },
     };
     const config = makeConfig({ fixedSegments: ["context_bar"], rotatingSegments: [] });
     const result = renderTwoTier(config, cache);
@@ -181,7 +181,7 @@ describe("renderTwoTier - ANSI coloring", () => {
 
   it("colors context_bar yellow at 50-75%", () => {
     const cache = {
-      _stdin: { context_window: { used_percentage: 0.6 } },
+      _stdin: { context_window: { used_percentage: 60 } },
     };
     const config = makeConfig({ fixedSegments: ["context_bar"], rotatingSegments: [] });
     const result = renderTwoTier(config, cache);
@@ -190,7 +190,7 @@ describe("renderTwoTier - ANSI coloring", () => {
 
   it("colors context_bar red at 75%+", () => {
     const cache = {
-      _stdin: { context_window: { used_percentage: 0.8 } },
+      _stdin: { context_window: { used_percentage: 80 } },
     };
     const config = makeConfig({ fixedSegments: ["context_bar"], rotatingSegments: [] });
     const result = renderTwoTier(config, cache);

@@ -32,24 +32,23 @@ guards:
 
 # Coaching module: behavioral nudges and self-awareness tools
 coaching:
-  enabled: true
-
   # Metacognition prompts: periodic questions to encourage reflection
   metacognition:
     enabled: true
-    # How often to show a metacognition prompt (in minutes)
-    interval_minutes: 5
+    # How often to show a metacognition prompt (in seconds)
+    interval_seconds: 300
 
   # Builder trap detection: alerts when you've been building too long
   # without stepping back to think about design or architecture
   builder_trap:
     enabled: true
-    yellow_threshold_minutes: 30   # first gentle nudge
-    orange_threshold_minutes: 60   # stronger nudge
-    red_threshold_minutes: 90      # urgent: take a break
+    thresholds:
+      yellow: 30   # first gentle nudge (minutes)
+      orange: 60   # stronger nudge (minutes)
+      red: 90      # urgent: take a break (minutes)
 
   # Communication coach: disabled by default, enable for interview prep
-  communication_coach:
+  communication:
     enabled: false
 
 # Status line: shows coaching indicators at the bottom of Claude Code
