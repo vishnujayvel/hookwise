@@ -112,6 +112,10 @@ def main():
         if start and end:
             start_dt = datetime.fromisoformat(start)
             end_dt = datetime.fromisoformat(end)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
             is_current = start_dt <= now < end_dt
 
         events.append(

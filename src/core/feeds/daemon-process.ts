@@ -29,7 +29,7 @@ import {
   DEFAULT_CALENDAR_CREDENTIALS_PATH,
 } from "../constants.js";
 import { ensureDir } from "../state.js";
-import { mergeKey } from "./cache-bus.js";
+import { mergeKey, readAll } from "./cache-bus.js";
 import { createFeedRegistry, createCommandProducer } from "./registry.js";
 import type { FeedRegistry } from "./registry.js";
 import { createPulseProducer } from "./producers/pulse.js";
@@ -259,9 +259,8 @@ export async function runDaemon(projectDir: string): Promise<void> {
   // Step 5: Inactivity monitoring
   const inactivityTimer = setInterval(() => {
     try {
-      const cache = readFileSync(cachePath, "utf-8");
-      const parsed = JSON.parse(cache);
-      const heartbeat = parsed?._heartbeat?.value as number | undefined;
+      const parsed = readAll(cachePath);
+      const heartbeat = (parsed?._heartbeat as Record<string, unknown>)?.value as number | undefined;
 
       const referenceTime = heartbeat ?? daemonStartTime;
       const timeoutMs = config.daemon.inactivityTimeoutMinutes * 60 * 1000;
