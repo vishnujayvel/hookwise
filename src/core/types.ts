@@ -81,6 +81,8 @@ export interface HooksConfig {
   handlers: CustomHandlerConfig[];
   settings: SettingsConfig;
   includes: string[];
+  feeds: FeedsConfig;
+  daemon: DaemonConfig;
 }
 
 export interface CoachingConfig {
@@ -475,4 +477,96 @@ export interface ScenarioResult {
   scenario: TestScenario;
   guardResult: GuardResult;
   passed: boolean;
+}
+
+// --- Feed Platform Types (v1.1) ---
+
+export interface CacheEntry {
+  updated_at: string;  // ISO 8601
+  ttl_seconds: number;
+  [key: string]: unknown;
+}
+
+/**
+ * A feed producer is an async function that returns feed data as a
+ * key-value object, or null if the feed could not be produced
+ * (e.g. command failure, timeout, or disabled source).
+ */
+export type FeedProducer = () => Promise<Record<string, unknown> | null>;
+
+/**
+ * A feed definition registered in the FeedRegistry.
+ * Each feed has a unique name, a polling interval, a producer function,
+ * and an enabled flag.
+ */
+export interface FeedDefinition {
+  name: string;
+  intervalSeconds: number;
+  producer: FeedProducer;
+  enabled: boolean;
+}
+
+export interface PulseFeedConfig {
+  enabled: boolean;
+  intervalSeconds: number;
+  thresholds: {
+    green: number;
+    yellow: number;
+    orange: number;
+    red: number;
+    skull: number;
+  };
+}
+
+export interface ProjectFeedConfig {
+  enabled: boolean;
+  intervalSeconds: number;
+  showBranch: boolean;
+  showLastCommit: boolean;
+}
+
+export interface CalendarFeedConfig {
+  enabled: boolean;
+  intervalSeconds: number;
+  lookaheadMinutes: number;
+  calendars: string[];
+}
+
+export interface NewsFeedConfig {
+  enabled: boolean;
+  source: "hackernews" | "rss";
+  rssUrl: string | null;
+  intervalSeconds: number;
+  maxStories: number;
+  rotationMinutes: number;
+}
+
+export interface CustomFeedConfig {
+  name: string;
+  command: string;
+  intervalSeconds: number;
+  enabled: boolean;
+  timeoutSeconds: number;
+}
+
+export interface InsightsFeedConfig {
+  enabled: boolean;
+  intervalSeconds: number;
+  stalenessDays: number;
+  usageDataPath: string;
+}
+
+export interface FeedsConfig {
+  pulse: PulseFeedConfig;
+  project: ProjectFeedConfig;
+  calendar: CalendarFeedConfig;
+  news: NewsFeedConfig;
+  insights: InsightsFeedConfig;
+  custom: CustomFeedConfig[];
+}
+
+export interface DaemonConfig {
+  autoStart: boolean;
+  inactivityTimeoutMinutes: number;
+  logFile: string;
 }

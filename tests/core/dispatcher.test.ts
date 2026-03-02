@@ -869,3 +869,81 @@ describe("dispatch — script handler integration", () => {
     expect(stdout.reason).toBe("script says no");
   });
 });
+
+// --- Task 16.1: Declarative guard warn action visibility ---
+
+describe("dispatch — declarative guard warn action", () => {
+  it("warn action produces stdout JSON with additionalContext containing the reason", () => {
+    const config = getDefaultConfig();
+    config.guards = [
+      { match: "Bash", action: "warn", reason: "Shell usage detected" },
+    ];
+
+    const payload = makePayload({ tool_name: "Bash" });
+    const result = dispatch("PreToolUse", payload, { config });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBeTruthy();
+    const stdout = JSON.parse(result.stdout!);
+    expect(stdout.hookSpecificOutput.additionalContext).toContain(
+      "Shell usage detected"
+    );
+    expect(stdout.hookSpecificOutput.additionalContext).toContain(
+      "Guard warning"
+    );
+  });
+
+  it("warn action does NOT block (no decision: block in output)", () => {
+    const config = getDefaultConfig();
+    config.guards = [
+      { match: "Bash", action: "warn", reason: "Careful with shell" },
+    ];
+
+    const payload = makePayload({ tool_name: "Bash" });
+    const result = dispatch("PreToolUse", payload, { config });
+    expect(result.exitCode).toBe(0);
+    // stdout should NOT contain a block decision
+    const stdout = JSON.parse(result.stdout!);
+    expect(stdout.decision).toBeUndefined();
+    // Should have hookSpecificOutput, not a block
+    expect(stdout.hookSpecificOutput).toBeDefined();
+  });
+
+  it("warn + Phase 2 context merge correctly (both messages appear)", () => {
+    const config = getDefaultConfig();
+    config.guards = [
+      { match: "Bash", action: "warn", reason: "Shell warning from guard" },
+    ];
+    config.handlers = [
+      {
+        name: "context-handler",
+        type: "inline",
+        events: ["PreToolUse"],
+        action: { additionalContext: "Context from Phase 2" },
+        phase: "context",
+      },
+    ];
+
+    const payload = makePayload({ tool_name: "Bash" });
+    const result = dispatch("PreToolUse", payload, { config });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBeTruthy();
+    const stdout = JSON.parse(result.stdout!);
+    const context = stdout.hookSpecificOutput.additionalContext;
+    // Both the warn context and Phase 2 context should be present
+    expect(context).toContain("Shell warning from guard");
+    expect(context).toContain("Context from Phase 2");
+  });
+
+  it("warn without reason produces no warn output", () => {
+    const config = getDefaultConfig();
+    config.guards = [
+      { match: "Bash", action: "warn" },
+    ];
+
+    const payload = makePayload({ tool_name: "Bash" });
+    const result = dispatch("PreToolUse", payload, { config });
+    expect(result.exitCode).toBe(0);
+    // No reason -> no warn context -> no stdout (unless there are context handlers)
+    expect(result.stdout).toBeNull();
+  });
+});

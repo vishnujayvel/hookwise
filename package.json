@@ -1,6 +1,6 @@
 {
   "name": "hookwise",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Config-driven hook framework for Claude Code with guards, analytics, coaching, and interactive TUI",
   "type": "module",
   "bin": {
@@ -23,7 +23,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "keywords": [
     "claude",
@@ -31,16 +34,29 @@
     "hooks",
     "guard",
     "analytics",
-    "coaching"
+    "coaching",
+    "ai-safety",
+    "developer-tools",
+    "yaml-config",
+    "status-line",
+    "tui",
+    "recipes",
+    "feed-platform",
+    "metacognition"
   ],
   "license": "MIT",
+  "author": "Vishnu Jayvel <vishnuj81093@gmail.com> (https://github.com/vishnujayvel)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vishnujayvel/hookwise.git"
+  },
+  "homepage": "https://github.com/vishnujayvel/hookwise#readme",
+  "bugs": {
+    "url": "https://github.com/vishnujayvel/hookwise/issues"
+  },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "ink": "^6.8.0",
-    "ink-select-input": "^6.2.0",
-    "ink-spinner": "^5.0.0",
-    "ink-table": "^3.1.0",
-    "ink-text-input": "^6.0.0",
     "js-yaml": "^4.1.1",
     "picomatch": "^4.0.3",
     "react": "^19.2.4"
@@ -55,6 +71,7 @@
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
+    "vitepress": "^1.6.4",
     "vitest": "^4.0.18"
   }
 }

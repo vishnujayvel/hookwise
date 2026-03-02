@@ -71,6 +71,38 @@ describe("HookResult", () => {
       expect(() => result.assertAllowed()).not.toThrow();
     });
 
+    it("fails when hookSpecificOutput has permissionDecision deny", () => {
+      const result = new HookResult(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: "blocked",
+          },
+        }),
+        "",
+        0,
+        10
+      );
+      expect(() => result.assertAllowed()).toThrow(/deny/i);
+    });
+
+    it("fails when hookSpecificOutput has permissionDecision ask", () => {
+      const result = new HookResult(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "ask",
+            permissionDecisionReason: "confirm first",
+          },
+        }),
+        "",
+        0,
+        10
+      );
+      expect(() => result.assertAllowed()).toThrow(/ask/i);
+    });
+
     it("fails when exit code is non-zero", () => {
       const result = new HookResult("", "", 2, 10);
       expect(() => result.assertAllowed()).toThrow(/exit code/i);
@@ -133,6 +165,38 @@ describe("HookResult", () => {
       expect(() => result.assertBlocked("force push")).toThrow(
         /force push/
       );
+    });
+
+    it("passes with hookSpecificOutput permissionDecision deny", () => {
+      const result = new HookResult(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: "dangerous command",
+          },
+        }),
+        "",
+        0,
+        10
+      );
+      expect(() => result.assertBlocked()).not.toThrow();
+    });
+
+    it("passes with hookSpecificOutput deny and reason check", () => {
+      const result = new HookResult(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: "force push detected",
+          },
+        }),
+        "",
+        0,
+        10
+      );
+      expect(() => result.assertBlocked("force push")).not.toThrow();
     });
   });
 
@@ -210,7 +274,23 @@ describe("HookResult", () => {
   });
 
   describe("assertAsks", () => {
-    it("passes when stdout has confirm decision", () => {
+    it("passes with hookSpecificOutput permissionDecision ask", () => {
+      const result = new HookResult(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "ask",
+            permissionDecisionReason: "Confirm before sending",
+          },
+        }),
+        "",
+        0,
+        10
+      );
+      expect(() => result.assertAsks()).not.toThrow();
+    });
+
+    it("passes with legacy confirm decision (backward compat)", () => {
       const result = new HookResult(
         '{"decision":"confirm"}',
         "",
@@ -222,7 +302,7 @@ describe("HookResult", () => {
 
     it("fails when no confirm decision", () => {
       const result = new HookResult("", "", 0, 10);
-      expect(() => result.assertAsks()).toThrow(/confirm/i);
+      expect(() => result.assertAsks()).toThrow(/confirm|ask/i);
     });
 
     it("fails when decision is block instead of confirm", () => {
@@ -232,7 +312,54 @@ describe("HookResult", () => {
         2,
         10
       );
-      expect(() => result.assertAsks()).toThrow(/confirm/i);
+      expect(() => result.assertAsks()).toThrow(/confirm|ask/i);
+    });
+
+    it("passes with reason check on hookSpecificOutput format", () => {
+      const result = new HookResult(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "ask",
+            permissionDecisionReason: "Gmail tool requires confirmation",
+          },
+        }),
+        "",
+        0,
+        10
+      );
+      expect(() => result.assertAsks("Gmail")).not.toThrow();
+    });
+
+    it("fails when reason doesn't contain expected substring", () => {
+      const result = new HookResult(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "ask",
+            permissionDecisionReason: "Requires confirmation",
+          },
+        }),
+        "",
+        0,
+        10
+      );
+      expect(() => result.assertAsks("Gmail")).toThrow(/Gmail/);
+    });
+
+    it("fails when permissionDecision is deny instead of ask", () => {
+      const result = new HookResult(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+          },
+        }),
+        "",
+        0,
+        10
+      );
+      expect(() => result.assertAsks()).toThrow(/confirm|ask/i);
     });
   });
 });

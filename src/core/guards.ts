@@ -109,17 +109,17 @@ export function evaluateCondition(
 
   switch (parsed.operator) {
     case "contains":
-      return fieldValue.includes(parsed.value);
+      return fieldValue.toLowerCase().includes(parsed.value.toLowerCase());
 
     case "starts_with":
-      return fieldValue.startsWith(parsed.value);
+      return fieldValue.toLowerCase().startsWith(parsed.value.toLowerCase());
 
     case "ends_with":
-      return fieldValue.endsWith(parsed.value);
+      return fieldValue.toLowerCase().endsWith(parsed.value.toLowerCase());
 
     case "==":
     case "equals":
-      return fieldValue === parsed.value;
+      return fieldValue.toLowerCase() === parsed.value.toLowerCase();
 
     case "matches": {
       try {

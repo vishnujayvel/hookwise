@@ -1,0 +1,10 @@
+{
+  "session_id": "minimal-005",
+  "start_time": "2026-02-20T16:00:00Z",
+  "duration_minutes": 10,
+  "user_message_count": 3,
+  "tool_counts": {},
+  "lines_added": 20,
+  "lines_removed": 5,
+  "message_hours": [16, 16, 16]
+}

@@ -679,6 +679,141 @@ describe("evaluate", () => {
     });
   });
 
+  describe("case-insensitive operators", () => {
+    it('contains "rm -rf" matches RM -RF', () => {
+      const rules: GuardRule[] = [
+        {
+          match: "Bash",
+          action: "block",
+          reason: "Dangerous command",
+          when: 'tool_input.command contains "rm -rf"',
+        },
+      ];
+      const result = evaluate(
+        "Bash",
+        { tool_input: { command: "RM -RF /" } },
+        rules
+      );
+      expect(result.action).toBe("block");
+    });
+
+    it('contains "rm -rf" matches Rm -Rf', () => {
+      const rules: GuardRule[] = [
+        {
+          match: "Bash",
+          action: "block",
+          reason: "Dangerous command",
+          when: 'tool_input.command contains "rm -rf"',
+        },
+      ];
+      const result = evaluate(
+        "Bash",
+        { tool_input: { command: "Rm -Rf /tmp" } },
+        rules
+      );
+      expect(result.action).toBe("block");
+    });
+
+    it('contains "rm -rf" matches rm -RF', () => {
+      const rules: GuardRule[] = [
+        {
+          match: "Bash",
+          action: "block",
+          reason: "Dangerous command",
+          when: 'tool_input.command contains "rm -rf"',
+        },
+      ];
+      const result = evaluate(
+        "Bash",
+        { tool_input: { command: "rm -RF /var" } },
+        rules
+      );
+      expect(result.action).toBe("block");
+    });
+
+    it('starts_with "git" matches GIT push', () => {
+      const result = evaluateCondition(
+        'command starts_with "git"',
+        { command: "GIT push origin main" }
+      );
+      expect(result).toBe(true);
+    });
+
+    it('starts_with "git" matches Git Push', () => {
+      const result = evaluateCondition(
+        'command starts_with "git"',
+        { command: "Git Push origin main" }
+      );
+      expect(result).toBe(true);
+    });
+
+    it('ends_with ".env" matches .ENV', () => {
+      const result = evaluateCondition(
+        'file_path ends_with ".env"',
+        { file_path: "/app/.ENV" }
+      );
+      expect(result).toBe(true);
+    });
+
+    it('ends_with ".env" matches .Env', () => {
+      const result = evaluateCondition(
+        'file_path ends_with ".env"',
+        { file_path: "/app/.Env" }
+      );
+      expect(result).toBe(true);
+    });
+
+    it('equals "Bash" matches BASH', () => {
+      const result = evaluateCondition(
+        'command equals "Bash"',
+        { command: "BASH" }
+      );
+      expect(result).toBe(true);
+    });
+
+    it('equals "Bash" matches bash', () => {
+      const result = evaluateCondition(
+        'command equals "Bash"',
+        { command: "bash" }
+      );
+      expect(result).toBe(true);
+    });
+
+    it("matches regex WITHOUT (?i) is still case-SENSITIVE", () => {
+      // Regex should NOT be affected by case-insensitive change
+      const resultLower = evaluateCondition(
+        'command matches "rm\\s+-rf"',
+        { command: "rm   -rf /tmp" }
+      );
+      expect(resultLower).toBe(true);
+
+      const resultUpper = evaluateCondition(
+        'command matches "rm\\s+-rf"',
+        { command: "RM   -RF /tmp" }
+      );
+      // Without (?i), regex is case-sensitive -> should NOT match
+      expect(resultUpper).toBe(false);
+    });
+
+    it("full guard evaluate(): rule with contains blocks case-variant input", () => {
+      const rules: GuardRule[] = [
+        {
+          match: "Bash",
+          action: "block",
+          reason: "rm -rf blocked",
+          when: 'tool_input.command contains "rm -rf"',
+        },
+      ];
+      const result = evaluate(
+        "Bash",
+        { tool_input: { command: "RM -RF /" } },
+        rules
+      );
+      expect(result.action).toBe("block");
+      expect(result.reason).toBe("rm -rf blocked");
+    });
+  });
+
   describe("all three actions", () => {
     it("returns block action", () => {
       const rules: GuardRule[] = [

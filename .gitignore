@@ -18,6 +18,13 @@ Thumbs.db
 # Hookwise state (user-specific)
 ~/.hookwise/
 
+# Claude Code (PDLC specs, product context — secret sauce)
+.claude/
+
+# VitePress
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
 # Python (legacy v0.1.0)
 __pycache__/
 *.py[cod]
