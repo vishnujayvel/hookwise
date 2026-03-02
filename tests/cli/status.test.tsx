@@ -192,4 +192,30 @@ handlers:
     expect(frame).toContain("Handlers");
     expect(frame).toContain("0 custom handler(s)");
   });
+
+  it("shows include count when includes are configured", () => {
+    const config = `
+version: 1
+includes:
+  - recipes/safety
+  - recipes/behavioral
+`;
+    writeFileSync(join(tempDir, "hookwise.yaml"), config, "utf-8");
+
+    const { lastFrame } = render(<StatusCommand configPath={tempDir} />);
+    const frame = lastFrame()!;
+    expect(frame).toContain("include(s) configured");
+  });
+
+  it("does not show include count when no includes", () => {
+    writeFileSync(
+      join(tempDir, "hookwise.yaml"),
+      "version: 1\n",
+      "utf-8"
+    );
+
+    const { lastFrame } = render(<StatusCommand configPath={tempDir} />);
+    const frame = lastFrame()!;
+    expect(frame).not.toContain("include(s) configured");
+  });
 });

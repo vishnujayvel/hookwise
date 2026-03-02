@@ -112,4 +112,41 @@ describe("DoctorCommand", () => {
     const { lastFrame } = render(<DoctorCommand projectDir={tempDir} />);
     expect(lastFrame()!).toContain("System Health Check");
   });
+
+  it("warns on unknown segment name", () => {
+    const configYaml = [
+      "version: 1",
+      "status_line:",
+      "  enabled: true",
+      "  segments:",
+      '    - builtin: clok',
+      '  delimiter: " | "',
+      "  cache_path: /tmp/test-cache",
+    ].join("\n") + "\n";
+    writeFileSync(join(tempDir, "hookwise.yaml"), configYaml, "utf-8");
+    mkdirSync(join(tempDir, "state"), { recursive: true, mode: 0o700 });
+
+    const { lastFrame } = render(<DoctorCommand projectDir={tempDir} />);
+    const frame = lastFrame()!;
+    expect(frame).toContain("Unknown segment");
+    expect(frame).toContain("clok");
+  });
+
+  it("passes valid segment names", () => {
+    const configYaml = [
+      "version: 1",
+      "status_line:",
+      "  enabled: true",
+      "  segments:",
+      '    - builtin: clock',
+      '  delimiter: " | "',
+      "  cache_path: /tmp/test-cache",
+    ].join("\n") + "\n";
+    writeFileSync(join(tempDir, "hookwise.yaml"), configYaml, "utf-8");
+    mkdirSync(join(tempDir, "state"), { recursive: true, mode: 0o700 });
+
+    const { lastFrame } = render(<DoctorCommand projectDir={tempDir} />);
+    const frame = lastFrame()!;
+    expect(frame).toContain("validated");
+  });
 });

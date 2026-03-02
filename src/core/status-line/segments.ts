@@ -1,11 +1,8 @@
 /**
- * Built-in status line segments for hookwise v1.1.
+ * Built-in status line segments for hookwise v1.0.
  *
  * Each segment is a pure function: (cache, config) => string.
  * Returns empty string when data is unavailable.
- *
- * Feed segments (pulse, project, calendar, news, insights_*)
- * check TTL freshness before rendering — stale entries return "".
  */
 
 import type { SegmentConfig, CacheEntry } from "../types.js";
@@ -52,7 +49,7 @@ const mantra: SegmentRenderer = (cache) => {
 };
 
 const builder_trap: SegmentRenderer = (cache) => {
-  const btData = cache.builderTrap as
+  const btData = cache.builder_trap as
     | { alertLevel?: string; toolingMinutes?: number }
     | undefined;
   if (!btData?.alertLevel || btData.alertLevel === "none") return "";
@@ -119,142 +116,263 @@ const streak: SegmentRenderer = (cache) => {
   return `\uD83D\uDD25 ${streakData.coding}d streak`;
 };
 
+// --- Two-Tier Segments (v1.2) ---
+// These read from _stdin (Claude Code's piped JSON merged into cache by the CLI command).
+
+const context_bar: SegmentRenderer = (cache) => {
+  const stdin = cache._stdin as
+    | { context_window?: { used_percentage?: number } }
+    | undefined;
+  const pct = stdin?.context_window?.used_percentage;
+  if (pct === undefined || pct === null) return "";
+
+  const ratio = Math.min(1, Math.max(0, pct));
+  const bar = renderBar(ratio, 10);
+  const display = Math.round(ratio * 100);
+  return `${bar} ${display}%`;
+};
+
+const mode_badge: SegmentRenderer = (cache) => {
+  const btData = cache.builder_trap as
+    | { current_mode?: string }
+    | undefined;
+  const mode = btData?.current_mode;
+  if (!mode) return "";
+
+  return `[${mode}]`;
+};
+
+const duration: SegmentRenderer = (cache) => {
+  const stdin = cache._stdin as
+    | { cost?: { total_duration_ms?: number } }
+    | undefined;
+  const ms = stdin?.cost?.total_duration_ms;
+  if (ms === undefined || ms === null) return "";
+
+  const minutes = Math.round(ms / 60_000);
+  return formatDuration(minutes);
+};
+
+const practice_breadcrumb: SegmentRenderer = (cache) => {
+  const practiceData = cache.practice as
+    | { last_at?: string }
+    | undefined;
+  if (!practiceData?.last_at) return "";
+
+  const lastAtMs = Date.parse(practiceData.last_at);
+  if (Number.isNaN(lastAtMs)) return "";
+
+  const ts = Math.floor(lastAtMs / 1000);
+  return `Last practice: ${formatRelativeTime(ts)}`;
+};
+
 // --- Feed Platform Segments (v1.1) ---
 
 /**
- * Check if a feed cache entry is fresh. Returns the entry data if fresh, null otherwise.
+ * Format a unix timestamp into a human-readable relative time string.
+ * Returns "Xm ago", "Xh ago", or "Xd ago".
  */
-function getFreshEntry(cache: Record<string, unknown>, key: string): Record<string, unknown> | null {
-  const entry = cache[key] as (CacheEntry & Record<string, unknown>) | undefined;
-  if (!entry) return null;
-  if (!isFresh(entry)) return null;
-  return entry;
+function formatRelativeTime(unixTimestamp: number): string {
+  const diffMs = Date.now() - unixTimestamp * 1000;
+  const diffMinutes = Math.floor(diffMs / 60_000);
+
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
 }
 
 const pulse: SegmentRenderer = (cache) => {
-  const entry = getFreshEntry(cache, "pulse");
-  if (!entry) return "";
-  const value = entry.value as string | undefined;
-  if (!value) return "";
-  return value;
+  const pulseData = cache.pulse as
+    | (CacheEntry & { value?: string })
+    | undefined;
+  if (!pulseData || !isFresh(pulseData)) return "";
+  if (!pulseData.value) return "";
+
+  return pulseData.value;
 };
 
 const project: SegmentRenderer = (cache) => {
-  const entry = getFreshEntry(cache, "project");
-  if (!entry) return "";
-  const repo = entry.repo as string | undefined;
-  if (!repo) return "";
+  const projectData = cache.project as
+    | (CacheEntry & { repo?: string; branch?: string; last_commit_ts?: number; detached?: boolean })
+    | undefined;
+  if (!projectData || !isFresh(projectData)) return "";
+  if (!projectData.repo) return "";
 
-  const detached = entry.detached as boolean | undefined;
-  const branch = entry.branch as string | undefined;
-  const branchDisplay = detached ? "(detached)" : `(${branch})`;
+  const branchDisplay = projectData.detached ? "detached" : (projectData.branch ?? "unknown");
+  const age = projectData.last_commit_ts != null
+    ? formatRelativeTime(projectData.last_commit_ts)
+    : "";
 
-  let result = `\uD83D\uDCE6 ${repo} ${branchDisplay}`;
-
-  const lastCommitTs = entry.last_commit_ts as number | undefined;
-  if (lastCommitTs !== undefined) {
-    const nowSec = Math.floor(Date.now() / 1000);
-    const ageSec = nowSec - lastCommitTs;
-    let ageStr: string;
-    if (ageSec < 3600) {
-      ageStr = `${Math.floor(ageSec / 60)}m ago`;
-    } else if (ageSec < 86400) {
-      ageStr = `${Math.floor(ageSec / 3600)}h ago`;
-    } else {
-      ageStr = `${Math.floor(ageSec / 86400)}d ago`;
-    }
-    result += ` \u2022 ${ageStr}`;
-  }
-
-  return result;
+  const parts = [`\uD83D\uDCE6 ${projectData.repo} (${branchDisplay})`];
+  if (age) parts.push(age);
+  return parts.join(" \u2022 ");
 };
-
-interface CalendarEventEntry {
-  title: string;
-  start: string;
-  end: string;
-  is_current: boolean;
-}
 
 const calendar: SegmentRenderer = (cache) => {
-  const entry = getFreshEntry(cache, "calendar");
-  if (!entry) return "";
+  interface CalendarEvent {
+    title: string;
+    start: string;
+    end: string;
+    is_current: boolean;
+  }
+  const calData = cache.calendar as
+    | (CacheEntry & { events?: CalendarEvent[]; next_event?: CalendarEvent | null })
+    | undefined;
+  if (!calData || !isFresh(calData)) return "";
 
-  const events = (entry.events as CalendarEventEntry[] | undefined) ?? [];
-  const nextEvent = entry.next_event as CalendarEventEntry | null | undefined;
+  const events = calData.events ?? [];
+  const nextEvent = calData.next_event ?? null;
 
+  // Check for current event first
   const currentEvent = events.find((e) => e.is_current);
-  const moreCount = events.length > 1 ? events.length - 1 : 0;
-  const moreSuffix = moreCount > 0 ? ` (+${moreCount} more)` : "";
-
   if (currentEvent) {
-    const endsInMs = Date.parse(currentEvent.end) - Date.now();
-    const endsInMin = Math.round(endsInMs / 60_000);
-    return `\uD83D\uDCC5 ${currentEvent.title} (ends in ${endsInMin}min)${moreSuffix}`;
+    const endMs = new Date(currentEvent.end).getTime();
+    const nowMs = Date.now();
+    const endsInMin = Math.round((endMs - nowMs) / 60_000);
+    const suffix = events.length > 1 ? ` (+${events.length - 1} more)` : "";
+    return `\uD83D\uDCC5 ${currentEvent.title} (ends in ${endsInMin}min)${suffix}`;
   }
 
-  if (nextEvent) {
-    const minutesUntil = Math.round((Date.parse(nextEvent.start) - Date.now()) / 60_000);
-
-    if (minutesUntil > 60) {
-      const hours = Math.round(minutesUntil / 60);
-      return `\uD83D\uDCC5 Free for ${hours}h${moreSuffix}`;
-    }
-    if (minutesUntil >= 15) {
-      return `\uD83D\uDCC5 ${nextEvent.title} in ${minutesUntil}min${moreSuffix}`;
-    }
-    if (minutesUntil >= 5) {
-      return `\uD83D\uDCC5 ${nextEvent.title} in ${minutesUntil}min \u26A1${moreSuffix}`;
-    }
-    return `\uD83D\uDCC5 ${nextEvent.title} NOW${moreSuffix}`;
+  // No current event and no next event
+  if (!nextEvent) {
+    return "\uD83D\uDCC5 Free";
   }
 
-  return "\uD83D\uDCC5 Free";
+  const startMs = new Date(nextEvent.start).getTime();
+  const nowMs = Date.now();
+  const diffMin = Math.round((startMs - nowMs) / 60_000);
+
+  let text: string;
+  if (diffMin < 5) {
+    text = `\uD83D\uDCC5 ${nextEvent.title} NOW`;
+  } else if (diffMin < 15) {
+    text = `\uD83D\uDCC5 ${nextEvent.title} in ${diffMin}min \u26A1`;
+  } else if (diffMin <= 60) {
+    text = `\uD83D\uDCC5 ${nextEvent.title} in ${diffMin}min`;
+  } else {
+    const hours = Math.round(diffMin / 60);
+    text = `\uD83D\uDCC5 Free for ${hours}h`;
+  }
+
+  const otherCount = events.length > 1 ? events.length - 1 : 0;
+  if (otherCount > 0) {
+    text += ` (+${otherCount} more)`;
+  }
+  return text;
 };
-
-const MAX_NEWS_TITLE_LENGTH = 45;
 
 const news: SegmentRenderer = (cache) => {
-  const entry = getFreshEntry(cache, "news");
-  if (!entry) return "";
-  const story = entry.current_story as { title: string; score: number; url: string; id: number } | undefined;
-  if (!story) return "";
-
-  let title = story.title;
-  if (title.length > MAX_NEWS_TITLE_LENGTH) {
-    title = title.slice(0, MAX_NEWS_TITLE_LENGTH) + "\u2026";
+  interface NewsStory {
+    title: string;
+    score: number;
+    url: string;
+    id: number;
   }
+  const newsData = cache.news as
+    | (CacheEntry & { current_story?: NewsStory })
+    | undefined;
+  if (!newsData || !isFresh(newsData)) return "";
+  if (!newsData.current_story) return "";
 
-  if (story.score > 0) {
-    return `\uD83D\uDCF0 ${title} (${story.score}pts)`;
+  const story = newsData.current_story;
+  const truncatedTitle =
+    story.title.length > 45
+      ? story.title.slice(0, 45) + "\u2026"
+      : story.title;
+
+  if (story.score === 0) {
+    return `\uD83D\uDCF0 ${truncatedTitle}`;
   }
-  return `\uD83D\uDCF0 ${title}`;
+  return `\uD83D\uDCF0 ${truncatedTitle} (${story.score}pts)`;
 };
 
+// --- Insights Segments ---
+
+/**
+ * Map an hour (0-23) to a time-of-day label.
+ */
+function hourToLabel(hour: number): string {
+  if (hour >= 6 && hour < 12) return "morning";
+  if (hour >= 12 && hour < 18) return "afternoon";
+  if (hour >= 18 && hour < 24) return "evening";
+  return "night";
+}
+
+/**
+ * Format a number with k suffix for thousands (e.g., 28000 → "28k").
+ */
+function formatLargeNumber(n: number): string {
+  if (n >= 1000) {
+    const k = n / 1000;
+    return k === Math.floor(k) ? `${Math.floor(k)}k` : `${k.toFixed(1)}k`;
+  }
+  return String(n);
+}
+
+interface InsightsCacheEntry extends CacheEntry {
+  total_sessions?: number;
+  total_messages?: number;
+  total_lines_added?: number;
+  days_active?: number;
+  top_tools?: Array<{ name: string; count: number }>;
+  peak_hour?: number;
+  friction_total?: number;
+  recent_session?: {
+    friction_count?: number;
+  };
+}
+
 const insights_friction: SegmentRenderer = (cache) => {
-  const entry = getFreshEntry(cache, "insights");
-  if (!entry) return "";
-  const frictionTotal = entry.friction_total as number | undefined;
-  if (frictionTotal === undefined || frictionTotal === 0) return "";
-  return `\u26A0\uFE0F ${frictionTotal} friction`;
+  const data = cache.insights as InsightsCacheEntry | undefined;
+  if (!data || !isFresh(data)) return "";
+
+  const recentFriction = data.recent_session?.friction_count ?? 0;
+  const totalFriction = data.friction_total ?? 0;
+
+  if (recentFriction > 0) {
+    return `\u26A0\uFE0F ${recentFriction} friction in last session`;
+  }
+  if (totalFriction > 0) {
+    return `\u2705 Clean session | ${totalFriction} total friction`;
+  }
+  return "\u2705 No friction detected";
 };
 
 const insights_pace: SegmentRenderer = (cache) => {
-  const entry = getFreshEntry(cache, "insights");
-  if (!entry) return "";
-  const sessions = entry.total_sessions as number | undefined;
-  const days = entry.days_active as number | undefined;
-  if (!sessions || !days) return "";
-  const pace = Math.round((sessions / days) * 10) / 10;
-  return `\u23F1\uFE0F ${pace}/day`;
+  const data = cache.insights as InsightsCacheEntry | undefined;
+  if (!data || !isFresh(data)) return "";
+
+  const totalMessages = data.total_messages ?? 0;
+  const daysActive = data.days_active || 1;
+  const linesAdded = data.total_lines_added ?? 0;
+  const sessions = data.total_sessions ?? 0;
+
+  const msgsPerDay = Math.round(totalMessages / daysActive);
+  const formattedLines = formatLargeNumber(linesAdded);
+
+  return `\uD83D\uDCCA ${msgsPerDay} msgs/day | ${formattedLines}+ lines | ${sessions} sessions`;
 };
 
 const insights_trend: SegmentRenderer = (cache) => {
-  const entry = getFreshEntry(cache, "insights");
-  if (!entry) return "";
-  const avgDuration = entry.avg_duration_minutes as number | undefined;
-  if (avgDuration === undefined) return "";
-  return `\u231A ${Math.round(avgDuration)}m avg`;
+  const data = cache.insights as InsightsCacheEntry | undefined;
+  if (!data || !isFresh(data)) return "";
+
+  const topTools = data.top_tools ?? [];
+  const peakHour = data.peak_hour ?? 0;
+
+  const toolNames = topTools
+    .slice(0, 2)
+    .map((t) => t.name)
+    .join(", ");
+  const peakLabel = hourToLabel(peakHour);
+
+  if (!toolNames) return "";
+
+  return `\uD83D\uDD27 Top: ${toolNames} | Peak: ${peakLabel}`;
 };
 
 /**
@@ -269,6 +387,10 @@ export const BUILTIN_SEGMENTS: Record<string, SegmentRenderer> = {
   ai_ratio,
   cost,
   streak,
+  context_bar,
+  mode_badge,
+  duration,
+  practice_breadcrumb,
   pulse,
   project,
   calendar,

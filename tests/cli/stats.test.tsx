@@ -34,12 +34,15 @@ describe("StatsCommand", () => {
     );
     const frame = lastFrame()!;
     expect(frame).toContain("No analytics database found");
+    expect(frame).toContain("hookwise init");
   });
 
   it("renders analytics header", () => {
-    // Create a DB with some data
     const dbPath = join(tempDir, "analytics.db");
     const db = new AnalyticsDB(dbPath);
+    const stmts = db.getStatements();
+    stmts.insertSession.run({ id: "s1", startedAt: new Date().toISOString() });
+    stmts.insertEvent.run({ sessionId: "s1", eventType: "PreToolUse", toolName: "Read", timestamp: new Date().toISOString(), filePath: null, linesAdded: 1, linesRemoved: 0, aiConfidenceScore: 0.5 });
     db.close();
 
     const { lastFrame } = render(<StatsCommand dbPath={dbPath} />);
@@ -50,6 +53,9 @@ describe("StatsCommand", () => {
   it("shows daily summary section", () => {
     const dbPath = join(tempDir, "analytics.db");
     const db = new AnalyticsDB(dbPath);
+    const stmts = db.getStatements();
+    stmts.insertSession.run({ id: "s1", startedAt: new Date().toISOString() });
+    stmts.insertEvent.run({ sessionId: "s1", eventType: "PreToolUse", toolName: "Read", timestamp: new Date().toISOString(), filePath: null, linesAdded: 1, linesRemoved: 0, aiConfidenceScore: 0.5 });
     db.close();
 
     const { lastFrame } = render(<StatsCommand dbPath={dbPath} />);
@@ -60,6 +66,9 @@ describe("StatsCommand", () => {
   it("shows tool breakdown section", () => {
     const dbPath = join(tempDir, "analytics.db");
     const db = new AnalyticsDB(dbPath);
+    const stmts = db.getStatements();
+    stmts.insertSession.run({ id: "s1", startedAt: new Date().toISOString() });
+    stmts.insertEvent.run({ sessionId: "s1", eventType: "PreToolUse", toolName: "Read", timestamp: new Date().toISOString(), filePath: null, linesAdded: 1, linesRemoved: 0, aiConfidenceScore: 0.5 });
     db.close();
 
     const { lastFrame } = render(<StatsCommand dbPath={dbPath} />);
@@ -70,6 +79,9 @@ describe("StatsCommand", () => {
   it("shows AI authorship section", () => {
     const dbPath = join(tempDir, "analytics.db");
     const db = new AnalyticsDB(dbPath);
+    const stmts = db.getStatements();
+    stmts.insertSession.run({ id: "s1", startedAt: new Date().toISOString() });
+    stmts.insertEvent.run({ sessionId: "s1", eventType: "PreToolUse", toolName: "Read", timestamp: new Date().toISOString(), filePath: null, linesAdded: 1, linesRemoved: 0, aiConfidenceScore: 0.5 });
     db.close();
 
     const { lastFrame } = render(<StatsCommand dbPath={dbPath} />);
@@ -77,15 +89,14 @@ describe("StatsCommand", () => {
     expect(frame).toContain("AI Authorship");
   });
 
-  it("renders with empty database", () => {
+  it("shows friendly message for empty database", () => {
     const dbPath = join(tempDir, "analytics.db");
     const db = new AnalyticsDB(dbPath);
     db.close();
 
     const { lastFrame } = render(<StatsCommand dbPath={dbPath} />);
     const frame = lastFrame()!;
-    expect(frame).toContain("No data available");
-    expect(frame).toContain("No tool usage data");
+    expect(frame).toContain("no data yet");
   });
 
   it("renders data when events exist", () => {

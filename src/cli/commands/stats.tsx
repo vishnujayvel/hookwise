@@ -81,7 +81,7 @@ function loadStats(
       agents: null,
       costState: null,
       streaks: null,
-      error: `No analytics database found at ${dbPath}. Enable analytics in hookwise.yaml first.`,
+      error: `No analytics database found. Run "hookwise init --preset analytics" to enable, then use Claude Code to generate data.`,
     };
   }
 
@@ -89,6 +89,20 @@ function loadStats(
   try {
     db = new AnalyticsDB(dbPath);
     const result = queryStats(db, { days: 7 });
+
+    const isEmpty =
+      result.daily.length === 0 &&
+      result.toolBreakdown.length === 0 &&
+      result.authorship.totalEntries === 0;
+    if (isEmpty) {
+      return {
+        stats: null,
+        agents: null,
+        costState: null,
+        streaks: null,
+        error: `Analytics database exists but has no data yet. Use Claude Code with hookwise active to generate session data.`,
+      };
+    }
 
     let agents: AgentSummary | null = null;
     if (options.agents) {

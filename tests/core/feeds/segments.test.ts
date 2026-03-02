@@ -513,9 +513,10 @@ describe("news segment", () => {
 });
 
 describe("BUILTIN_SEGMENTS registry", () => {
-  it("has all segments registered (original + insights)", () => {
+  it("has all segments registered (original + two-tier + feed + insights)", () => {
     const expected = [
       "clock", "mantra", "builder_trap", "session", "practice", "ai_ratio", "cost", "streak",
+      "context_bar", "mode_badge", "duration", "practice_breadcrumb",
       "pulse", "project", "calendar", "news",
       "insights_friction", "insights_pace", "insights_trend",
     ];
@@ -523,6 +524,6 @@ describe("BUILTIN_SEGMENTS registry", () => {
       expect(BUILTIN_SEGMENTS[name]).toBeDefined();
       expect(typeof BUILTIN_SEGMENTS[name]).toBe("function");
     }
-    expect(Object.keys(BUILTIN_SEGMENTS)).toHaveLength(15);
+    expect(Object.keys(BUILTIN_SEGMENTS)).toHaveLength(19);
   });
 });

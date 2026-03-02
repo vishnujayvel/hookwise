@@ -56,19 +56,36 @@ function applyPreset(config: HooksConfig, preset: Preset): HooksConfig {
       result.analytics = { ...result.analytics, enabled: true };
       result.greeting = { ...result.greeting, enabled: true };
       result.statusLine = { ...result.statusLine, enabled: true };
+      result.feeds = {
+        ...result.feeds,
+        pulse: { ...result.feeds.pulse, enabled: true },
+        project: { ...result.feeds.project, enabled: true },
+        calendar: { ...result.feeds.calendar, enabled: true },
+        news: { ...result.feeds.news, enabled: true },
+        insights: { ...result.feeds.insights, enabled: true },
+      };
+      result.daemon = { ...result.daemon, autoStart: true };
       break;
   }
 
   return result;
 }
 
+const VALID_PRESETS = ["minimal", "coaching", "analytics", "full"];
+
 function runInit(preset: string, dir: string): Step[] {
   const results: Step[] = [];
-  const effectivePreset = (
-    ["minimal", "coaching", "analytics", "full"].includes(preset)
-      ? preset
-      : "minimal"
-  ) as Preset;
+
+  if (!VALID_PRESETS.includes(preset)) {
+    results.push({
+      label: "Preset",
+      status: "fail",
+      message: `Unknown preset "${preset}". Valid presets: ${VALID_PRESETS.join(", ")}`,
+    });
+    return results;
+  }
+
+  const effectivePreset = preset as Preset;
 
   // Step 1: Generate hookwise.yaml
   const configPath = join(dir, PROJECT_CONFIG_FILE);
@@ -80,16 +97,21 @@ function runInit(preset: string, dir: string): Step[] {
     });
   } else {
     try {
-      const config = applyPreset(getDefaultConfig(), effectivePreset);
-      const snakeCased = deepCamelToSnake(config);
-      const yamlContent =
-        `# hookwise configuration\n# Preset: ${effectivePreset}\n# Docs: https://github.com/vishnujayvel/hookwise\n\n` +
-        yaml.dump(snakeCased, {
-          indent: 2,
-          lineWidth: 120,
-          noRefs: true,
-          sortKeys: false,
-        });
+      let yamlContent: string;
+      if (effectivePreset === "minimal") {
+        yamlContent = `# hookwise configuration\n# Preset: minimal\n# Docs: https://github.com/vishnujayvel/hookwise\n\nversion: 1\nguards: []\n`;
+      } else {
+        const config = applyPreset(getDefaultConfig(), effectivePreset);
+        const snakeCased = deepCamelToSnake(config);
+        yamlContent =
+          `# hookwise configuration\n# Preset: ${effectivePreset}\n# Docs: https://github.com/vishnujayvel/hookwise\n\n` +
+          yaml.dump(snakeCased, {
+            indent: 2,
+            lineWidth: 120,
+            noRefs: true,
+            sortKeys: false,
+          });
+      }
       writeFileSync(configPath, yamlContent, "utf-8");
       results.push({
         label: PROJECT_CONFIG_FILE,
@@ -151,19 +173,21 @@ export function InitCommand({
       <Header />
       <Text bold>Initializing hookwise...</Text>
       <Box flexDirection="column" marginTop={1}>
-        {steps.map((step, i) => (
-          <Box key={i} gap={1}>
+        {steps.map((step) => (
+          <Box key={step.label} gap={1}>
             <StatusBadge status={step.status} />
             <Text bold>{step.label}:</Text>
             <Text>{step.message}</Text>
           </Box>
         ))}
       </Box>
-      <Box marginTop={1}>
-        <Text color="green" bold>
-          Done! Run "hookwise doctor" to verify your setup.
-        </Text>
-      </Box>
+      {!steps.some((s) => s.status === "fail") && (
+        <Box marginTop={1}>
+          <Text color="green" bold>
+            Done! Run "hookwise doctor" to verify your setup.
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }
