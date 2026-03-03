@@ -85,6 +85,9 @@ describe("DoctorCommand — feed checks", () => {
     calendarEnabled?: boolean;
     newsEnabled?: boolean;
     insightsEnabled?: boolean;
+    practiceEnabled?: boolean;
+    weatherEnabled?: boolean;
+    memoriesEnabled?: boolean;
   } = {}): void {
     const {
       pulseEnabled = true,
@@ -92,6 +95,9 @@ describe("DoctorCommand — feed checks", () => {
       calendarEnabled = false,
       newsEnabled = false,
       insightsEnabled = false,
+      practiceEnabled = false,
+      weatherEnabled = false,
+      memoriesEnabled = false,
     } = overrides;
 
     const configYaml = [
@@ -129,6 +135,17 @@ describe("DoctorCommand — feed checks", () => {
       "    interval_seconds: 120",
       "    staleness_days: 30",
       "    usage_data_path: ~/.claude/usage-data",
+      "  practice:",
+      `    enabled: ${practiceEnabled}`,
+      "    interval_seconds: 120",
+      "    db_path: ~/.practice-tracker/practice-tracker.db",
+      "  weather:",
+      `    enabled: ${weatherEnabled}`,
+      "    interval_seconds: 600",
+      "    temperature_unit: fahrenheit",
+      "  memories:",
+      `    enabled: ${memoriesEnabled}`,
+      "    interval_seconds: 3600",
     ].join("\n") + "\n";
     writeFileSync(join(tempDir, "hookwise.yaml"), configYaml, "utf-8");
   }

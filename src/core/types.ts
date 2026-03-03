@@ -83,6 +83,7 @@ export interface HooksConfig {
   includes: string[];
   feeds: FeedsConfig;
   daemon: DaemonConfig;
+  tui: TuiConfig;
 }
 
 export interface CoachingConfig {
@@ -530,6 +531,8 @@ export interface CalendarFeedConfig {
   intervalSeconds: number;
   lookaheadMinutes: number;
   calendars: string[];
+  credentialsPath: string;
+  tokenPath: string;
 }
 
 export interface NewsFeedConfig {
@@ -556,12 +559,35 @@ export interface InsightsFeedConfig {
   usageDataPath: string;
 }
 
+export interface PracticeFeedConfig {
+  enabled: boolean;
+  intervalSeconds: number;
+  dbPath: string;
+}
+
+export interface WeatherFeedConfig {
+  enabled: boolean;
+  intervalSeconds: number;
+  latitude: number;
+  longitude: number;
+  temperatureUnit: "fahrenheit" | "celsius";
+}
+
+export interface MemoriesFeedConfig {
+  enabled: boolean;
+  intervalSeconds: number;
+  dbPath: string;
+}
+
 export interface FeedsConfig {
   pulse: PulseFeedConfig;
   project: ProjectFeedConfig;
   calendar: CalendarFeedConfig;
   news: NewsFeedConfig;
   insights: InsightsFeedConfig;
+  practice: PracticeFeedConfig;
+  weather: WeatherFeedConfig;
+  memories: MemoriesFeedConfig;
   custom: CustomFeedConfig[];
 }
 
@@ -569,4 +595,9 @@ export interface DaemonConfig {
   autoStart: boolean;
   inactivityTimeoutMinutes: number;
   logFile: string;
+}
+
+export interface TuiConfig {
+  autoLaunch: boolean;
+  launchMethod: "newWindow" | "background";
 }

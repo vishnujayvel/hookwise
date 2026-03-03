@@ -164,12 +164,12 @@ describe("pipeline integration: SessionStart -> daemon -> feeds -> segments", ()
     registerCustomFeeds(registry, config);
 
     const allFeeds = registry.getAll();
-    expect(allFeeds.length).toBeGreaterThanOrEqual(5); // pulse, project, calendar, news, insights
+    expect(allFeeds).toHaveLength(8); // pulse, project, calendar, news, insights, practice, weather, memories
 
     const enabledFeeds = registry.getEnabled();
-    // Default config: pulse, project, insights enabled; calendar and news disabled
+    // Default config: pulse, project, insights, practice enabled; calendar and news disabled
     const enabledNames = enabledFeeds.map((f) => f.name).sort();
-    expect(enabledNames).toEqual(["insights", "project", "pulse"]);
+    expect(enabledNames).toEqual(["insights", "practice", "project", "pulse"]);
 
     // Step 3: Simulate a feed producing data and appearing in cache
     // Create a mock cache as if the daemon wrote pulse data
@@ -394,7 +394,7 @@ describe("pipeline integration: custom feed registration", () => {
         ...getDefaultConfig().feeds,
         custom: [
           {
-            name: "weather",
+            name: "local-weather",
             command: "curl -s https://wttr.in?format=j1",
             intervalSeconds: 120,
             enabled: true,
@@ -410,14 +410,14 @@ describe("pipeline integration: custom feed registration", () => {
 
     // Custom feed should be registered alongside built-ins
     const all = registry.getAll();
-    expect(all).toHaveLength(6); // 5 builtin + 1 custom
+    expect(all).toHaveLength(9); // 8 builtin + 1 custom
 
-    const weather = registry.get("weather");
-    expect(weather).toBeDefined();
-    expect(weather!.name).toBe("weather");
-    expect(weather!.intervalSeconds).toBe(120);
-    expect(weather!.enabled).toBe(true);
-    expect(typeof weather!.producer).toBe("function");
+    const localWeather = registry.get("local-weather");
+    expect(localWeather).toBeDefined();
+    expect(localWeather!.name).toBe("local-weather");
+    expect(localWeather!.intervalSeconds).toBe(120);
+    expect(localWeather!.enabled).toBe(true);
+    expect(typeof localWeather!.producer).toBe("function");
   });
 
   it("custom feed producer is a command-based producer", async () => {
@@ -435,7 +435,7 @@ describe("pipeline integration: custom feed registration", () => {
       feeds: {
         ...getDefaultConfig().feeds,
         custom: [
-          { name: "weather", command: "get-weather", intervalSeconds: 120, enabled: true, timeoutSeconds: 10 },
+          { name: "local-weather", command: "get-weather", intervalSeconds: 120, enabled: true, timeoutSeconds: 10 },
           { name: "stocks", command: "get-stocks", intervalSeconds: 300, enabled: true, timeoutSeconds: 10 },
           { name: "ci-status", command: "get-ci", intervalSeconds: 60, enabled: false, timeoutSeconds: 5 },
         ],
@@ -446,10 +446,10 @@ describe("pipeline integration: custom feed registration", () => {
     registerBuiltinFeeds(registry, config);
     registerCustomFeeds(registry, config);
 
-    expect(registry.getAll()).toHaveLength(8); // 5 builtin + 3 custom
-    expect(registry.getEnabled()).toHaveLength(5); // pulse + project + insights + weather + stocks
+    expect(registry.getAll()).toHaveLength(11); // 8 builtin + 3 custom
+    expect(registry.getEnabled()).toHaveLength(6); // pulse + project + insights + practice + local-weather + stocks
 
-    expect(registry.get("weather")!.enabled).toBe(true);
+    expect(registry.get("local-weather")!.enabled).toBe(true);
     expect(registry.get("stocks")!.enabled).toBe(true);
     expect(registry.get("ci-status")!.enabled).toBe(false);
   });
@@ -647,6 +647,9 @@ describe("pipeline integration: config without daemon (NFR-4)", () => {
         calendar: { ...getDefaultConfig().feeds.calendar, enabled: false },
         news: { ...getDefaultConfig().feeds.news, enabled: false },
         insights: { ...getDefaultConfig().feeds.insights, enabled: false },
+        practice: { ...getDefaultConfig().feeds.practice, enabled: false },
+        weather: { ...getDefaultConfig().feeds.weather, enabled: false },
+        memories: { ...getDefaultConfig().feeds.memories, enabled: false },
         custom: [],
       },
       daemon: {
@@ -679,6 +682,9 @@ describe("pipeline integration: config without daemon (NFR-4)", () => {
         calendar: { ...getDefaultConfig().feeds.calendar, enabled: false },
         news: { ...getDefaultConfig().feeds.news, enabled: false },
         insights: { ...getDefaultConfig().feeds.insights, enabled: false },
+        practice: { ...getDefaultConfig().feeds.practice, enabled: false },
+        weather: { ...getDefaultConfig().feeds.weather, enabled: false },
+        memories: { ...getDefaultConfig().feeds.memories, enabled: false },
         custom: [],
       },
     });
@@ -687,7 +693,7 @@ describe("pipeline integration: config without daemon (NFR-4)", () => {
     registerBuiltinFeeds(registry, config);
     registerCustomFeeds(registry, config);
 
-    expect(registry.getAll()).toHaveLength(5); // All registered but...
+    expect(registry.getAll()).toHaveLength(8); // All registered but...
     expect(registry.getEnabled()).toHaveLength(0); // ...none enabled
   });
 

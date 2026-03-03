@@ -37,6 +37,9 @@ import { createProjectProducer } from "./producers/project.js";
 import { createNewsProducer } from "./producers/news.js";
 import { createCalendarProducer } from "./producers/calendar.js";
 import { createInsightsProducer } from "./producers/insights.js";
+import { createPracticeProducer } from "./producers/practice.js";
+import { createWeatherProducer } from "./producers/weather.js";
+import { createMemoriesProducer } from "./producers/memories.js";
 import { loadConfig } from "../config.js";
 import type { HooksConfig, FeedDefinition } from "../types.js";
 
@@ -97,7 +100,7 @@ export function rotateLog(logFile: string = DEFAULT_DAEMON_LOG_PATH): void {
 // --- Feed Registration ---
 
 /**
- * Register the five built-in feeds (pulse, project, calendar, news, insights)
+ * Register the built-in feeds (pulse, project, calendar, news, insights, practice, weather, memories)
  * based on the config.
  */
 export function registerBuiltinFeeds(
@@ -143,6 +146,30 @@ export function registerBuiltinFeeds(
     intervalSeconds: config.feeds.insights.intervalSeconds,
     producer: createInsightsProducer(config.feeds.insights),
     enabled: config.feeds.insights.enabled,
+  });
+
+  // Practice feed
+  registry.register({
+    name: "practice",
+    intervalSeconds: config.feeds.practice.intervalSeconds,
+    producer: createPracticeProducer(config.feeds.practice),
+    enabled: config.feeds.practice.enabled,
+  });
+
+  // Weather feed
+  registry.register({
+    name: "weather",
+    intervalSeconds: config.feeds.weather.intervalSeconds,
+    producer: createWeatherProducer(config.feeds.weather),
+    enabled: config.feeds.weather.enabled,
+  });
+
+  // Memories feed
+  registry.register({
+    name: "memories",
+    intervalSeconds: config.feeds.memories.intervalSeconds,
+    producer: createMemoriesProducer(config.feeds.memories),
+    enabled: config.feeds.memories.enabled,
   });
 }
 

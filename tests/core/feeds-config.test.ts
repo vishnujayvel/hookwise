@@ -64,6 +64,12 @@ describe("feeds and daemon default config", () => {
     expect(config.feeds.news.maxStories).toBe(5);
     expect(config.feeds.news.rotationMinutes).toBe(30);
 
+    // Practice
+    expect(config.feeds.practice).toBeDefined();
+    expect(config.feeds.practice.enabled).toBe(true);
+    expect(config.feeds.practice.intervalSeconds).toBe(120);
+    expect(config.feeds.practice.dbPath).toContain("practice-tracker.db");
+
     // Custom
     expect(config.feeds.custom).toEqual([]);
 
@@ -74,10 +80,12 @@ describe("feeds and daemon default config", () => {
     expect(config.daemon.logFile).toContain("daemon.log");
   });
 
-  it("default config has pulse and project enabled, calendar and news disabled", () => {
+  it("default config has pulse, project, insights, and practice enabled; calendar and news disabled", () => {
     const config = getDefaultConfig();
     expect(config.feeds.pulse.enabled).toBe(true);
     expect(config.feeds.project.enabled).toBe(true);
+    expect(config.feeds.insights.enabled).toBe(true);
+    expect(config.feeds.practice.enabled).toBe(true);
     expect(config.feeds.calendar.enabled).toBe(false);
     expect(config.feeds.news.enabled).toBe(false);
   });
@@ -99,6 +107,8 @@ describe("feeds and daemon default config", () => {
       expect(config.feeds.project.enabled).toBe(true);
       expect(config.feeds.calendar.enabled).toBe(false);
       expect(config.feeds.news.enabled).toBe(false);
+      expect(config.feeds.practice.enabled).toBe(true);
+      expect(config.feeds.practice.intervalSeconds).toBe(120);
       expect(config.feeds.custom).toEqual([]);
       expect(config.daemon.autoStart).toBe(true);
       expect(config.daemon.inactivityTimeoutMinutes).toBe(120);

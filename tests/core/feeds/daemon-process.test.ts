@@ -6,7 +6,7 @@
  * No real daemon processes are spawned.
  *
  * Covers Task 6.2:
- * - registerBuiltinFeeds: registers all 4 built-in feeds
+ * - registerBuiltinFeeds: registers all 8 built-in feeds
  * - registerCustomFeeds: registers custom feeds from config
  * - staggered intervals: offsets by index * 2000ms
  * - feed error isolation: one failing feed doesn't crash others
@@ -60,6 +60,10 @@ vi.mock("../../../src/core/feeds/producers/news.js", () => ({
 
 vi.mock("../../../src/core/feeds/producers/calendar.js", () => ({
   createCalendarProducer: vi.fn(() => vi.fn(async () => ({ events: [] }))),
+}));
+
+vi.mock("../../../src/core/feeds/producers/practice.js", () => ({
+  createPracticeProducer: vi.fn(() => vi.fn(async () => ({ todayTotal: 0, dueReviews: 0, last_at: null }))),
 }));
 
 // --- Mock cache-bus ---
@@ -208,17 +212,17 @@ describe("rotateLog", () => {
 // --- registerBuiltinFeeds ---
 
 describe("registerBuiltinFeeds", () => {
-  it("registers all 5 built-in feeds (FR-2.3)", () => {
+  it("registers all built-in feeds (FR-2.3)", () => {
     const registry = createFeedRegistry();
     const config = makeTestConfig();
 
     registerBuiltinFeeds(registry, config, TEST_CACHE_PATH);
 
     const all = registry.getAll();
-    expect(all).toHaveLength(5);
+    expect(all).toHaveLength(8);
 
     const names = all.map((f) => f.name).sort();
-    expect(names).toEqual(["calendar", "insights", "news", "project", "pulse"]);
+    expect(names).toEqual(["calendar", "insights", "memories", "news", "practice", "project", "pulse", "weather"]);
   });
 
   it("uses correct interval from config for each feed", () => {
@@ -266,7 +270,7 @@ describe("registerBuiltinFeeds", () => {
 
     const enabled = registry.getEnabled();
     const names = enabled.map((f) => f.name).sort();
-    expect(names).toEqual(["insights", "project", "pulse"]);
+    expect(names).toEqual(["insights", "practice", "project", "pulse"]);
   });
 });
 

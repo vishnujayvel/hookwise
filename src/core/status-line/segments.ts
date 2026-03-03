@@ -375,6 +375,62 @@ const insights_trend: SegmentRenderer = (cache) => {
   return `\uD83D\uDD27 Top: ${toolNames} | Peak: ${peakLabel}`;
 };
 
+// --- Weather Segment ---
+
+const weather: SegmentRenderer = (cache) => {
+  const weatherData = cache.weather as
+    | (CacheEntry & {
+        temperature?: number;
+        emoji?: string;
+        windSpeed?: number;
+        temperatureUnit?: "fahrenheit" | "celsius";
+      })
+    | undefined;
+  if (!weatherData || !isFresh(weatherData)) return "\uD83C\uDF24\uFE0F --";
+  if (weatherData.temperature === undefined || !weatherData.emoji) return "\uD83C\uDF24\uFE0F --";
+
+  const unit = weatherData.temperatureUnit === "celsius" ? "C" : "F";
+  const temp = Math.round(weatherData.temperature);
+  let text = `${weatherData.emoji} ${temp}\u00B0${unit}`;
+
+  // Append wind indicator if wind speed exceeds 20 mph/kmh
+  if (weatherData.windSpeed !== undefined && weatherData.windSpeed > 20) {
+    text += " \uD83D\uDCA8";
+  }
+
+  return text;
+};
+
+// --- Memories Segment ---
+
+interface MemoryItemShape {
+  date: string;
+  daysSince: number;
+  label: string;
+  toolCalls: number;
+  filesEdited: number;
+}
+
+const memories: SegmentRenderer = (cache) => {
+  const memoriesData = cache.memories as
+    | (CacheEntry & { memories?: MemoryItemShape[]; hasMemories?: boolean })
+    | undefined;
+  if (!memoriesData || !isFresh(memoriesData)) return "";
+  if (!memoriesData.hasMemories || !memoriesData.memories?.length) return "";
+
+  // Pick the most interesting memory: the one with the most tool calls
+  const best = memoriesData.memories.reduce((a, b) =>
+    b.toolCalls > a.toolCalls ? b : a,
+  );
+
+  const sessionCount = memoriesData.memories.reduce((sum, m) => {
+    // Each memory is a date, count it as 1+ sessions
+    return sum + 1;
+  }, 0);
+
+  return `\uD83D\uDD70\uFE0F On this day: ${sessionCount} session${sessionCount !== 1 ? "s" : ""} (${best.label})`;
+};
+
 /**
  * Registry of all built-in segments.
  */
@@ -398,4 +454,6 @@ export const BUILTIN_SEGMENTS: Record<string, SegmentRenderer> = {
   insights_friction,
   insights_pace,
   insights_trend,
+  weather,
+  memories,
 };
