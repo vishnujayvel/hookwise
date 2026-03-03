@@ -63,8 +63,10 @@ function applyPreset(config: HooksConfig, preset: Preset): HooksConfig {
         calendar: { ...result.feeds.calendar, enabled: true },
         news: { ...result.feeds.news, enabled: true },
         insights: { ...result.feeds.insights, enabled: true },
+        practice: { ...result.feeds.practice, enabled: true },
       };
       result.daemon = { ...result.daemon, autoStart: true };
+      result.tui = { ...result.tui, autoLaunch: true };
       break;
   }
 

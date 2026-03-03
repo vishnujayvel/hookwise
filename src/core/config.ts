@@ -24,10 +24,13 @@ import yaml from "js-yaml";
 import {
   DEFAULT_STATE_DIR,
   DEFAULT_CACHE_PATH,
+  DEFAULT_DB_PATH,
   DEFAULT_HANDLER_TIMEOUT,
   DEFAULT_STATUS_DELIMITER,
   DEFAULT_TRANSCRIPT_DIR,
   DEFAULT_DAEMON_LOG_PATH,
+  DEFAULT_CALENDAR_CREDENTIALS_PATH,
+  DEFAULT_CALENDAR_TOKEN_PATH,
   PROJECT_CONFIG_FILE,
   GLOBAL_CONFIG_PATH,
 } from "./constants.js";
@@ -234,6 +237,8 @@ export function getDefaultConfig(): HooksConfig {
         intervalSeconds: 300,
         lookaheadMinutes: 120,
         calendars: ["primary"],
+        credentialsPath: DEFAULT_CALENDAR_CREDENTIALS_PATH,
+        tokenPath: DEFAULT_CALENDAR_TOKEN_PATH,
       },
       news: {
         enabled: false,
@@ -249,12 +254,33 @@ export function getDefaultConfig(): HooksConfig {
         stalenessDays: 30,
         usageDataPath: "~/.claude/usage-data",
       },
+      practice: {
+        enabled: true,
+        intervalSeconds: 120,
+        dbPath: "~/.practice-tracker/practice-tracker.db",
+      },
+      weather: {
+        enabled: false,
+        intervalSeconds: 600,
+        latitude: 37.7749,
+        longitude: -122.4194,
+        temperatureUnit: "fahrenheit",
+      },
+      memories: {
+        enabled: false,
+        intervalSeconds: 3600,
+        dbPath: DEFAULT_DB_PATH,
+      },
       custom: [],
     },
     daemon: {
       autoStart: true,
       inactivityTimeoutMinutes: 120,
       logFile: DEFAULT_DAEMON_LOG_PATH,
+    },
+    tui: {
+      autoLaunch: false,
+      launchMethod: "newWindow",
     },
   };
 }
@@ -467,6 +493,7 @@ const KNOWN_SECTIONS = new Set([
   "includes",
   "feeds",
   "daemon",
+  "tui",
 ]);
 
 /** Known top-level sections in snake_case (for YAML) */
@@ -485,6 +512,7 @@ const KNOWN_SECTIONS_SNAKE = new Set([
   "includes",
   "feeds",
   "daemon",
+  "tui",
 ]);
 
 /**
@@ -808,6 +836,19 @@ export function validateConfig(raw: Record<string, unknown>): ValidationResult {
         path: "daemon.inactivity_timeout_minutes",
         message: "inactivity_timeout_minutes must be a positive number",
         suggestion: "Set inactivity_timeout_minutes: 120",
+      });
+    }
+  }
+
+  // Validate tui
+  if (raw.tui !== undefined && typeof raw.tui === "object" && raw.tui !== null) {
+    const tui = raw.tui as Record<string, unknown>;
+    const launchMethod = (tui.launch_method ?? tui.launchMethod) as string | undefined;
+    if (launchMethod !== undefined && launchMethod !== "newWindow" && launchMethod !== "background") {
+      errors.push({
+        path: "tui.launch_method",
+        message: `Invalid launch method: "${launchMethod}"`,
+        suggestion: "Use one of: newWindow, background",
       });
     }
   }

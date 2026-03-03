@@ -322,6 +322,9 @@ def read_feed_health(
         ("calendar", feeds_config.get("calendar", {})),
         ("news", feeds_config.get("news", {})),
         ("insights", feeds_config.get("insights", {})),
+        ("practice", feeds_config.get("practice", {})),
+        ("weather", feeds_config.get("weather", {})),
+        ("memories", feeds_config.get("memories", {})),
     ]
 
     results = []

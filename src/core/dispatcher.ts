@@ -17,6 +17,7 @@ import type {
   HandlerResult,
   HooksConfig,
   ResolvedHandler,
+  AnalyticsConfig,
 } from "./types.js";
 import { isEventType, isHookPayload } from "./types.js";
 import { safeDispatch, logError, logDebug } from "./errors.js";
@@ -24,6 +25,107 @@ import { loadConfig, getHandlersForEvent, getDefaultConfig } from "./config.js";
 import { evaluate } from "./guards.js";
 import { mergeKey } from "./feeds/cache-bus.js";
 import { isRunning, startDaemon } from "./feeds/daemon-manager.js";
+import { launchTui } from "./tui-launcher.js";
+import { AnalyticsDB } from "./analytics/db.js";
+import { AnalyticsEngine } from "./analytics/session.js";
+
+// --- Analytics Engine (lazy singleton) ---
+
+/**
+ * Cached analytics engine instance, keyed by dbPath.
+ * Re-created if the dbPath changes (e.g., between test runs).
+ */
+let cachedEngine: AnalyticsEngine | null = null;
+let cachedDbPath: string | null = null;
+
+/**
+ * Get or create the analytics engine for the given config.
+ * Returns null if analytics is disabled.
+ */
+function getAnalyticsEngine(analyticsConfig: AnalyticsConfig): AnalyticsEngine | null {
+  if (!analyticsConfig.enabled) return null;
+
+  // Normalize undefined to null so the cache comparison works correctly
+  const dbPath = analyticsConfig.dbPath ?? null;
+
+  // Re-use cached engine if dbPath matches
+  if (cachedEngine && cachedDbPath === dbPath) {
+    return cachedEngine;
+  }
+
+  // Close old DB handle before rotating (avoid leaking SQLite connections)
+  if (cachedEngine) {
+    try { cachedEngine.getDB().close(); } catch { /* best-effort cleanup */ }
+  }
+
+  // Create new engine
+  const db = new AnalyticsDB(dbPath ?? undefined);
+  cachedEngine = new AnalyticsEngine(db);
+  cachedDbPath = dbPath;
+  return cachedEngine;
+}
+
+/**
+ * Record analytics events based on the dispatch event type.
+ *
+ * Runs in Phase 3 (side effects). Wrapped in try/catch for fail-open
+ * behavior: analytics errors must NEVER affect the dispatch exit code (ARCH-3).
+ *
+ * - SessionStart: creates a session row
+ * - SessionEnd: updates the session row with end timestamp and summary
+ * - PostToolUse: records a tool use event
+ */
+function executeAnalytics(
+  engine: AnalyticsEngine,
+  eventType: EventType,
+  payload: HookPayload
+): void {
+  try {
+    const sessionId = payload.session_id;
+    if (!sessionId) return;
+
+    const timestamp = new Date().toISOString();
+
+    switch (eventType) {
+      case "SessionStart":
+        engine.startSession(sessionId);
+        break;
+
+      case "SessionEnd":
+        engine.endSession(sessionId, {
+          totalToolCalls: 0,
+          fileEditsCount: 0,
+          aiAuthoredLines: 0,
+          humanVerifiedLines: 0,
+        });
+        break;
+
+      case "PostToolUse":
+        engine.recordEvent({
+          sessionId,
+          eventType,
+          toolName: payload.tool_name ?? undefined,
+          timestamp,
+        });
+        break;
+
+      default:
+        // Other event types: record a generic event
+        engine.recordEvent({
+          sessionId,
+          eventType,
+          timestamp,
+        });
+        break;
+    }
+  } catch (error) {
+    // ARCH-3: Fail-open — analytics errors must never affect dispatch exit code
+    logError(
+      error instanceof Error ? error : new Error(String(error)),
+      { context: "executeAnalytics", eventType }
+    );
+  }
+}
 
 // --- Stdin Reading ---
 
@@ -394,11 +496,23 @@ export function dispatch(
       }
     }
 
+    // TUI auto-launch on SessionStart
+    if (eventType === "SessionStart" && config.tui?.autoLaunch) {
+      try {
+        launchTui(config.tui);
+      } catch {
+        // Fail-open: TUI launch failure must never affect dispatch (ARCH-3)
+      }
+    }
+
     // Get handlers for this event
     const handlers = getHandlersForEvent(config, eventType);
 
-    // No handlers AND no declarative guards -> exit 0
-    if (handlers.length === 0 && config.guards.length === 0) {
+    // Initialize analytics engine (Phase 3 built-in side effect)
+    const analyticsEngine = getAnalyticsEngine(config.analytics);
+
+    // No handlers AND no declarative guards AND no analytics -> exit 0
+    if (handlers.length === 0 && config.guards.length === 0 && !analyticsEngine) {
       return { stdout: null, stderr: null, exitCode: 0 };
     }
 
@@ -459,6 +573,11 @@ export function dispatch(
 
     // Phase 3: Non-Blocking Side Effects (after stdout decided)
     executeSideEffectPhase(handlers, payload);
+
+    // Phase 3b: Built-in analytics (always runs if enabled, independent of custom handlers)
+    if (analyticsEngine) {
+      executeAnalytics(analyticsEngine, eventType, payload);
+    }
 
     // Merge warn context with Phase 2 context output
     let finalStdout: string | null = contextStdout;

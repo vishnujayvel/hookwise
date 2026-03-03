@@ -57,5 +57,8 @@ export const DEFAULT_DAEMON_LOG_PATH = join(DEFAULT_STATE_DIR, "daemon.log");
 /** Default calendar credentials path: ~/.hookwise/calendar-credentials.json */
 export const DEFAULT_CALENDAR_CREDENTIALS_PATH = join(DEFAULT_STATE_DIR, "calendar-credentials.json");
 
+/** Default calendar token path: ~/.hookwise/calendar-token.json */
+export const DEFAULT_CALENDAR_TOKEN_PATH = join(DEFAULT_STATE_DIR, "calendar-token.json");
+
 /** Default feed timeout in seconds */
 export const DEFAULT_FEED_TIMEOUT = 10; // seconds

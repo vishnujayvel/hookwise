@@ -1,6 +1,6 @@
 {
   "name": "hookwise",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Config-driven hook framework for Claude Code with guards, analytics, coaching, and interactive TUI",
   "type": "module",
   "bin": {
@@ -13,7 +13,8 @@
   "files": [
     "dist/",
     "recipes/",
-    "examples/"
+    "examples/",
+    "scripts/"
   ],
   "engines": {
     "node": ">=20.0.0"

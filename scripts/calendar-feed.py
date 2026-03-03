@@ -7,15 +7,19 @@ and outputs them as JSON to stdout.
 
 Usage:
     python3 calendar-feed.py --lookahead 60 --credentials /path/to/credentials.json
+    python3 calendar-feed.py --setup --credentials /path/to/credentials.json
 
 Setup:
     1. Create OAuth 2.0 credentials in Google Cloud Console
     2. Download the credentials JSON file
     3. Set the path in hookwise.yaml under feeds.calendar.credentialsPath
     4. Install dependencies: pip install google-auth google-auth-oauthlib google-api-python-client
+    5. Or use: hookwise setup calendar (handles steps 2-4 automatically)
 
 The first run will open a browser for OAuth consent. Subsequent runs use
 the cached token at ~/.hookwise/calendar-token.json.
+
+The --setup flag runs only the OAuth flow and validates the token, then exits.
 """
 
 import argparse
@@ -40,6 +44,11 @@ def main():
         "--credentials",
         required=True,
         help="Path to Google OAuth credentials JSON file",
+    )
+    parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Only run the OAuth flow and validate the token, then exit",
     )
     args = parser.parse_args()
 
@@ -83,6 +92,18 @@ def main():
         Path(TOKEN_PATH).parent.mkdir(parents=True, exist_ok=True)
         with open(TOKEN_PATH, "w") as token_file:
             token_file.write(creds.to_json())
+
+    # --setup mode: validate token and exit without fetching events
+    if args.setup:
+        if os.path.exists(TOKEN_PATH):
+            print("Calendar OAuth setup complete. Token saved to " + TOKEN_PATH)
+            sys.exit(0)
+        else:
+            print(
+                "Setup failed: token file was not created at " + TOKEN_PATH,
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     service = build("calendar", "v3", credentials=creds)
 

@@ -189,7 +189,7 @@ describe("BUILTIN_SEGMENTS registry", () => {
     }
   });
 
-  it("has 19 total segments", () => {
-    expect(Object.keys(BUILTIN_SEGMENTS)).toHaveLength(19);
+  it("has 21 total segments", () => {
+    expect(Object.keys(BUILTIN_SEGMENTS)).toHaveLength(21);
   });
 });
