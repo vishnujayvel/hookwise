@@ -144,6 +144,8 @@ function runChecks(dir: string): Check[] {
       loadedConfig.feeds.news.enabled ||
       loadedConfig.feeds.insights.enabled ||
       loadedConfig.feeds.practice.enabled ||
+      loadedConfig.feeds.weather.enabled ||
+      loadedConfig.feeds.memories.enabled ||
       loadedConfig.feeds.custom.some((f) => f.enabled);
 
     if (anyFeedEnabled) {

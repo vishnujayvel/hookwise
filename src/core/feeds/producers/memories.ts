@@ -90,9 +90,11 @@ export function queryMemoriesData(dbPath: string): MemoriesData | null {
     db = new Database(resolvedPath, { readonly: true });
 
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
+    const todayStr = now.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+    // Use UTC getters to stay consistent with toISOString() (which is UTC).
+    // Local getters diverge near midnight in negative UTC offsets.
+    const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(now.getUTCDate()).padStart(2, "0");
     const monthDay = `-${month}-${day}`; // e.g. "-03-03"
 
     // Collect all matching dates
@@ -147,7 +149,7 @@ export function queryMemoriesData(dbPath: string): MemoriesData | null {
       if (!sessionAgg || sessionAgg.session_count === 0) continue;
 
       // Use UTC date-only math to avoid timezone rounding issues
-      const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
       const [y, m, d] = dateStr.split("-").map(Number);
       const targetUtc = Date.UTC(y, m - 1, d);
       const daysSince = Math.round((todayUtc - targetUtc) / (1000 * 60 * 60 * 24));

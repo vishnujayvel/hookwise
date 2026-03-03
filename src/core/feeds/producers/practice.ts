@@ -58,7 +58,10 @@ export function queryPracticeData(dbPath: string): PracticeData | null {
   try {
     db = new Database(resolvedPath, { readonly: true });
 
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    // UTC date: toISOString() returns UTC, and practice_reps.practiced_at
+    // is stored as ISO 8601 with Z suffix (UTC), so UTC-based "today" is
+    // the correct boundary for day-level comparisons.
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
 
     // 1. Count today's practice reps
     const todayCountRow = db

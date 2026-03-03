@@ -489,7 +489,7 @@ describe("pipeline-wiring: weather producer to segment pipeline", () => {
     expect(output).toContain("\uD83D\uDCA8"); // wind emoji
   });
 
-  it("weather producer returns null → weather segment renders empty", () => {
+  it("weather producer returns null → weather segment renders fallback", () => {
     env = createTestEnv();
 
     // Do NOT write any weather data — simulates a producer that returned null
@@ -497,7 +497,7 @@ describe("pipeline-wiring: weather producer to segment pipeline", () => {
     const segmentFn = BUILTIN_SEGMENTS["weather"];
     const output = segmentFn(cache, { builtin: "weather" });
 
-    expect(output).toBe("");
+    expect(output).toBe("\uD83C\uDF24\uFE0F --");
   });
 
   it("testPipelineFlow works with weather data (weather segment)", async () => {

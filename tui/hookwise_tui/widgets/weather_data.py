@@ -33,6 +33,22 @@ VALID_CONDITIONS = frozenset({
 })
 
 
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Safely convert a value to float, returning *default* on failure."""
+    try:
+        return float(val) if val is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(val: Any, default: int = 0) -> int:
+    """Safely convert a value to int, returning *default* on failure."""
+    try:
+        return int(float(val)) if val is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass
 class WeatherInfo:
     """Parsed weather information for the TUI."""
@@ -106,7 +122,7 @@ def read_weather_from_cache(
     if not condition and description:
         condition = description.lower().replace(" ", "_")
     if condition not in VALID_CONDITIONS:
-        condition = WEATHER_CODE_MAP.get(int(code) if isinstance(code, (int, float)) else 0, "cloudy")
+        condition = WEATHER_CODE_MAP.get(_safe_int(code), "cloudy")
 
     # If no useful data at all, return None
     if not condition and not temperature and not code:
@@ -114,22 +130,22 @@ def read_weather_from_cache(
 
     # Compute temp_c/temp_f from the single temperature + unit, or from legacy fields
     if temp_unit == "celsius":
-        temp_c = float(temperature) if temperature else float(weather_entry.get("temp_c", 0))
+        temp_c = _safe_float(temperature) if temperature else _safe_float(weather_entry.get("temp_c"))
         temp_f = round(temp_c * 9 / 5 + 32)
     elif temp_unit == "fahrenheit" or temperature:
-        temp_f = float(temperature) if temperature else float(weather_entry.get("temp_f", 0))
+        temp_f = _safe_float(temperature) if temperature else _safe_float(weather_entry.get("temp_f"))
         temp_c = round((temp_f - 32) * 5 / 9)
     else:
-        temp_c = float(weather_entry.get("temp_c", 0))
-        temp_f = float(weather_entry.get("temp_f", 0))
+        temp_c = _safe_float(weather_entry.get("temp_c"))
+        temp_f = _safe_float(weather_entry.get("temp_f"))
 
     return WeatherInfo(
         city=str(city) if city else "Local",
         condition=condition,
-        code=int(code) if isinstance(code, (int, float)) else 0,
+        code=_safe_int(code),
         temp_c=temp_c,
         temp_f=temp_f,
-        wind_speed=float(wind_speed),
+        wind_speed=_safe_float(wind_speed),
     )
 
 

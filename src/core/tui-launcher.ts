@@ -12,9 +12,12 @@
 import { spawn } from "node:child_process";
 import {
   existsSync,
+  openSync,
+  closeSync,
   readFileSync,
   writeFileSync,
   unlinkSync,
+  constants as fsConstants,
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { platform } from "node:os";
@@ -66,6 +69,41 @@ function writeTuiPid(pid: number, pidPath: string): void {
     } else {
       throw err;
     }
+  }
+}
+
+/**
+ * Atomically reserve the PID file by creating it with O_EXCL.
+ * Writes a sentinel value ("0") to indicate "launching".
+ * Returns true if reservation succeeded, false if file already exists
+ * (another launch is in progress or a live TUI holds it).
+ */
+function reserveTuiPid(pidPath: string): boolean {
+  ensureDir(dirname(pidPath));
+  try {
+    const fd = openSync(pidPath, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL);
+    writeFileSync(fd, "0", "utf-8");
+    closeSync(fd);
+    return true;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      // Check if the existing file is from a live process
+      const existingPid = readTuiPid(pidPath);
+      if (existingPid !== null && existingPid > 0 && isProcessAlive(existingPid)) {
+        return false; // Another TUI instance is running
+      }
+      // Stale PID file (dead process or sentinel "0") — remove and retry once
+      try {
+        unlinkSync(pidPath);
+        const fd = openSync(pidPath, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL);
+        writeFileSync(fd, "0", "utf-8");
+        closeSync(fd);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
   }
 }
 
@@ -149,13 +187,11 @@ export function launchTui(config: TuiConfig, pidPath?: string): boolean {
       return false;
     }
 
-    let child;
-
     if (config.launchMethod === "newWindow") {
       // macOS: use osascript to open a new Terminal.app window running the TUI.
       // Note: osascript is transient — its PID is not the python3 PID, so we
       // skip PID-based duplicate prevention for newWindow mode.
-      child = spawn(
+      const child = spawn(
         "osascript",
         ["-e", 'tell application "Terminal" to do script "python3 -m hookwise_tui"'],
         {
@@ -163,33 +199,44 @@ export function launchTui(config: TuiConfig, pidPath?: string): boolean {
           stdio: "ignore",
         },
       );
-    } else {
-      // background: spawn detached python process directly
-      child = spawn(
-        "python3",
-        ["-m", "hookwise_tui"],
-        {
-          detached: true,
-          stdio: "ignore",
-        },
-      );
+      child.unref();
+      const pid = child.pid ?? null;
+      if (pid !== null) {
+        logDebug(`TUI launched with PID ${pid} (method: newWindow)`);
+        return true;
+      }
+      logDebug("TUI launch failed: no PID returned from spawn");
+      return false;
     }
 
-    const pid = child.pid ?? null;
+    // Background mode: reserve PID file atomically BEFORE spawning
+    // to prevent TOCTOU race where two concurrent calls both pass isTuiRunning()
+    if (!reserveTuiPid(effectivePath)) {
+      logDebug("TUI PID file reservation failed (another instance launching or running)");
+      return false;
+    }
 
-    // Unref so the parent process can exit without waiting
+    const child = spawn(
+      "python3",
+      ["-m", "hookwise_tui"],
+      {
+        detached: true,
+        stdio: "ignore",
+      },
+    );
+
+    const pid = child.pid ?? null;
     child.unref();
 
     if (pid !== null) {
-      // Only write PID for background mode — newWindow uses a transient
-      // osascript process whose PID goes stale immediately.
-      if (config.launchMethod !== "newWindow") {
-        writeTuiPid(pid, effectivePath);
-      }
-      logDebug(`TUI launched with PID ${pid} (method: ${config.launchMethod})`);
+      // Update sentinel with actual PID
+      writeTuiPid(pid, effectivePath);
+      logDebug(`TUI launched with PID ${pid} (method: background)`);
       return true;
     }
 
+    // Spawn failed — release the reservation
+    removeTuiPid(effectivePath);
     logDebug("TUI launch failed: no PID returned from spawn");
     return false;
   } catch (error) {

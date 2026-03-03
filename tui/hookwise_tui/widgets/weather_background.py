@@ -351,17 +351,16 @@ class WeatherBackground(Widget):
             elif self.weather == "fog":
                 p.x += p.drift + self._wind * 0.2
                 p.y += math.sin(self._time_offset + p.x * 0.05) * 0.02
-            else:
-                # Rain/drizzle/thunderstorm
-                p.y += p.speed
-                p.x += p.drift + self._wind * (0.3 + p.layer * 0.2)
-
-            # Dust motes in sun mode
-            if self.weather in ("clear", "sun") and p.layer == 1:
+            elif self.weather in ("clear", "sun") and p.layer == 1:
+                # Dust motes — gentle drift (must be before the else branch)
                 p.y += p.speed
                 p.x += p.drift + math.sin(
                     self._time_offset * 0.5 + p.y * 0.2
                 ) * 0.03
+            else:
+                # Rain/drizzle/thunderstorm
+                p.y += p.speed
+                p.x += p.drift + self._wind * (0.3 + p.layer * 0.2)
 
             # Respawn at top when off bottom
             if p.y > h:

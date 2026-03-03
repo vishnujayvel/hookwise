@@ -46,6 +46,28 @@ export interface CacheSeedEntry {
 // ---------------------------------------------------------------------------
 
 /**
+ * Simple recursive merge: for each key in source, if both target[key] and
+ * source[key] are plain objects, recurse; otherwise source wins.
+ */
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    if (
+      source[key] && typeof source[key] === "object" && !Array.isArray(source[key]) &&
+      target[key] && typeof target[key] === "object" && !Array.isArray(target[key])
+    ) {
+      result[key] = deepMerge(
+        target[key] as Record<string, unknown>,
+        source[key] as Record<string, unknown>,
+      );
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
+}
+
+/**
  * Build a minimal valid HooksConfig with all features enabled and paths
  * pointing to a given temp directory. Merges any caller overrides on top.
  */
@@ -70,8 +92,8 @@ export function makeIntegrationConfig(
     base.settings.stateDir = tmpDir;
   }
 
-  // Apply caller overrides (shallow merge for top-level keys)
-  return { ...base, ...overrides } as HooksConfig;
+  // Apply caller overrides with deep merge to preserve nested defaults
+  return deepMerge(base, overrides) as HooksConfig;
 }
 
 /**

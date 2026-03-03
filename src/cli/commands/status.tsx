@@ -62,6 +62,8 @@ function getStatusInfo(config: HooksConfig): StatusInfo {
       { name: "News", enabled: config.feeds.news.enabled },
       { name: "Insights", enabled: config.feeds.insights.enabled },
       { name: "Practice", enabled: config.feeds.practice.enabled },
+      { name: "Weather", enabled: config.feeds.weather.enabled },
+      { name: "Memories", enabled: config.feeds.memories.enabled },
     ],
   };
 }

@@ -386,8 +386,8 @@ const weather: SegmentRenderer = (cache) => {
         temperatureUnit?: "fahrenheit" | "celsius";
       })
     | undefined;
-  if (!weatherData || !isFresh(weatherData)) return "";
-  if (weatherData.temperature === undefined || !weatherData.emoji) return "";
+  if (!weatherData || !isFresh(weatherData)) return "\uD83C\uDF24\uFE0F --";
+  if (weatherData.temperature === undefined || !weatherData.emoji) return "\uD83C\uDF24\uFE0F --";
 
   const unit = weatherData.temperatureUnit === "celsius" ? "C" : "F";
   const temp = Math.round(weatherData.temperature);

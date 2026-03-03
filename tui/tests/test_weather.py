@@ -362,11 +362,9 @@ class TestWeatherBackground:
         bg._height = 24
         bg.weather = "rain"
         bg._spawn_all()
-        rain_count = len(bg.particles)
 
         bg.weather = "snow"
         bg.watch_weather("snow")
-        snow_count = len(bg.particles)
 
         # Different weather = different particle count
         # (they might coincidentally be the same due to randomness,
@@ -445,7 +443,7 @@ class TestAppWeatherIntegration:
         """App starts with weather background widget."""
         from hookwise_tui.app import HookwiseTUI
         app = HookwiseTUI()
-        async with app.run_test() as pilot:
+        async with app.run_test() as _pilot:
             assert app.title == "Hookwise"
             bg = app.query_one("#weather-bg", WeatherBackground)
             assert bg is not None
@@ -465,6 +463,7 @@ class TestAppWeatherIntegration:
             # and wraps to the same — unlikely but possible)
             assert isinstance(new_weather, str)
             assert new_weather in VALID_CONDITIONS or new_weather == "sun"
+            assert new_weather != initial_weather
 
     async def test_tab_switching_still_works(self):
         """Tab switching works with weather background present."""
@@ -482,7 +481,7 @@ class TestAppWeatherIntegration:
         """Content layer container is present above the weather background."""
         from hookwise_tui.app import HookwiseTUI
         app = HookwiseTUI()
-        async with app.run_test() as pilot:
+        async with app.run_test() as _pilot:
             from textual.containers import Container
             content = app.query_one("#content-layer", Container)
             assert content is not None

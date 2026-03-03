@@ -6,7 +6,7 @@
  * No real daemon processes are spawned.
  *
  * Covers Task 6.2:
- * - registerBuiltinFeeds: registers all 6 built-in feeds
+ * - registerBuiltinFeeds: registers all 8 built-in feeds
  * - registerCustomFeeds: registers custom feeds from config
  * - staggered intervals: offsets by index * 2000ms
  * - feed error isolation: one failing feed doesn't crash others

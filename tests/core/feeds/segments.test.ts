@@ -519,6 +519,7 @@ describe("BUILTIN_SEGMENTS registry", () => {
       "context_bar", "mode_badge", "duration", "practice_breadcrumb",
       "pulse", "project", "calendar", "news",
       "insights_friction", "insights_pace", "insights_trend",
+      "weather", "memories",
     ];
     for (const name of expected) {
       expect(BUILTIN_SEGMENTS[name]).toBeDefined();

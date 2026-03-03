@@ -179,7 +179,7 @@ describe("setup CLI command", () => {
       // Should not crash — fail-open principle
       const allErrors = errorSpy.mock.calls.map((c) => c[0]).join("\n");
       expect(allErrors).toContain("OAuth");
-      expect(process.exitCode).toBe(1);
+      expect(process.exitCode).toBe(2);
     });
 
     it("skips writing credentials if file already exists", async () => {

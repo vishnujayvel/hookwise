@@ -13,7 +13,7 @@
  * GH#80: Memories/On This Day feed producer
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -96,9 +96,9 @@ function todayStr(): string {
  */
 function sameMonthDayPreviousYear(yearsAgo: number): string {
   const now = new Date();
-  const year = now.getFullYear() - yearsAgo;
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
+  const year = now.getUTCFullYear() - yearsAgo;
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(now.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -256,17 +256,13 @@ describe("queryMemoriesData", () => {
   });
 
   it("returns null when 7d and 30d lookbacks have no sessions and no same-month-day matches", () => {
-    // Insert a session from a completely different date
+    // Freeze time so 7d/30d/same-month-day are deterministic and don't match 2025-01-15
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-02-22T12:00:00Z"));
     insertSession(db, "session-random", "2025-01-15", 10, 5);
-
     const result = queryMemoriesData(dbPath);
-    // Only returns memories if there are matches for 7d ago, 30d ago, or same month-day
-    // The 7d and 30d dates may or may not match "2025-01-15" — this test just verifies
-    // that a random date doesn't accidentally match
-    // If result is not null, it means 7d/30d ago happened to have sessions — still correct
-    if (result !== null) {
-      expect(result.hasMemories).toBe(true);
-    }
+    expect(result).toBeNull();
+    vi.useRealTimers();
   });
 });
 

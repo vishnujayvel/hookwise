@@ -14,12 +14,12 @@ from hookwise_tui.tabs.insights import InsightsTab
 from hookwise_tui.tabs.recipes import RecipesTab
 from hookwise_tui.tabs.status import StatusTab
 from hookwise_tui.widgets.weather_background import WeatherBackground
-from hookwise_tui.widgets.weather_data import get_weather
+from hookwise_tui.widgets.weather_data import WeatherInfo, get_weather
 
 
 # Map weather conditions to background engine values
 _CONDITION_TO_WEATHER = {
-    "clear": "sun", "cloudy": "cloudy", "fog": "fog",
+    "clear": "sun", "sun": "sun", "cloudy": "cloudy", "fog": "fog",
     "drizzle": "drizzle", "rain": "rain", "heavy_rain": "heavy_rain",
     "snow": "snow", "heavy_snow": "heavy_snow",
     "thunderstorm": "thunderstorm",
@@ -99,7 +99,13 @@ class HookwiseTUI(App):
 
     def on_mount(self) -> None:
         # Load weather (may do a network fetch if cache is empty)
-        weather_info = get_weather()
+        try:
+            weather_info = get_weather()
+        except Exception:
+            weather_info = WeatherInfo(
+                city="Local", condition="rain", code=61,
+                temp_c=9, temp_f=48, wind_speed=12,
+            )
         bg = self.query_one("#weather-bg", WeatherBackground)
         initial = _CONDITION_TO_WEATHER.get(
             weather_info.condition, "rain"

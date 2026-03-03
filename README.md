@@ -88,7 +88,7 @@ Then [register hookwise in `.claude/settings.json`](docs/guide/getting-started.m
 
 **[Coaching](docs/features/coaching.md)** -- Periodic **metacognition prompts** break autopilot mode: *"Are you solving the right problem, or the most interesting one?"*
 
-**[Status Line](docs/features/status-line.md)** -- 18 composable segments powered by a [background daemon](docs/features/feeds.md) with 5 feed producers. Mix `session`, `cost`, `project`, `calendar`, `news`, `insights`, and more.
+**[Status Line](docs/features/status-line.md)** -- 21 composable segments powered by a [background daemon](docs/features/feeds.md) with 8 built-in feed producers. Mix `session`, `cost`, `project`, `calendar`, `news`, `insights`, and more.
 
 <img src="screenshots/status-line-v1.2.png" alt="Claude Code status line with context bar, cost, duration, and insights" width="700">
 
@@ -143,6 +143,6 @@ Also exports `HookRunner` and `HookResult`. [Details &rarr;](docs/cli.md)
 
 ## Contributing
 
-`git clone`, `npm install`, `npm test` (1363 tests), `npm run build`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+`git clone`, `npm install`, `npm test` (1,487 tests), `npm run build`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [MIT](LICENSE) -- Built by [Vishnu](https://github.com/vishnujayvel). *Born from watching Claude Code do amazing things -- and occasionally terrifying things.*

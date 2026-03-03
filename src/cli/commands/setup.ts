@@ -163,7 +163,7 @@ async function setupCalendar(): Promise<void> {
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error(`Failed to write credentials file: ${msg}`);
-      process.exitCode = 1;
+      process.exitCode = 2;
       return;
     }
   } else {
@@ -177,7 +177,7 @@ async function setupCalendar(): Promise<void> {
   if (!success) {
     console.error("\nOAuth setup did not complete successfully.");
     console.log("You can retry with: hookwise setup calendar");
-    process.exitCode = 1;
+    process.exitCode = 2;
     return;
   }
 
@@ -191,7 +191,7 @@ async function setupCalendar(): Promise<void> {
     console.error("\nSetup appeared to succeed but token file was not found.");
     console.error(`Expected at: ${DEFAULT_CALENDAR_TOKEN_PATH}`);
     console.log("You can retry with: hookwise setup calendar");
-    process.exitCode = 1;
+    process.exitCode = 2;
   }
 }
 

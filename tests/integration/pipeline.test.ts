@@ -164,7 +164,7 @@ describe("pipeline integration: SessionStart -> daemon -> feeds -> segments", ()
     registerCustomFeeds(registry, config);
 
     const allFeeds = registry.getAll();
-    expect(allFeeds.length).toBeGreaterThanOrEqual(6); // pulse, project, calendar, news, insights, practice
+    expect(allFeeds).toHaveLength(8); // pulse, project, calendar, news, insights, practice, weather, memories
 
     const enabledFeeds = registry.getEnabled();
     // Default config: pulse, project, insights, practice enabled; calendar and news disabled

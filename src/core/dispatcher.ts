@@ -43,7 +43,14 @@ let cachedDbPath: string | null = null;
  * Returns null if analytics is disabled.
  */
 function getAnalyticsEngine(analyticsConfig: AnalyticsConfig): AnalyticsEngine | null {
-  if (!analyticsConfig.enabled) return null;
+  if (!analyticsConfig.enabled) {
+    if (cachedEngine) {
+      try { cachedEngine.getDB().close(); } catch { /* best-effort */ }
+      cachedEngine = null;
+      cachedDbPath = null;
+    }
+    return null;
+  }
 
   // Normalize undefined to null so the cache comparison works correctly
   const dbPath = analyticsConfig.dbPath ?? null;
@@ -496,23 +503,13 @@ export function dispatch(
       }
     }
 
-    // TUI auto-launch on SessionStart
-    if (eventType === "SessionStart" && config.tui?.autoLaunch) {
-      try {
-        launchTui(config.tui);
-      } catch {
-        // Fail-open: TUI launch failure must never affect dispatch (ARCH-3)
-      }
-    }
-
     // Get handlers for this event
     const handlers = getHandlersForEvent(config, eventType);
 
-    // Initialize analytics engine (Phase 3 built-in side effect)
-    const analyticsEngine = getAnalyticsEngine(config.analytics);
-
-    // No handlers AND no declarative guards AND no analytics -> exit 0
-    if (handlers.length === 0 && config.guards.length === 0 && !analyticsEngine) {
+    // No handlers AND no declarative guards AND no analytics AND no TUI -> exit 0
+    const hasAnalytics = config.analytics.enabled;
+    const hasTuiLaunch = eventType === "SessionStart" && config.tui?.autoLaunch;
+    if (handlers.length === 0 && config.guards.length === 0 && !hasAnalytics && !hasTuiLaunch) {
       return { stdout: null, stderr: null, exitCode: 0 };
     }
 
@@ -574,7 +571,17 @@ export function dispatch(
     // Phase 3: Non-Blocking Side Effects (after stdout decided)
     executeSideEffectPhase(handlers, payload);
 
-    // Phase 3b: Built-in analytics (always runs if enabled, independent of custom handlers)
+    // Phase 3b: TUI auto-launch on SessionStart (side effect)
+    if (eventType === "SessionStart" && config.tui?.autoLaunch) {
+      try {
+        launchTui(config.tui);
+      } catch {
+        // Fail-open: TUI launch failure must never affect dispatch (ARCH-3)
+      }
+    }
+
+    // Phase 3c: Built-in analytics (always runs if enabled, independent of custom handlers)
+    const analyticsEngine = getAnalyticsEngine(config.analytics);
     if (analyticsEngine) {
       executeAnalytics(analyticsEngine, eventType, payload);
     }

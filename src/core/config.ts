@@ -785,6 +785,85 @@ export function validateConfig(raw: Record<string, unknown>): ValidationResult {
       }
     }
 
+    // Validate feeds.practice
+    if (feeds.practice !== undefined && typeof feeds.practice === "object" && feeds.practice !== null) {
+      const practice = feeds.practice as Record<string, unknown>;
+      const interval = (practice.interval_seconds ?? practice.intervalSeconds) as number | undefined;
+      if (interval !== undefined && (typeof interval !== "number" || interval <= 0)) {
+        errors.push({
+          path: "feeds.practice.interval_seconds",
+          message: "interval_seconds must be a positive number",
+          suggestion: "Set interval_seconds: 120",
+        });
+      }
+      const dbPath = (practice.db_path ?? practice.dbPath) as string | undefined;
+      if (dbPath !== undefined && (typeof dbPath !== "string" || dbPath.trim() === "")) {
+        errors.push({
+          path: "feeds.practice.db_path",
+          message: "db_path must be a non-empty string",
+          suggestion: "Set db_path: '~/.practice-tracker/practice-tracker.db'",
+        });
+      }
+    }
+
+    // Validate feeds.weather
+    if (feeds.weather !== undefined && typeof feeds.weather === "object" && feeds.weather !== null) {
+      const weather = feeds.weather as Record<string, unknown>;
+      const interval = (weather.interval_seconds ?? weather.intervalSeconds) as number | undefined;
+      if (interval !== undefined && (typeof interval !== "number" || interval <= 0)) {
+        errors.push({
+          path: "feeds.weather.interval_seconds",
+          message: "interval_seconds must be a positive number",
+          suggestion: "Set interval_seconds: 600",
+        });
+      }
+      const lat = weather.latitude as number | undefined;
+      if (lat !== undefined && (typeof lat !== "number" || lat < -90 || lat > 90)) {
+        errors.push({
+          path: "feeds.weather.latitude",
+          message: "latitude must be a number between -90 and 90",
+          suggestion: "Set latitude: 37.7749",
+        });
+      }
+      const lon = weather.longitude as number | undefined;
+      if (lon !== undefined && (typeof lon !== "number" || lon < -180 || lon > 180)) {
+        errors.push({
+          path: "feeds.weather.longitude",
+          message: "longitude must be a number between -180 and 180",
+          suggestion: "Set longitude: -122.4194",
+        });
+      }
+      const tempUnit = (weather.temperature_unit ?? weather.temperatureUnit) as string | undefined;
+      if (tempUnit !== undefined && tempUnit !== "fahrenheit" && tempUnit !== "celsius") {
+        errors.push({
+          path: "feeds.weather.temperature_unit",
+          message: `Invalid temperature_unit: "${tempUnit}"`,
+          suggestion: "Use one of: fahrenheit, celsius",
+        });
+      }
+    }
+
+    // Validate feeds.memories
+    if (feeds.memories !== undefined && typeof feeds.memories === "object" && feeds.memories !== null) {
+      const memories = feeds.memories as Record<string, unknown>;
+      const interval = (memories.interval_seconds ?? memories.intervalSeconds) as number | undefined;
+      if (interval !== undefined && (typeof interval !== "number" || interval <= 0)) {
+        errors.push({
+          path: "feeds.memories.interval_seconds",
+          message: "interval_seconds must be a positive number",
+          suggestion: "Set interval_seconds: 3600",
+        });
+      }
+      const dbPath = (memories.db_path ?? memories.dbPath) as string | undefined;
+      if (dbPath !== undefined && (typeof dbPath !== "string" || dbPath.trim() === "")) {
+        errors.push({
+          path: "feeds.memories.db_path",
+          message: "db_path must be a non-empty string",
+          suggestion: "Set db_path to a valid SQLite database path",
+        });
+      }
+    }
+
     // Validate feeds.custom
     if (feeds.custom !== undefined) {
       if (!Array.isArray(feeds.custom)) {
@@ -849,6 +928,14 @@ export function validateConfig(raw: Record<string, unknown>): ValidationResult {
         path: "tui.launch_method",
         message: `Invalid launch method: "${launchMethod}"`,
         suggestion: "Use one of: newWindow, background",
+      });
+    }
+    const autoLaunch = (tui.auto_launch ?? tui.autoLaunch) as unknown;
+    if (autoLaunch !== undefined && typeof autoLaunch !== "boolean") {
+      errors.push({
+        path: "tui.auto_launch",
+        message: `Invalid auto_launch: expected boolean`,
+        suggestion: "Use true or false",
       });
     }
   }
