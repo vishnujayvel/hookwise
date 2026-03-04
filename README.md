@@ -113,6 +113,43 @@ Then [register hookwise in `.claude/settings.json`](docs/guide/getting-started.m
 
 **[Workflow Insights](docs/features/feeds.md)** -- Surfaces friction patterns with actionable tips, pace metrics, and session health. The data your workflow already generates but never shows you.
 
+**[Feed Platform](docs/features/feeds.md)** -- A background daemon polls 8 producers on staggered intervals and writes to an atomic cache bus with per-key TTL. Status line segments read from cache with `isFresh()` checks. If a feed is unavailable or stale, its segments silently disappear (fail-open).
+
+```mermaid
+graph LR
+    subgraph Sources[Data Sources]
+        S1[Git Repo]
+        S2[HN API]
+        S3[Calendar]
+        S4[Heartbeat]
+        S5[Usage Data]
+        S6[Practice Data]
+        S7[Weather API]
+        S8[Session History]
+    end
+
+    subgraph Daemon[Background Daemon]
+        D1[Feed Registry — 8 producers]
+        D2[pulse 30s]
+        D3[project 60s]
+        D4[calendar 5m]
+        D5[news 30m]
+        D6[insights 2m]
+        D7[practice 60s]
+        D8[weather 15m]
+        D9[memories 1h]
+    end
+
+    Sources --> D1
+    D1 --> CB[Cache Bus · Atomic JSON · Per-key TTL]
+    CB --> SL[Status Line · 21 segments]
+
+    style Sources fill:#D0EBFF,stroke:#1971C2,stroke-width:2px
+    style Daemon fill:#D3F9D8,stroke:#2B8A3E,stroke-width:2px
+    style CB fill:#FFF0DB,stroke:#D4853B,stroke-width:2px
+    style SL fill:#FFE3E3,stroke:#C92A2A,stroke-width:2px
+```
+
 **[Analytics](docs/features/analytics.md)** -- SQLite-backed session tracking: tool calls, duration, cost, daily budgets. Close the perception gap between how fast you *feel* and how fast you *are*.
 
 <img src="screenshots/stats.png" alt="hookwise stats" width="600">
@@ -146,8 +183,8 @@ Global config at `~/.hookwise/config.yaml` applies everywhere. Project-level `ho
 
 ```typescript
 import { GuardTester } from "hookwise/testing";
-const tester = new GuardTester("hookwise.yaml");
-expect(tester.evaluate("Bash", { command: "rm -rf /" }).action).toBe("block");
+const tester = new GuardTester({ configPath: "hookwise.yaml" });
+expect(tester.testToolCall("Bash", { command: "rm -rf /" }).action).toBe("block");
 ```
 
 Also exports `HookRunner` and `HookResult`. [Details &rarr;](docs/cli.md)

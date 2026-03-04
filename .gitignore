@@ -42,5 +42,8 @@ archive/
 screenshots/marketing/
 screenshots/01-before-after-results.png
 
+# Social media drafts (unpublished, internal only)
+docs/social-media-drafts.md
+
 # Excalidraw
 excalidraw.log
