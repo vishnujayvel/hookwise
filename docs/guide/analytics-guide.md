@@ -11,7 +11,7 @@ analytics:
   # db_path: "/custom/path/analytics.db"
 ```
 
-Once enabled, hookwise records events on every `PostToolUse` and `SessionEnd` dispatch.
+Once enabled, hookwise records events on every `SessionStart`, `PostToolUse`, and `SessionEnd` dispatch.
 
 ## What Gets Tracked
 

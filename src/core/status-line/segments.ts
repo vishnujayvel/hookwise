@@ -321,9 +321,41 @@ interface InsightsCacheEntry extends CacheEntry {
   top_tools?: Array<{ name: string; count: number }>;
   peak_hour?: number;
   friction_total?: number;
+  friction_counts?: Record<string, number>;
   recent_session?: {
     friction_count?: number;
   };
+}
+
+/**
+ * Map friction categories to actionable tips.
+ * Categories come from Claude Code's facets data.
+ */
+const FRICTION_TIPS: Record<string, string> = {
+  wrong_approach: "break tasks into steps",
+  misunderstood_request: "be more specific",
+  stale_context: "try a fresh session",
+  tool_error: "check tool setup",
+  scope_creep: "define done upfront",
+  repeated_errors: "read error output first",
+};
+
+/**
+ * Find the top friction category by count and return its tip.
+ */
+function topFrictionTip(frictionCounts: Record<string, number>): string | null {
+  let topCat = "";
+  let topCount = 0;
+  for (const [cat, count] of Object.entries(frictionCounts)) {
+    if (typeof count === "number" && count > topCount) {
+      topCat = cat;
+      topCount = count;
+    }
+  }
+  if (!topCat) return null;
+  const humanName = topCat.replace(/_/g, " ");
+  const tip = FRICTION_TIPS[topCat];
+  return tip ? `${humanName} \u2192 ${tip}` : humanName;
 }
 
 const insights_friction: SegmentRenderer = (cache) => {
@@ -332,8 +364,13 @@ const insights_friction: SegmentRenderer = (cache) => {
 
   const recentFriction = data.recent_session?.friction_count ?? 0;
   const totalFriction = data.friction_total ?? 0;
+  const frictionCounts = data.friction_counts ?? {};
 
   if (recentFriction > 0) {
+    const tip = topFrictionTip(frictionCounts);
+    if (tip) {
+      return `\u26A0\uFE0F ${recentFriction} friction \u00B7 ${tip}`;
+    }
     return `\u26A0\uFE0F ${recentFriction} friction in last session`;
   }
   if (totalFriction > 0) {

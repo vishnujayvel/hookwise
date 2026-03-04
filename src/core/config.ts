@@ -252,12 +252,12 @@ export function getDefaultConfig(): HooksConfig {
         enabled: true,
         intervalSeconds: 120,
         stalenessDays: 30,
-        usageDataPath: "~/.claude/usage-data",
+        usageDataPath: join(homedir(), ".claude", "usage-data"),
       },
       practice: {
         enabled: true,
         intervalSeconds: 120,
-        dbPath: "~/.practice-tracker/practice-tracker.db",
+        dbPath: join(homedir(), ".practice-tracker", "practice-tracker.db"),
       },
       weather: {
         enabled: false,

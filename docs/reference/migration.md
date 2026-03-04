@@ -11,7 +11,7 @@ This guide walks you through migrating from the original Python hookwise (v0.1.0
 | Config format | hookwise.yaml (snake_case) | hookwise.yaml (snake_case, same file) |
 | Test framework | pytest | vitest |
 | Testing API | `GuardTester` (Python) | `GuardTester`, `HookRunner`, `HookResult` |
-| TUI | Textual | React Ink |
+| TUI | Textual | Python Textual |
 | Recipes | 7 built-in | 11 built-in |
 | Event support | 7 events | All 13 Claude Code events |
 | Package format | pip/PyPI | npm |
@@ -45,11 +45,15 @@ hookwise migrate
 ```
 
 This will:
-- Detect your existing `hookwise.yaml`
-- Check for Python handler scripts (`.py` files)
-- Suggest the `python3` prefix for any Python scripts
-- Validate your config against the v1.0 schema
+- Replace the Python hookwise entry in Claude's `settings.json` with the TypeScript version
+- Validate your existing `hookwise.yaml` against the v1.0 schema
 - Report any incompatibilities
+
+Use `--dry-run` to preview changes without applying them:
+
+```bash
+hookwise migrate --dry-run
+```
 
 ### 3. Update handler scripts
 
@@ -142,8 +146,8 @@ import { describe, it, expect } from "vitest";
 
 describe("guards", () => {
   it("blocks rm -rf", () => {
-    const tester = new GuardTester("hookwise.yaml");
-    const result = tester.evaluate("Bash", { command: "rm -rf /" });
+    const tester = new GuardTester({ configPath: "hookwise.yaml" });
+    const result = tester.testToolCall("Bash", { command: "rm -rf /" });
     expect(result.action).toBe("block");
   });
 });

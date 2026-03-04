@@ -28,9 +28,12 @@ interface Step {
 function applyPreset(config: HooksConfig, preset: Preset): HooksConfig {
   const result = { ...config };
 
+  // TUI auto-launch enabled for ALL presets — it's how users discover hookwise
+  result.tui = { ...result.tui, autoLaunch: true };
+
   switch (preset) {
     case "minimal":
-      // Guards only — everything else disabled (default)
+      // Guards + TUI — everything else disabled
       break;
 
     case "coaching":
@@ -66,7 +69,6 @@ function applyPreset(config: HooksConfig, preset: Preset): HooksConfig {
         practice: { ...result.feeds.practice, enabled: true },
       };
       result.daemon = { ...result.daemon, autoStart: true };
-      result.tui = { ...result.tui, autoLaunch: true };
       break;
   }
 

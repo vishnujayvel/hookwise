@@ -15,6 +15,7 @@ export default defineConfig([
     entry: {
       "cli/app": "src/cli/app.tsx",
       "bin/hookwise": "bin/hookwise.ts",
+      "core/feeds/daemon-process": "src/core/feeds/daemon-process.ts",
       index: "src/index.ts",
       "testing/index": "src/testing/index.ts",
     },

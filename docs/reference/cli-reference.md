@@ -1,6 +1,6 @@
 # CLI Reference
 
-hookwise provides 13 CLI commands. All commands are invoked as `hookwise <command>`.
+hookwise provides 12 CLI commands. All commands are invoked as `hookwise <command>`.
 
 ## init
 
@@ -100,7 +100,7 @@ Launch the interactive terminal UI.
 hookwise tui
 ```
 
-Opens a full-screen interface with 7 tabs:
+Opens a full-screen interface with 8 tabs:
 
 | Key | Tab | Description |
 |-----|-----|-------------|
@@ -108,9 +108,10 @@ Opens a full-screen interface with 7 tabs:
 | `2` | Guards | Rule browser, test interface, match visualization |
 | `3` | Coaching | Metacognition, builder's trap, communication status |
 | `4` | Analytics | Daily summary, tool breakdown, authorship metrics |
-| `5` | Recipes | Installed recipes, details, active includes |
-| `6` | Status | Status line preview, segment configuration |
-| `7` | Feeds | Live feed data, daemon health, cache bus state |
+| `5` | Feeds | Live feed data, daemon health, cache bus state |
+| `6` | Insights | AI-generated insights, trend analysis |
+| `7` | Recipes | Installed recipes, details, active includes |
+| `8` | Status | Status line preview, segment configuration |
 
 Press `q` or `Escape` to exit.
 
@@ -126,7 +127,7 @@ hookwise migrate [--dry-run]
 |------|-------------|
 | `--dry-run` | Preview changes without applying them |
 
-Detects existing `hookwise.yaml`, checks for Python handler scripts, suggests `python3` prefix, and validates against the v1.0 schema.
+Replaces the Python hookwise entry in Claude's `settings.json` with the TypeScript version and validates your config against the v1.0 schema.
 
 See the [Migration guide](/reference/migration) for full details.
 

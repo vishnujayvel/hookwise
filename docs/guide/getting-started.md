@@ -82,11 +82,16 @@ Add hookwise as a hook handler in your Claude Code settings (`.claude/settings.j
 hookwise doctor
 ```
 
-This checks:
+This runs 9 checks:
+- Node.js version (20+)
+- Claude directory exists (`~/.claude/`)
 - Configuration file exists and is valid YAML
 - State directory has correct permissions
-- All referenced handlers are accessible
-- Recipe includes resolve correctly
+- Status line segments resolve correctly
+- Daemon process is running
+- Insights data is accessible
+- Calendar credentials are valid
+- Python 3 is available (for TUI)
 
 ### 4. Check your configuration
 
@@ -172,7 +177,7 @@ See [Creating a Recipe](./creating-a-recipe.md) for writing your own.
 
 ## Feeds and Insights
 
-hookwise v1.2 includes a feed platform with a background daemon that aggregates data from multiple sources:
+hookwise includes a feed platform with a background daemon that aggregates data from multiple sources:
 
 ```yaml
 feeds:
@@ -192,6 +197,15 @@ feeds:
   insights:
     enabled: true
     interval_seconds: 120
+  practice:
+    enabled: true
+    interval_seconds: 60
+  weather:
+    enabled: true
+    interval_seconds: 900
+  memories:
+    enabled: true
+    interval_seconds: 3600
 ```
 
 Start the daemon to begin collecting feeds:

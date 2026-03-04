@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { getDefaultConfig } from "../../src/core/config.js";
 
 describe("insights feed configuration", () => {
@@ -20,6 +22,6 @@ describe("insights feed configuration", () => {
 
   it("default config has correct usage data path", () => {
     const config = getDefaultConfig();
-    expect(config.feeds.insights.usageDataPath).toBe("~/.claude/usage-data");
+    expect(config.feeds.insights.usageDataPath).toBe(join(homedir(), ".claude", "usage-data"));
   });
 });
