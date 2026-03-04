@@ -44,6 +44,39 @@ describe("insights_friction", () => {
     expect(result).toContain("\u26A0\uFE0F");
   });
 
+  it("renders friction with actionable tip when friction_counts present", () => {
+    const cache = makeCache({
+      recent_session: { friction_count: 3 },
+      friction_total: 5,
+      friction_counts: { wrong_approach: 3, misunderstood_request: 2 },
+    });
+    const result = render(cache, defaultSegmentConfig);
+    expect(result).toContain("3 friction");
+    expect(result).toContain("wrong approach");
+    expect(result).toContain("break tasks into steps");
+  });
+
+  it("renders friction with humanized category when no tip mapping exists", () => {
+    const cache = makeCache({
+      recent_session: { friction_count: 2 },
+      friction_total: 2,
+      friction_counts: { unfamiliar_codebase: 2 },
+    });
+    const result = render(cache, defaultSegmentConfig);
+    expect(result).toContain("2 friction");
+    expect(result).toContain("unfamiliar codebase");
+  });
+
+  it("falls back to plain message when friction_counts is empty", () => {
+    const cache = makeCache({
+      recent_session: { friction_count: 3 },
+      friction_total: 12,
+      friction_counts: {},
+    });
+    const result = render(cache, defaultSegmentConfig);
+    expect(result).toContain("3 friction in last session");
+  });
+
   it("renders clean session message when zero recent but historical friction", () => {
     const cache = makeCache({
       recent_session: { friction_count: 0 },

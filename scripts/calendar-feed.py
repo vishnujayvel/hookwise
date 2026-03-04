@@ -80,7 +80,10 @@ def main():
 
     creds = None
     if os.path.exists(TOKEN_PATH):
-        creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+        # Load without scope restriction — token may have been granted with
+        # full calendar scope (e.g., shared with Google Calendar MCP).
+        # Both calendar and calendar.readonly work for read-only queries.
+        creds = Credentials.from_authorized_user_file(TOKEN_PATH)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:

@@ -5,6 +5,26 @@ All notable changes to hookwise will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-03-03
+
+### Added
+
+- **3 new feed producers:**
+  - `weather` -- Open-Meteo API integration with configurable lat/lon coordinates
+  - `memories` -- Mem0 MCP integration for surfacing relevant memories
+  - `practice` -- spaced repetition data from practice-tracker MCP
+- **2 new status line segments:**
+  - `weather` -- current temperature and conditions
+  - `memories` -- relevant memory count
+- **Integration tests** -- comprehensive test suite for end-to-end validation
+- **TUI weather background** -- weather-reactive background in Python TUI dashboard
+
+### Fixed
+
+- Input validation and sanitization across producers
+- Path traversal prevention in file-based operations
+- YAML safe loading enforced in config parsing
+
 ## [1.2.0] - 2026-02-23
 
 ### Added

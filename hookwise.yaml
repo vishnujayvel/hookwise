@@ -11,3 +11,21 @@ guards:
     action: confirm
     when: 'tool_input.command contains "force push"'
     reason: "Force push requires confirmation"
+
+feeds:
+  calendar:
+    enabled: true
+    interval_seconds: 300
+    lookahead_minutes: 120
+
+status_line:
+  enabled: true
+  segments:
+    - session
+    - cost
+    - project
+    - calendar
+
+tui:
+  auto_launch: true
+  launch_method: "newWindow"

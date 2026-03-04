@@ -208,10 +208,10 @@ Use `GuardTester` from `hookwise/testing` to test recipe guards:
 import { GuardTester } from "hookwise/testing";
 
 // Load a config that includes your recipe
-const tester = new GuardTester("hookwise.yaml");
+const tester = new GuardTester({ configPath: "hookwise.yaml" });
 
 // Verify your recipe's guards work
-const result = tester.evaluate("Bash", { command: "rm -rf /" });
+const result = tester.testToolCall("Bash", { command: "rm -rf /" });
 expect(result.action).toBe("block");
 ```
 
@@ -220,8 +220,8 @@ For script handlers, use `HookRunner` to test the full subprocess pipeline:
 ```typescript
 import { HookRunner } from "hookwise/testing";
 
-const runner = new HookRunner("hookwise.yaml");
-const result = await runner.run("PreToolUse", {
+const runner = new HookRunner("hookwise dispatch");
+const result = runner.run("PreToolUse", {
   session_id: "test",
   tool_name: "Bash",
   tool_input: { command: "ls -la" },

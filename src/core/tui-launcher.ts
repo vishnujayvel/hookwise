@@ -21,10 +21,30 @@ import {
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { platform } from "node:os";
+import { fileURLToPath } from "node:url";
 import { ensureDir } from "./state.js";
 import { logError, logDebug } from "./errors.js";
 import type { TuiConfig } from "./types.js";
 import { getStateDir } from "./state.js";
+
+/**
+ * Resolve the Python command for running the TUI.
+ * Checks bundled venv first (relative to this module), then falls back to system python3.
+ */
+function resolveTuiPython(): string {
+  try {
+    const thisDir = dirname(fileURLToPath(import.meta.url));
+    const venvPython = join(thisDir, "..", "..", "tui", ".venv", "bin", "python3");
+    if (existsSync(venvPython)) {
+      logDebug(`TUI using bundled venv: ${venvPython}`);
+      return venvPython;
+    }
+  } catch {
+    // Fall through to system python
+  }
+  logDebug("TUI using system python3");
+  return "python3";
+}
 
 /** Default TUI PID file path: ~/.hookwise/tui.pid */
 function getDefaultTuiPidPath(): string {
@@ -191,9 +211,10 @@ export function launchTui(config: TuiConfig, pidPath?: string): boolean {
       // macOS: use osascript to open a new Terminal.app window running the TUI.
       // Note: osascript is transient — its PID is not the python3 PID, so we
       // skip PID-based duplicate prevention for newWindow mode.
+      const pythonCmd = resolveTuiPython();
       const child = spawn(
         "osascript",
-        ["-e", 'tell application "Terminal" to do script "python3 -m hookwise_tui"'],
+        ["-e", `tell application "Terminal" to do script "${pythonCmd} -m hookwise_tui"`],
         {
           detached: true,
           stdio: "ignore",
@@ -216,8 +237,9 @@ export function launchTui(config: TuiConfig, pidPath?: string): boolean {
       return false;
     }
 
+    const bgPythonCmd = resolveTuiPython();
     const child = spawn(
-      "python3",
+      bgPythonCmd,
       ["-m", "hookwise_tui"],
       {
         detached: true,

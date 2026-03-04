@@ -62,6 +62,17 @@ function colorizeSegment(name: string, text: string, cache: Record<string, unkno
       if (btData?.alertLevel === "yellow") return color(text, YELLOW);
       return text;
     }
+    case "insights_friction": {
+      const insData = cache.insights as { recent_session?: { friction_count?: number } } | undefined;
+      const friction = insData?.recent_session?.friction_count ?? 0;
+      return friction > 0 ? color(text, YELLOW) : color(text, GREEN);
+    }
+    case "insights_pace":
+      return color(text, CYAN);
+    case "insights_trend":
+      return color(text, DIM);
+    case "calendar":
+      return color(text, CYAN);
     default:
       return text;
   }

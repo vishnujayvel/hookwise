@@ -8,7 +8,7 @@ Thanks for your interest in contributing to hookwise! Here's how to get started.
 git clone https://github.com/vishnujayvel/hookwise.git
 cd hookwise
 npm install
-npm test          # 1363 tests via vitest
+npm test          # 1440 tests via vitest
 npm run build     # tsup build
 npm run typecheck # tsc --noEmit
 ```
@@ -25,7 +25,7 @@ src/
   cli/            # CLI commands (init, doctor, status, stats, test, migrate)
   testing/        # HookRunner, HookResult, GuardTester
 
-tests/            # 1363+ tests
+tests/            # 1440+ tests
 recipes/          # 12 built-in recipes
 examples/         # Example configs
 ```
@@ -49,10 +49,10 @@ npm run typecheck     # Type checking
 ## Creating a Recipe
 
 Recipes live in `recipes/{category}/{name}/`. Each recipe needs:
-- `recipe.yaml` — The recipe configuration
+- `hooks.yaml` — The recipe configuration
 - `README.md` — Documentation
 
-See [Creating a Recipe](docs/creating-a-recipe.md) for details.
+See [Creating a Recipe](docs/guide/creating-a-recipe.md) for details.
 
 ## Pull Request Guidelines
 

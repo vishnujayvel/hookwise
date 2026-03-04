@@ -29,7 +29,7 @@ guards:
 - **Session analytics** — SQLite-backed tracking of tool usage, AI authorship ratio, costs
 - **Status line** — 19 composable segments showing session info, feeds, and insights
 - **12 recipes** — Pre-built patterns you can include with one line
-- **1363 tests** — Yeah, I may have gone overboard
+- **1440 tests** — Yeah, I may have gone overboard
 
 It is open source (MIT), works with `npx hookwise init`, and takes about 30 seconds to set up.
 
@@ -42,7 +42,7 @@ Happy to answer questions about the architecture or specific recipes. The three-
 
 ## Reddit: r/programming
 
-**Title:** hookwise: declarative guard rails and analytics for AI code agents (TypeScript, 1363 tests)
+**Title:** hookwise: declarative guard rails and analytics for AI code agents (TypeScript, 1440 tests)
 
 **Body:**
 
@@ -54,11 +54,11 @@ Happy to answer questions about the architecture or specific recipes. The three-
 
 2. **Three-phase execution** — Every hook dispatch goes through guards (protect) → context injection (enrich) → side effects (observe). If guards block, phases 2-3 are skipped. Fail-open guarantee: any internal error → exit 0.
 
-3. **Feed platform** — Background daemon polls 5 producers (git, calendar, HN, heartbeat, usage analytics) on staggered intervals, writes to an atomic cache bus with per-key TTL. Status line segments read from cache with `isFresh()` checks.
+3. **Feed platform** — Background daemon polls 8 producers (git, calendar, HN, heartbeat, usage analytics) on staggered intervals, writes to an atomic cache bus with per-key TTL. Status line segments read from cache with `isFresh()` checks.
 
 4. **Testing utilities** — `GuardTester` for in-process rule evaluation, `HookRunner` for subprocess-based dispatch testing, `HookResult` for assertion helpers.
 
-**Tech stack:** TypeScript, vitest (1363 tests), SQLite (analytics), tsup (build), YAML config with deep merge and recipe composition.
+**Tech stack:** TypeScript, vitest (1440 tests), SQLite (analytics), tsup (build), YAML config with deep merge and recipe composition.
 
 **Architecture highlights:**
 - Fail-open everywhere — hookwise must never accidentally block a tool call
@@ -92,11 +92,11 @@ Claude Code has a hooks system. Shell commands that fire on 13 different events.
 
 So I built hookwise.
 
-One YAML file. Declarative guard rules that read like a firewall. Session analytics that tell you where your time goes. Coaching that nudges you when you have been in "tooling mode" too long. A composable status line with 19 segments. 12 built-in recipes for common patterns.
+One YAML file. Declarative guard rules that read like a firewall. Session analytics that tell you where your time goes. Coaching that nudges you when you have been in "tooling mode" too long. A composable status line with 21 segments. 12 built-in recipes for common patterns.
 
 The design principle: your AI should never be the reason you cannot sleep.
 
-I went a bit overboard with testing — 1363 tests for 69 source files. But when your tool's job is to prevent disasters, you really want to know it works.
+I went a bit overboard with testing — 1440 tests for 69 test files. But when your tool's job is to prevent disasters, you really want to know it works.
 
 It is open source (MIT), takes 30 seconds to set up, and works with any Claude Code project.
 
@@ -120,4 +120,4 @@ If you are using Claude Code and want guard rails that actually work, give it a 
 - Reply to every comment in the first 24 hours
 - If asked about architecture, link to the feed platform or three-phase diagrams
 - Have `npx hookwise init` ready as the primary CTA
-- Mention "1363 tests" — it signals quality and dedication
+- Mention "1440 tests" — it signals quality and dedication

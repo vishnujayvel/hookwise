@@ -32,6 +32,27 @@ export default defineConfig({
             { text: 'Migration', link: '/reference/migration' }
           ]
         }
+      ],
+      '/features/': [
+        {
+          text: 'Features',
+          items: [
+            { text: 'Guards', link: '/features/guards' },
+            { text: 'Analytics', link: '/features/analytics' },
+            { text: 'Feeds', link: '/features/feeds' },
+            { text: 'Status Line', link: '/features/status-line' },
+            { text: 'Coaching', link: '/features/coaching' }
+          ]
+        }
+      ],
+      '/': [
+        {
+          text: 'About',
+          items: [
+            { text: 'Architecture', link: '/architecture' },
+            { text: 'Philosophy', link: '/philosophy' }
+          ]
+        }
       ]
     }
   }

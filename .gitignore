@@ -31,3 +31,16 @@ __pycache__/
 .venv/
 .pytest_cache/
 .coverage
+
+# Demo scripts and VHS tapes (internal tooling, not shipped)
+demos/
+
+# Archive (old drafts, one-off files)
+archive/
+
+# Marketing assets (Midjourney generated, too large for repo)
+screenshots/marketing/
+screenshots/01-before-after-results.png
+
+# Excalidraw
+excalidraw.log
