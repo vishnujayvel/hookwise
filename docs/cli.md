@@ -46,7 +46,7 @@ hookwise migrate          Migrate from Python hookwise (v0.1.0) to TypeScript
 | Preset | What you get |
 |--------|-------------|
 | `minimal` | Guards only -- just the safety rails |
-| `coaching` | Guards + metacognition + builder's trap + status line |
+| `coaching` | Guards + metacognition + builder's trap + communication |
 | `analytics` | Guards + SQLite session tracking |
 | `full` | Everything enabled |
 
@@ -57,14 +57,14 @@ hookwise includes testing utilities so you can validate guards in CI:
 ```typescript
 import { GuardTester } from "hookwise/testing";
 
-const tester = new GuardTester("hookwise.yaml");
+const tester = new GuardTester({ configPath: "hookwise.yaml" });
 
 // Test blocking
-const blocked = tester.evaluate("Bash", { command: "rm -rf /" });
+const blocked = tester.testToolCall("Bash", { command: "rm -rf /" });
 expect(blocked.action).toBe("block");
 
 // Test allowing
-const allowed = tester.evaluate("Bash", { command: "ls -la" });
+const allowed = tester.testToolCall("Bash", { command: "ls -la" });
 expect(allowed.action).toBe("allow");
 ```
 

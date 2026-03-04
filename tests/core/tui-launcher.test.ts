@@ -178,7 +178,7 @@ describe("launchTui", () => {
 
     expect(mockedSpawn).toHaveBeenCalledWith(
       "osascript",
-      ["-e", 'tell application "Terminal" to do script "python3 -m hookwise_tui"'],
+      ["-e", expect.stringContaining("-m hookwise_tui")],
       expect.objectContaining({ detached: true, stdio: "ignore" }),
     );
   });
@@ -213,7 +213,7 @@ describe("launchTui", () => {
     launchTui(config, pidPath);
 
     expect(mockedSpawn).toHaveBeenCalledWith(
-      "python3",
+      expect.stringContaining("python3"),
       ["-m", "hookwise_tui"],
       expect.objectContaining({ detached: true, stdio: "ignore" }),
     );

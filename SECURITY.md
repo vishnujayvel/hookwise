@@ -11,8 +11,8 @@
 
 If you discover a security vulnerability, please report it responsibly:
 
-1. **Do not** open a public issue
-2. Email **vishnu@hookwise.dev** with a description, reproduction steps, and impact assessment
+1. **For sensitive vulnerabilities**, email **vishnu@hookwise.dev** with a description, reproduction steps, and impact assessment. Do not open a public issue for exploitable or unpatched vulnerabilities.
+2. **For low-severity or already-patched issues**, you may use the [Security Vulnerability issue template](https://github.com/vishnujayvel/hookwise/issues/new?template=security_vulnerability.md).
 3. You will receive an acknowledgment within 48 hours
 4. We aim to release a fix within 7 days for confirmed vulnerabilities
 
@@ -51,6 +51,7 @@ The codebase enforces the following security practices by design:
 - **No `eval()` or `Function()`** -- Explicitly avoided throughout the codebase and documented in source comments.
 - **`execFileSync` for untrusted paths** -- Used where arguments could contain special characters (e.g., calendar credentials path).
 - **`spawnSync` without shell** -- The dispatcher passes handler arguments as array elements, preventing shell injection.
+- **Scoped `shell: true` usage** -- The status line renderer and test helper (`HookRunner`) use `shell: true` for trusted, locally-authored commands. The feed registry uses `exec()` for producer scripts defined in the user's own `hookwise.yaml` config (same trust level as a Makefile). These are intentional — external/untrusted input never reaches shell execution.
 
 ### File System
 - **Restrictive permissions** -- Database files use `0o600`; directories use `0o700` (owner-only).

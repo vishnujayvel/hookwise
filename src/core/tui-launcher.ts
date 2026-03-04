@@ -212,9 +212,10 @@ export function launchTui(config: TuiConfig, pidPath?: string): boolean {
       // Note: osascript is transient — its PID is not the python3 PID, so we
       // skip PID-based duplicate prevention for newWindow mode.
       const pythonCmd = resolveTuiPython();
+      const escapedCmd = pythonCmd.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       const child = spawn(
         "osascript",
-        ["-e", `tell application "Terminal" to do script "${pythonCmd} -m hookwise_tui"`],
+        ["-e", `tell application "Terminal" to do script "${escapedCmd} -m hookwise_tui"`],
         {
           detached: true,
           stdio: "ignore",

@@ -84,6 +84,11 @@ def main():
         # full calendar scope (e.g., shared with Google Calendar MCP).
         # Both calendar and calendar.readonly work for read-only queries.
         creds = Credentials.from_authorized_user_file(TOKEN_PATH)
+        # Verify loaded scopes are compatible (must include calendar or calendar.readonly)
+        if creds and creds.scopes and not any(
+            s.endswith("calendar") or s.endswith("calendar.readonly") for s in creds.scopes
+        ):
+            creds = None  # Incompatible scopes — re-trigger OAuth
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
