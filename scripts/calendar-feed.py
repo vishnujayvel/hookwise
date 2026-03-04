@@ -77,17 +77,18 @@ def main():
         sys.exit(1)
 
     SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+    COMPATIBLE_SCOPES = {
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/calendar.readonly",
+    }
 
     creds = None
     if os.path.exists(TOKEN_PATH):
-        # Load without scope restriction — token may have been granted with
-        # full calendar scope (e.g., shared with Google Calendar MCP).
+        # Load with requested scopes so the library can validate them.
         # Both calendar and calendar.readonly work for read-only queries.
-        creds = Credentials.from_authorized_user_file(TOKEN_PATH)
-        # Verify loaded scopes are compatible (must include calendar or calendar.readonly)
-        if creds and creds.scopes and not any(
-            s.endswith("calendar") or s.endswith("calendar.readonly") for s in creds.scopes
-        ):
+        creds = Credentials.from_authorized_user_file(TOKEN_PATH, scopes=SCOPES)
+        # Verify loaded scopes are compatible (exact URI match)
+        if creds and creds.scopes and not COMPATIBLE_SCOPES.intersection(creds.scopes):
             creds = None  # Incompatible scopes — re-trigger OAuth
 
     if not creds or not creds.valid:
