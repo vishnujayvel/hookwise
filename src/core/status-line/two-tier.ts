@@ -19,9 +19,9 @@ export interface TwoTierConfig {
   /** Segment names for line 2 (rotating). */
   rotatingSegments: string[];
   /** Segment names for middle section (multi-line, between fixed and rotating). */
-  middleSegments: string[];
+  middleSegments?: string[];
   /** Whether to show a separator line before middle segments. */
-  showSeparator: boolean;
+  showSeparator?: boolean;
   /** Delimiter between segments on each line. */
   delimiter: string;
 }

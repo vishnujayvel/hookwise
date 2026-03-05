@@ -4,7 +4,7 @@
 # Claude Code hook for SubagentStart / SubagentStop events.
 # Reads JSON from stdin, maintains state at ~/.hookwise/cache/active-agents.json.
 # Always exits 0 (fail-open).
-set -euo pipefail
+set -uo pipefail
 
 STATE_DIR="${HOOKWISE_STATE_DIR:-$HOME/.hookwise}"
 CACHE_DIR="$STATE_DIR/cache"
