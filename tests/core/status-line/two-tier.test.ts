@@ -206,6 +206,121 @@ describe("renderTwoTier - ANSI coloring", () => {
   });
 });
 
+describe("renderTwoTier - middle segments (N-tier)", () => {
+  it("renders middle segment lines between fixed and rotating", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const cache = {
+      _stdin: { context_window: { used_percentage: 30 } },
+      mantra: { text: "Focus" },
+      agents: {
+        agents: [
+          { agent_id: "a1", name: "builder", status: "working", started_at: now - 120 },
+        ],
+        team_name: "test-team",
+        strategy: "parallel",
+      },
+      _rotation_index: 0,
+    };
+    const config = makeConfig({
+      middleSegments: ["agents"],
+      showSeparator: true,
+      rotatingSegments: ["mantra"],
+    });
+    const result = renderTwoTier(config, cache);
+    const lines = result.split("\n");
+
+    // Should have: line1, separator, team header, agent line, rotating line = 5 lines
+    expect(lines.length).toBeGreaterThanOrEqual(4);
+
+    const stripped = strip(result);
+    expect(stripped).toContain("TEAM: test-team");
+    expect(stripped).toContain("builder");
+    expect(stripped).toContain("Focus");
+  });
+
+  it("renders separator between fixed and middle segments", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const cache = {
+      _stdin: { context_window: { used_percentage: 30 } },
+      agents: {
+        agents: [
+          { agent_id: "a1", name: "worker", status: "working", started_at: now - 60 },
+        ],
+        team_name: "",
+        strategy: "",
+      },
+    };
+    const config = makeConfig({
+      middleSegments: ["agents"],
+      showSeparator: true,
+      rotatingSegments: [],
+    });
+    const result = renderTwoTier(config, cache);
+    const stripped = strip(result);
+    expect(stripped).toContain("---");
+  });
+
+  it("skips separator when showSeparator is false", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const cache = {
+      _stdin: { context_window: { used_percentage: 30 } },
+      agents: {
+        agents: [
+          { agent_id: "a1", name: "worker", status: "working", started_at: now - 60 },
+        ],
+        team_name: "",
+        strategy: "",
+      },
+    };
+    const config = makeConfig({
+      middleSegments: ["agents"],
+      showSeparator: false,
+      rotatingSegments: [],
+    });
+    const result = renderTwoTier(config, cache);
+    const stripped = strip(result);
+    expect(stripped).not.toContain("---");
+  });
+
+  it("collapses to 2-line output when all middle segments are empty", () => {
+    const cache = {
+      _stdin: { context_window: { used_percentage: 30 } },
+      mantra: { text: "Ship it" },
+      _rotation_index: 0,
+    };
+    const config = makeConfig({
+      middleSegments: ["agents"],
+      showSeparator: true,
+      rotatingSegments: ["mantra"],
+    });
+    const result = renderTwoTier(config, cache);
+    const lines = result.split("\n");
+
+    // Should be exactly 2 lines (fixed + rotating), no separator
+    expect(lines.length).toBe(2);
+    const stripped = strip(result);
+    expect(stripped).not.toContain("---");
+    expect(stripped).toContain("30%");
+    expect(stripped).toContain("Ship it");
+  });
+
+  it("handles empty middleSegments array gracefully", () => {
+    const cache = {
+      _stdin: { context_window: { used_percentage: 50 } },
+      mantra: { text: "Go" },
+      _rotation_index: 0,
+    };
+    const config = makeConfig({
+      middleSegments: [],
+      showSeparator: true,
+      rotatingSegments: ["mantra"],
+    });
+    const result = renderTwoTier(config, cache);
+    const lines = result.split("\n");
+    expect(lines.length).toBe(2);
+  });
+});
+
 describe("DEFAULT_TWO_TIER_CONFIG", () => {
   it("has expected fixed segments", () => {
     expect(DEFAULT_TWO_TIER_CONFIG.fixedSegments).toEqual([
@@ -222,5 +337,13 @@ describe("DEFAULT_TWO_TIER_CONFIG", () => {
 
   it("uses pipe delimiter", () => {
     expect(DEFAULT_TWO_TIER_CONFIG.delimiter).toBe(" | ");
+  });
+
+  it("has agents as default middle segment", () => {
+    expect(DEFAULT_TWO_TIER_CONFIG.middleSegments).toEqual(["agents"]);
+  });
+
+  it("has separator enabled by default", () => {
+    expect(DEFAULT_TWO_TIER_CONFIG.showSeparator).toBe(true);
   });
 });

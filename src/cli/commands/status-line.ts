@@ -9,9 +9,13 @@
  */
 
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { safeReadJSON, atomicWriteJSON } from "../../core/state.js";
 import { DEFAULT_CACHE_PATH } from "../../core/constants.js";
 import { renderTwoTier, DEFAULT_TWO_TIER_CONFIG } from "../../core/status-line/two-tier.js";
+
+const ACTIVE_AGENTS_PATH = join(homedir(), ".hookwise", "cache", "active-agents.json");
 
 /**
  * Stdin data shape from Claude Code's status line protocol.
@@ -72,6 +76,12 @@ export async function runStatusLineCommand(): Promise<void> {
         ...existingCost,
         sessionCostUsd: stdinData.cost.total_cost_usd,
       };
+    }
+
+    // Load active agents data for the agents segment
+    const agentsData = safeReadJSON<Record<string, unknown>>(ACTIVE_AGENTS_PATH, {});
+    if (agentsData && Object.keys(agentsData).length > 0) {
+      cache.agents = agentsData;
     }
 
     // Advance rotation index for line 2 cycling

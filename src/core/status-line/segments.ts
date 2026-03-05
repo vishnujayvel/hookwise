@@ -5,8 +5,12 @@
  * Returns empty string when data is unavailable.
  */
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { SegmentConfig, CacheEntry } from "../types.js";
 import { isFresh } from "../feeds/cache-bus.js";
+import { color, GREEN, YELLOW, RED, DIM } from "./ansi.js";
 
 type SegmentRenderer = (
   cache: Record<string, unknown>,
@@ -444,6 +448,92 @@ const memories: SegmentRenderer = (cache) => {
   return `\uD83D\uDD70\uFE0F On this day: ${sessionCount} session${sessionCount !== 1 ? "s" : ""} (${best.label})`;
 };
 
+// --- Agents Segment ---
+
+interface AgentEntry {
+  agent_id: string;
+  name: string;
+  status: string;
+  started_at: number;
+  stopped_at?: number;
+}
+
+interface ActiveAgentsData {
+  agents: AgentEntry[];
+  team_name?: string;
+  strategy?: string;
+  updated_at?: number;
+}
+
+const AGENTS_CACHE_PATH = join(homedir(), ".hookwise", "cache", "active-agents.json");
+
+const agents: SegmentRenderer = (cache) => {
+  // Read from cache.agents (merged by CLI command) or directly from file
+  let data: ActiveAgentsData | undefined = cache.agents as ActiveAgentsData | undefined;
+
+  if (!data) {
+    try {
+      if (!existsSync(AGENTS_CACHE_PATH)) return "";
+      const raw = readFileSync(AGENTS_CACHE_PATH, "utf-8");
+      data = JSON.parse(raw) as ActiveAgentsData;
+    } catch {
+      return "";
+    }
+  }
+
+  if (!data?.agents?.length) return "";
+
+  // Filter stale entries (older than 10 minutes)
+  const now = Math.floor(Date.now() / 1000);
+  const staleThreshold = 600;
+  const activeAgents = data.agents.filter(
+    (a) => (now - (a.started_at ?? now)) < staleThreshold
+  );
+
+  if (activeAgents.length === 0) return "";
+
+  const lines: string[] = [];
+
+  // Header with team info
+  if (data.team_name) {
+    const strategyPart = data.strategy ? ` (${data.strategy})` : "";
+    lines.push(`TEAM: ${data.team_name}${strategyPart}`);
+  }
+
+  // Tree-draw each agent
+  for (let i = 0; i < activeAgents.length; i++) {
+    const agent = activeAgents[i];
+    const isLast = i === activeAgents.length - 1;
+    const prefix = isLast ? "  +-- " : "  |-- ";
+
+    const elapsed = now - (agent.started_at ?? now);
+    const elapsedMin = Math.floor(elapsed / 60);
+    let timeStr: string;
+    if (agent.status === "done" && agent.stopped_at) {
+      const ago = now - agent.stopped_at;
+      const agoMin = Math.floor(ago / 60);
+      timeStr = `${agoMin}m ago`;
+    } else {
+      timeStr = formatDuration(elapsedMin);
+    }
+
+    const statusPadded = agent.status.padEnd(9);
+    const namePadded = agent.name.padEnd(14);
+    const raw = `${prefix}${namePadded}${statusPadded}${timeStr}`;
+
+    // Colorize by status
+    if (agent.status === "done") {
+      lines.push(color(raw, GREEN));
+    } else if (agent.status === "failed") {
+      lines.push(color(raw, RED));
+    } else {
+      lines.push(color(raw, YELLOW));
+    }
+  }
+
+  return lines.join("\n");
+};
+
 // --- Daemon Health Segment ---
 
 const daemon_health: SegmentRenderer = (cache) => {
@@ -487,4 +577,5 @@ export const BUILTIN_SEGMENTS: Record<string, SegmentRenderer> = {
   weather,
   memories,
   daemon_health,
+  agents,
 };
