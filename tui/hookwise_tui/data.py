@@ -63,22 +63,42 @@ def _default_usage_data_path() -> Path:
 
 # --- Config reader ---
 
+def _effective_config_path(config_path: Path | None = None) -> Path:
+    """Resolve config path consistently for read/write operations."""
+    if config_path is not None:
+        return config_path
+    local_path = _default_config_path()
+    if local_path.exists():
+        return local_path
+    global_path = _config_dir() / "config.yaml"
+    if global_path.exists():
+        return global_path
+    return local_path
+
+
 def read_config(config_path: Path | None = None) -> dict[str, Any]:
     """Read hookwise.yaml config. Returns empty dict if missing."""
-    path = config_path or _default_config_path()
+    path = _effective_config_path(config_path)
     if not path.exists():
-        # Try global config
-        global_path = _config_dir() / "config.yaml"
-        if global_path.exists():
-            path = global_path
-        else:
-            return {}
+        return {}
     try:
         with open(path) as f:
             data = yaml.safe_load(f)
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
+
+
+def write_config(config: dict[str, Any], config_path: Path | None = None) -> bool:
+    """Write hookwise.yaml config. Returns True on success."""
+    path = _effective_config_path(config_path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        return True
+    except Exception:
+        return False
 
 
 # --- Cache bus reader ---
@@ -509,7 +529,9 @@ def read_insights(
     # Derived metrics
     avg_duration = total_duration / len(valid_sessions) if valid_sessions else 0
     top_tools = tool_counts.most_common(10)
-    peak_hour = max(range(24), key=lambda h: hour_counts[h]) if any(hour_counts) else 0
+    peak_hour_utc = max(range(24), key=lambda h: hour_counts[h]) if any(hour_counts) else 0
+    local_offset_hours = datetime.now().astimezone().utcoffset().total_seconds() / 3600
+    peak_hour = int((peak_hour_utc + local_offset_hours + 24) % 24)
     friction_total = sum(friction_counts.values())
 
     return InsightsData(

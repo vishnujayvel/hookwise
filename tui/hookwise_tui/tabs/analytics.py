@@ -1,7 +1,7 @@
-"""Analytics tab — Sparkline trends, AI authorship ratio, tool breakdown."""
+"""Analytics tab — Sparkline trends and tool breakdown."""
 
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal
+from textual.containers import Horizontal
 from textual.widget import Widget
 from textual.widgets import DataTable, Static
 
@@ -9,17 +9,8 @@ from hookwise_tui.data import read_analytics
 from hookwise_tui.widgets.sparkline import SparklineWidget
 
 
-def _ai_ratio_bar(score: float, width: int = 30) -> str:
-    """Render AI authorship ratio as a visual progress bar."""
-    pct = max(0, min(100, score * 100))
-    filled = int(pct / 100 * width)
-    empty = width - filled
-    bar = f"[magenta]{'█' * filled}[/magenta][dim]{'░' * empty}[/dim]"
-    return f"{bar} {pct:.0f}% AI"
-
-
 class AnalyticsTab(Widget):
-    """Analytics — coding patterns, tool usage, and AI authorship."""
+    """Analytics — coding patterns and tool usage."""
 
     DEFAULT_CSS = """
     AnalyticsTab {
@@ -33,13 +24,6 @@ class AnalyticsTab(Widget):
         text-style: bold;
         color: $accent;
         margin: 1 0 0 0;
-    }
-    AnalyticsTab .ai-ratio {
-        margin: 1 0;
-        padding: 1 2;
-        border: round $primary;
-        background: $surface-darken-1;
-        height: auto;
     }
     AnalyticsTab .metric-row {
         layout: horizontal;
@@ -102,15 +86,6 @@ class AnalyticsTab(Widget):
                 values=line_values,
                 current_value=str(line_values[-1]) if line_values else "0",
             )
-
-        # AI Authorship
-        yield Static("AI Authorship", classes="section-title")
-        with Container(classes="ai-ratio"):
-            yield Static(_ai_ratio_bar(data.authorship.weighted_ai_score))
-            breakdown = data.authorship.breakdown
-            if breakdown:
-                parts = [f"{k}: {v}" for k, v in breakdown.items()]
-                yield Static(f"[dim]{' | '.join(parts)}[/dim]")
 
         # Tool breakdown
         if data.tools:

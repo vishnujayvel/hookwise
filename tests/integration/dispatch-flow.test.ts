@@ -78,6 +78,7 @@ describe("integration: full dispatch flow", () => {
   it("dispatches through all three phases with a real config file", () => {
     const config = {
       version: 1,
+      analytics: { enabled: false },
       handlers: [
         {
           name: "allow-guard",
@@ -120,6 +121,7 @@ describe("integration: full dispatch flow", () => {
   it("guard block short-circuits context and side effects with real config", () => {
     const config = {
       version: 1,
+      analytics: { enabled: false },
       handlers: [
         {
           name: "blocker",
@@ -155,6 +157,7 @@ describe("integration: full dispatch flow", () => {
   it("handles multiple context handlers merging output", () => {
     const config = {
       version: 1,
+      analytics: { enabled: false },
       handlers: [
         {
           name: "greeting",
@@ -189,6 +192,7 @@ describe("integration: full dispatch flow", () => {
   it("returns null stdout when no handlers match event", () => {
     const config = {
       version: 1,
+      analytics: { enabled: false },
       handlers: [
         {
           name: "stop-only",
@@ -213,6 +217,7 @@ describe("integration: full dispatch flow", () => {
   it("handles wildcard event handlers", () => {
     const config = {
       version: 1,
+      analytics: { enabled: false },
       handlers: [
         {
           name: "universal-context",
@@ -267,6 +272,7 @@ describe("integration: full dispatch flow", () => {
 
     const config = {
       version: 1,
+      analytics: { enabled: false },
       handlers: [
         {
           name: "echo-script",
@@ -322,6 +328,7 @@ describe("integration: config merge precedence", () => {
     // Global config: coaching disabled, log level info
     const globalConfig = {
       version: 1,
+      analytics: { enabled: false },
       settings: {
         log_level: "info",
         handler_timeout_seconds: 10,
@@ -337,6 +344,7 @@ describe("integration: config merge precedence", () => {
     // Project config: coaching enabled, log level debug
     const projectConfig = {
       version: 1,
+      analytics: { enabled: false },
       settings: {
         log_level: "debug",
       },
@@ -364,6 +372,7 @@ describe("integration: config merge precedence", () => {
   it("global config used as fallback when project config is missing", () => {
     const globalConfig = {
       version: 1,
+      analytics: { enabled: false },
       settings: {
         log_level: "warn",
         handler_timeout_seconds: 20,
@@ -391,6 +400,7 @@ describe("integration: config merge precedence", () => {
   it("project handlers override global handlers entirely", () => {
     const globalConfig = {
       version: 1,
+      analytics: { enabled: false },
       handlers: [
         {
           name: "global-handler",
@@ -403,6 +413,7 @@ describe("integration: config merge precedence", () => {
 
     const projectConfig = {
       version: 1,
+      analytics: { enabled: false },
       handlers: [
         {
           name: "project-handler",
@@ -430,6 +441,7 @@ describe("integration: config merge precedence", () => {
 describe("integration: guard evaluation produces block output", () => {
   it("blocked tool call returns block decision in dispatch result", () => {
     const config = getDefaultConfig();
+    config.analytics = { enabled: false };
     config.handlers = [
       {
         name: "bash-guard",
@@ -475,6 +487,7 @@ describe("integration: guard evaluation produces block output", () => {
 
     // Test via dispatch() with a config wrapping the same logic
     const config = getDefaultConfig();
+    config.analytics = { enabled: false };
     config.handlers = [
       {
         name: "inline-block",
@@ -511,6 +524,7 @@ describe("integration: guard evaluation produces block output", () => {
 
     // Dispatch with same guard as inline handler
     const config = getDefaultConfig();
+    config.analytics = { enabled: false };
     // No handlers that would block "ls -la"
     const result = dispatch("PreToolUse", makePayload(), { config });
     expect(result.exitCode).toBe(0);
@@ -544,6 +558,7 @@ describe("integration: CLI init generates valid config", () => {
   it("hookwise init creates a parseable hookwise.yaml", () => {
     // Simulate what init does: generate a default config and write it
     const config = getDefaultConfig();
+    config.analytics = { enabled: false };
     saveConfig(config, join(tempDir, "hookwise.yaml"));
 
     // Verify the file exists and is valid YAML
@@ -563,6 +578,7 @@ describe("integration: CLI init generates valid config", () => {
 
   it("saved config round-trips through save/load cycle", () => {
     const config = getDefaultConfig();
+    config.analytics = { enabled: false };
     config.guards = [
       {
         match: "Bash",
@@ -590,6 +606,7 @@ describe("integration: CLI init generates valid config", () => {
 
   it("dispatch works with init-generated config", () => {
     const config = getDefaultConfig();
+    config.analytics = { enabled: false };
     saveConfig(config, join(tempDir, "hookwise.yaml"));
 
     // Default config has no handlers, so dispatch should exit 0 cleanly
@@ -602,6 +619,7 @@ describe("integration: CLI init generates valid config", () => {
 
   it("init-generated config with handlers dispatches correctly", () => {
     const config = getDefaultConfig();
+    config.analytics = { enabled: false };
     config.handlers = [
       {
         name: "session-greeter",
@@ -660,6 +678,7 @@ describe("integration: env var interpolation in dispatch", () => {
 
     const config = {
       version: 1,
+      analytics: { enabled: false },
       handlers: [
         {
           name: "env-guard",

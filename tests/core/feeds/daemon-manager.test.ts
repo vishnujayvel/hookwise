@@ -312,7 +312,7 @@ describe("getDaemonStatus", () => {
     const config = makeTestConfig();
     const status = getDaemonStatus(config, TEST_PID_PATH, TEST_CACHE_PATH);
 
-    expect(status.feeds).toHaveLength(5); // 5 built-in, 0 custom
+    expect(status.feeds).toHaveLength(8); // 8 built-in, 0 custom
 
     const pulseFeed = status.feeds.find((f) => f.name === "pulse");
     expect(pulseFeed).toBeDefined();
@@ -347,25 +347,25 @@ describe("getDaemonStatus", () => {
   it("includes custom feeds in health report", () => {
     mockedExistsSync.mockReturnValue(false);
     mockedReadAll.mockReturnValue({
-      weather: { updated_at: new Date().toISOString(), ttl_seconds: 120 },
+      my_custom_feed: { updated_at: new Date().toISOString(), ttl_seconds: 120 },
     });
 
     const config = makeTestConfig({
       feeds: {
         ...getDefaultConfig().feeds,
         custom: [
-          { name: "weather", command: "echo '{}'", intervalSeconds: 120, enabled: true, timeoutSeconds: 10 },
+          { name: "my_custom_feed", command: "echo '{}'", intervalSeconds: 120, enabled: true, timeoutSeconds: 10 },
         ],
       },
     });
 
     const status = getDaemonStatus(config, TEST_PID_PATH, TEST_CACHE_PATH);
 
-    expect(status.feeds).toHaveLength(6); // 5 built-in + 1 custom
-    const weatherFeed = status.feeds.find((f) => f.name === "weather");
-    expect(weatherFeed).toBeDefined();
-    expect(weatherFeed!.enabled).toBe(true);
-    expect(weatherFeed!.healthy).toBe(true);
+    expect(status.feeds).toHaveLength(9); // 8 built-in + 1 custom
+    const customFeed = status.feeds.find((f) => f.name === "my_custom_feed");
+    expect(customFeed).toBeDefined();
+    expect(customFeed!.enabled).toBe(true);
+    expect(customFeed!.healthy).toBe(true);
   });
 
   it("reports running with uptime when daemon is alive (FR-9.3)", () => {

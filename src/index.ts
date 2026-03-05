@@ -136,7 +136,6 @@ export {
 export {
   AnalyticsDB,
   AnalyticsEngine,
-  AuthorshipLedger,
   queryStats,
   queryDailySummary,
   queryToolBreakdown,

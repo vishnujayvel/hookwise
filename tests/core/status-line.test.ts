@@ -148,8 +148,8 @@ describe("render - missing cache", () => {
 // --- Built-in Segments ---
 
 describe("BUILTIN_SEGMENTS", () => {
-  it("has all 8 required segments registered", () => {
-    const names = ["clock", "mantra", "builder_trap", "session", "practice", "ai_ratio", "cost", "streak"];
+  it("has all 7 original segments registered", () => {
+    const names = ["clock", "mantra", "builder_trap", "session", "practice", "cost", "streak"];
     for (const name of names) {
       expect(BUILTIN_SEGMENTS[name]).toBeDefined();
       expect(typeof BUILTIN_SEGMENTS[name]).toBe("function");
@@ -279,36 +279,6 @@ describe("practice segment", () => {
   });
 });
 
-// --- ai_ratio segment ---
-
-describe("ai_ratio segment", () => {
-  it("renders AI ratio as percentage and bar", () => {
-    const result = BUILTIN_SEGMENTS.ai_ratio(
-      { session: { aiRatio: 0.73 } }, {}
-    );
-    expect(result).toContain("AI: 73%");
-    expect(result.length).toBeGreaterThan(8); // has bar chars
-  });
-
-  it("returns empty when no session in cache", () => {
-    const result = BUILTIN_SEGMENTS.ai_ratio({}, {});
-    expect(result).toBe("");
-  });
-
-  it("renders 0% ratio", () => {
-    const result = BUILTIN_SEGMENTS.ai_ratio(
-      { session: { aiRatio: 0 } }, {}
-    );
-    expect(result).toContain("AI: 0%");
-  });
-
-  it("renders 100% ratio", () => {
-    const result = BUILTIN_SEGMENTS.ai_ratio(
-      { session: { aiRatio: 1.0 } }, {}
-    );
-    expect(result).toContain("AI: 100%");
-  });
-});
 
 // --- cost segment ---
 

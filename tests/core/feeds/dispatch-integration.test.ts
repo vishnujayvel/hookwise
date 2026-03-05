@@ -71,9 +71,9 @@ describe("dispatch — feed platform integration", () => {
       const config = makeConfig();
       dispatch("PreToolUse", makePayload({ tool_name: "Bash" }), { config });
 
-      // mergeKey should be called for _heartbeat
+      // mergeKey should be called for _dispatch_heartbeat
       const heartbeatCall = mockedMergeKey.mock.calls.find(
-        (call) => call[1] === "_heartbeat"
+        (call) => call[1] === "_dispatch_heartbeat"
       );
       expect(heartbeatCall).toBeDefined();
       expect(heartbeatCall![0]).toBe(config.statusLine.cachePath);
@@ -100,7 +100,7 @@ describe("dispatch — feed platform integration", () => {
       dispatch("SessionStart", makePayload(), { config });
 
       const heartbeatCall = mockedMergeKey.mock.calls.find(
-        (call) => call[1] === "_heartbeat"
+        (call) => call[1] === "_dispatch_heartbeat"
       );
       const cwdCall = mockedMergeKey.mock.calls.find(
         (call) => call[1] === "_cwd"
@@ -114,7 +114,7 @@ describe("dispatch — feed platform integration", () => {
       dispatch("Stop", makePayload(), { config });
 
       const heartbeatCall = mockedMergeKey.mock.calls.find(
-        (call) => call[1] === "_heartbeat"
+        (call) => call[1] === "_dispatch_heartbeat"
       );
       const cwdCall = mockedMergeKey.mock.calls.find(
         (call) => call[1] === "_cwd"
@@ -218,7 +218,7 @@ describe("dispatch — feed platform integration", () => {
 
   describe("dispatch result unaffected by feed operations", () => {
     it("context handlers still produce output when feeds are active", () => {
-      const config = makeConfig();
+      const config = makeConfig({ analytics: { enabled: false } });
       config.handlers = [
         {
           name: "greeter",

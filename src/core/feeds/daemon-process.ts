@@ -55,8 +55,11 @@ const MAX_LOG_LINES = 1000;
 /** Lines to keep after rotation. */
 const KEEP_LOG_LINES = 500;
 
-/** Heartbeat TTL: effectively infinite (used as a sentinel, not for freshness). */
-const HEARTBEAT_TTL = 999999;
+/** Daemon heartbeat TTL: 90 seconds (refreshed every 30s, stale = daemon crashed). */
+const DAEMON_HEARTBEAT_TTL = 90;
+
+/** Daemon heartbeat interval: 30 seconds. */
+const DAEMON_HEARTBEAT_INTERVAL_MS = 30_000;
 
 // --- Logging ---
 
@@ -253,8 +256,23 @@ export async function runDaemon(projectDir: string): Promise<void> {
   writeFileSync(pidPath, String(process.pid), "utf-8");
   daemonLog(`PID ${process.pid} written to ${pidPath}`, logFile);
 
-  // Step 5 (partial): Write initial heartbeat
-  mergeKey(cachePath, "_heartbeat", { value: Date.now() }, HEARTBEAT_TTL);
+  // Step 5 (partial): Write initial daemon heartbeat + start refresh interval
+  try {
+    mergeKey(cachePath, "_daemon_heartbeat", { value: Date.now() }, DAEMON_HEARTBEAT_TTL);
+  } catch (error) {
+    daemonLog(
+      `Initial daemon heartbeat write failed: ${error instanceof Error ? error.message : String(error)}`,
+      logFile,
+    );
+  }
+
+  const heartbeatTimer = setInterval(() => {
+    try {
+      mergeKey(cachePath, "_daemon_heartbeat", { value: Date.now() }, DAEMON_HEARTBEAT_TTL);
+    } catch {
+      // Fail-open: heartbeat write errors must never crash daemon
+    }
+  }, DAEMON_HEARTBEAT_INTERVAL_MS);
 
   // Step 4: Start staggered intervals for enabled feeds
   const enabledFeeds = registry.getEnabled();
@@ -281,14 +299,19 @@ export async function runDaemon(projectDir: string): Promise<void> {
     intervalTimers.push(initialTimeout);
   }
 
+  intervalTimers.push(heartbeatTimer);
+
   daemonLog(`Started ${enabledFeeds.length} feed(s) with staggered intervals`, logFile);
 
   // Step 5: Inactivity monitoring
   const inactivityTimer = setInterval(() => {
     try {
       const parsed = readAll(cachePath);
-      const heartbeat = (parsed?._heartbeat as Record<string, unknown>)?.value as number | undefined;
-
+      const rawHeartbeat = (parsed?._dispatch_heartbeat as Record<string, unknown>)?.value;
+      const heartbeat =
+        typeof rawHeartbeat === "number" && Number.isFinite(rawHeartbeat)
+          ? rawHeartbeat
+          : undefined;
       const referenceTime = heartbeat ?? daemonStartTime;
       const timeoutMs = config.daemon.inactivityTimeoutMinutes * 60 * 1000;
 

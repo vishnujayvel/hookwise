@@ -141,8 +141,10 @@ class DashboardTab(Widget):
         layout: grid;
         grid-size: 2;
         grid-gutter: 1;
+        grid-columns: 1fr 1fr;
         height: auto;
         padding: 0;
+        min-width: 60;
     }
     DashboardTab .dash-header {
         text-style: bold;

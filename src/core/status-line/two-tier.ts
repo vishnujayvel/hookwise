@@ -18,14 +18,20 @@ export interface TwoTierConfig {
   fixedSegments: string[];
   /** Segment names for line 2 (rotating). */
   rotatingSegments: string[];
+  /** Segment names for middle section (multi-line, between fixed and rotating). */
+  middleSegments?: string[];
+  /** Whether to show a separator line before middle segments. */
+  showSeparator?: boolean;
   /** Delimiter between segments on each line. */
   delimiter: string;
 }
 
 /** Default configuration. */
 export const DEFAULT_TWO_TIER_CONFIG: TwoTierConfig = {
-  fixedSegments: ["context_bar", "mode_badge", "cost", "duration"],
-  rotatingSegments: ["insights_friction", "insights_pace", "insights_trend", "news", "calendar", "practice_breadcrumb", "mantra", "project", "pulse"],
+  fixedSegments: ["context_bar", "mode_badge", "cost", "duration", "daemon_health"],
+  rotatingSegments: ["insights_friction", "insights_pace", "insights_trend", "news", "calendar", "mantra", "project", "pulse"],
+  middleSegments: ["agents"],
+  showSeparator: true,
   delimiter: " | ",
 };
 
@@ -73,6 +79,10 @@ function colorizeSegment(name: string, text: string, cache: Record<string, unkno
       return color(text, DIM);
     case "calendar":
       return color(text, CYAN);
+    case "daemon_health": {
+      if (text.includes("stale")) return color(text, YELLOW);
+      return color(text, GREEN);
+    }
     default:
       return text;
   }
@@ -129,13 +139,45 @@ export function renderTwoTier(
       }
     }
 
+    // Middle segments: multi-line content between fixed and rotating
+    const middleLines: string[] = [];
+    const middleSegmentNames = config.middleSegments ?? [];
+    for (const name of middleSegmentNames) {
+      const renderer = BUILTIN_SEGMENTS[name];
+      if (!renderer) continue;
+      try {
+        const raw = renderer(cache, {});
+        if (raw) {
+          // Split multi-line segment content into individual lines
+          const segLines = raw.split("\n");
+          for (const segLine of segLines) {
+            if (segLine) middleLines.push(segLine);
+          }
+        }
+      } catch {
+        // Skip failing segment
+      }
+    }
+
     const line1 = line1Parts.join(config.delimiter);
+    const hasMiddle = middleLines.length > 0;
+    const showSep = config.showSeparator ?? true;
 
-    if (!line1 && !line2) return "";
-    if (!line2) return line1;
-    if (!line1) return line2;
+    if (!line1 && !hasMiddle && !line2) return "";
 
-    return `${line1}\n${line2}`;
+    const outputLines: string[] = [];
+    if (line1) outputLines.push(line1);
+
+    if (hasMiddle) {
+      if (showSep && outputLines.length > 0) {
+        outputLines.push(color("---", DIM));
+      }
+      outputLines.push(...middleLines);
+    }
+
+    if (line2) outputLines.push(line2);
+
+    return outputLines.join("\n");
   } catch {
     return "";
   }

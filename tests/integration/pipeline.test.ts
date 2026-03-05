@@ -153,7 +153,7 @@ describe("pipeline integration: SessionStart -> daemon -> feeds -> segments", ()
     const mergeKeyCalls: Array<{ key: string; data: Record<string, unknown> }> = [];
     dispatch("SessionStart", makePayload(), { config });
 
-    // Verify: mergeKey was called for _heartbeat and _cwd
+    // Verify: mergeKey was called for _dispatch_heartbeat and _cwd
     // (We test via the dispatch mock integration above; the actual calls
     //  are verified in dispatch-integration.test.ts. Here we verify the
     //  full chain from dispatch -> registry -> segments.)
@@ -266,14 +266,14 @@ describe("pipeline integration: daemon + dispatch coexistence", () => {
 
   it("dispatch and daemon can both write to cache without data loss", () => {
     // This test verifies the mergeKey contract: each writer only touches
-    // its own key, so concurrent writes from dispatch (_heartbeat, _cwd)
+    // its own key, so concurrent writes from dispatch (_dispatch_heartbeat, _cwd)
     // and daemon (pulse, project, etc.) do not overwrite each other.
 
     // Simulate the actual mergeKey behavior on an in-memory cache
     const cache: Record<string, unknown> = {};
 
-    // Dispatch writes _heartbeat and _cwd
-    cache["_heartbeat"] = {
+    // Dispatch writes _dispatch_heartbeat and _cwd
+    cache["_dispatch_heartbeat"] = {
       value: Date.now(),
       updated_at: new Date().toISOString(),
       ttl_seconds: 999999,
@@ -299,13 +299,13 @@ describe("pipeline integration: daemon + dispatch coexistence", () => {
 
     // Verify all keys coexist without overwriting each other
     expect(Object.keys(cache)).toHaveLength(4);
-    expect(cache["_heartbeat"]).toBeDefined();
+    expect(cache["_dispatch_heartbeat"]).toBeDefined();
     expect(cache["_cwd"]).toBeDefined();
     expect(cache["pulse"]).toBeDefined();
     expect(cache["project"]).toBeDefined();
 
     // Dispatch writes again (next tool call) — only its keys update
-    cache["_heartbeat"] = {
+    cache["_dispatch_heartbeat"] = {
       value: Date.now() + 5000,
       updated_at: new Date().toISOString(),
       ttl_seconds: 999999,
@@ -324,7 +324,7 @@ describe("pipeline integration: daemon + dispatch coexistence", () => {
 
     // Build a cache with both dispatch and daemon data
     const cache: Record<string, unknown> = {
-      _heartbeat: {
+      _dispatch_heartbeat: {
         value: NOW,
         updated_at: new Date(NOW).toISOString(),
         ttl_seconds: 999999,
@@ -355,9 +355,9 @@ describe("pipeline integration: daemon + dispatch coexistence", () => {
     const pulseStaleCutoff = NOW - 30 * 2 * 1000;
     expect(pulseUpdatedMs).toBeGreaterThan(pulseStaleCutoff);
 
-    // _heartbeat key should NOT affect feed health computation
+    // _dispatch_heartbeat key should NOT affect feed health computation
     // (daemon-manager only looks at named feeds, not internal keys)
-    expect(cache["_heartbeat"]).toBeDefined();
+    expect(cache["_dispatch_heartbeat"]).toBeDefined();
     expect(Object.keys(cache).filter((k) => !k.startsWith("_"))).toHaveLength(2);
 
     vi.useRealTimers();
@@ -368,7 +368,7 @@ describe("pipeline integration: daemon + dispatch coexistence", () => {
       daemon: { ...getDefaultConfig().daemon, autoStart: false },
     });
 
-    // Multiple dispatches in a session — each writes _heartbeat and _cwd
+    // Multiple dispatches in a session — each writes _dispatch_heartbeat and _cwd
     // without affecting daemon feed keys
     for (let i = 0; i < 5; i++) {
       dispatch("PreToolUse", makePayload({ tool_name: "Read" }), { config });
@@ -592,6 +592,7 @@ describe("pipeline integration: backward compatibility (no feeds section)", () =
         project: { ...getDefaultConfig().feeds.project, enabled: false },
       },
       daemon: { ...getDefaultConfig().daemon, autoStart: false },
+      analytics: { enabled: false },
     });
 
     config.handlers = [
@@ -734,6 +735,7 @@ describe("pipeline integration: config without daemon (NFR-4)", () => {
   it("dispatch continues to work as pure guard/handler pipeline when daemon is off", () => {
     const config = makeConfig({
       daemon: { ...getDefaultConfig().daemon, autoStart: false },
+      analytics: { enabled: false },
     });
 
     // Add handlers that exercise all three phases

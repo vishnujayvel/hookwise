@@ -3,9 +3,8 @@
  * for today's practice count, due SRS reviews, and last practice time.
  *
  * Reads from the practice-tracker database (default: ~/.practice-tracker/practice-tracker.db)
- * and writes to the "practice" cache key consumed by two segments:
+ * and writes to the "practice" cache key consumed by the practice segment:
  *   - practice: displays "TARGET todayTotal today"
- *   - practice_breadcrumb: displays "Last practice: Xm ago"
  *
  * Returns null when:
  *   - The database file does not exist

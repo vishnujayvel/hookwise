@@ -1,6 +1,6 @@
 /**
  * Tests for the 4 new two-tier segments:
- * context_bar, mode_badge, duration, practice_breadcrumb.
+ * context_bar, mode_badge, duration.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -121,68 +121,19 @@ describe("duration segment", () => {
   });
 });
 
-describe("practice_breadcrumb segment", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T12:00:00Z"));
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("renders relative time since last practice (hours)", () => {
-    // 3 hours ago
-    const cache = { practice: { last_at: "2026-02-23T09:00:00Z" } };
-    const result = BUILTIN_SEGMENTS.practice_breadcrumb(cache, {});
-    expect(result).toBe("Last practice: 3h ago");
-  });
-
-  it("renders relative time since last practice (minutes)", () => {
-    // 30 minutes ago
-    const cache = { practice: { last_at: "2026-02-23T11:30:00Z" } };
-    const result = BUILTIN_SEGMENTS.practice_breadcrumb(cache, {});
-    expect(result).toBe("Last practice: 30m ago");
-  });
-
-  it("renders relative time since last practice (days)", () => {
-    // 2 days ago
-    const cache = { practice: { last_at: "2026-02-21T12:00:00Z" } };
-    const result = BUILTIN_SEGMENTS.practice_breadcrumb(cache, {});
-    expect(result).toBe("Last practice: 2d ago");
-  });
-
-  it("returns empty when no practice data", () => {
-    const result = BUILTIN_SEGMENTS.practice_breadcrumb({}, {});
-    expect(result).toBe("");
-  });
-
-  it("returns empty when last_at is missing", () => {
-    const cache = { practice: {} };
-    const result = BUILTIN_SEGMENTS.practice_breadcrumb(cache, {});
-    expect(result).toBe("");
-  });
-
-  it("returns empty for invalid date", () => {
-    const cache = { practice: { last_at: "not-a-date" } };
-    const result = BUILTIN_SEGMENTS.practice_breadcrumb(cache, {});
-    expect(result).toBe("");
-  });
-});
-
 describe("BUILTIN_SEGMENTS registry", () => {
-  it("includes all 4 new segments", () => {
-    const newSegments = ["context_bar", "mode_badge", "duration", "practice_breadcrumb"];
+  it("includes all 3 new segments", () => {
+    const newSegments = ["context_bar", "mode_badge", "duration"];
     for (const name of newSegments) {
       expect(BUILTIN_SEGMENTS[name]).toBeDefined();
       expect(typeof BUILTIN_SEGMENTS[name]).toBe("function");
     }
   });
 
-  it("still includes all original 12 segments", () => {
+  it("still includes all original segments", () => {
     const original = [
       "clock", "mantra", "builder_trap", "session", "practice",
-      "ai_ratio", "cost", "streak", "pulse", "project", "calendar", "news",
+      "cost", "streak", "pulse", "project", "calendar", "news",
     ];
     for (const name of original) {
       expect(BUILTIN_SEGMENTS[name]).toBeDefined();
@@ -191,5 +142,32 @@ describe("BUILTIN_SEGMENTS registry", () => {
 
   it("has 21 total segments", () => {
     expect(Object.keys(BUILTIN_SEGMENTS)).toHaveLength(21);
+  });
+});
+
+describe("daemon_health segment", () => {
+  it("returns empty string when no heartbeat exists", () => {
+    const cache = {};
+    const result = BUILTIN_SEGMENTS.daemon_health(cache, {});
+    expect(result).toBe("");
+  });
+
+  it("returns 'daemon ok' when heartbeat is fresh", () => {
+    const cache = { _daemon_heartbeat: { value: Date.now() - 30_000 } };
+    const result = BUILTIN_SEGMENTS.daemon_health(cache, {});
+    expect(result).toContain("daemon ok");
+  });
+
+  it("returns warning when heartbeat is stale (>90s)", () => {
+    const cache = { _daemon_heartbeat: { value: Date.now() - 120_000 } };
+    const result = BUILTIN_SEGMENTS.daemon_health(cache, {});
+    expect(result).toContain("daemon stale");
+    expect(result).toContain("2m");
+  });
+
+  it("returns empty string when heartbeat value is missing", () => {
+    const cache = { _daemon_heartbeat: {} };
+    const result = BUILTIN_SEGMENTS.daemon_health(cache, {});
+    expect(result).toBe("");
   });
 });

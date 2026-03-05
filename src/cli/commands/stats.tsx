@@ -81,7 +81,7 @@ function loadStats(
       agents: null,
       costState: null,
       streaks: null,
-      error: `No analytics database found. Run "hookwise init --preset analytics" to enable, then use Claude Code to generate data.`,
+      error: `No analytics database found. Analytics is enabled by default — use Claude Code to generate data. If disabled, run "hookwise init --preset analytics" to re-enable.`,
     };
   }
 

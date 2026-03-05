@@ -193,14 +193,18 @@ export function aggregateInsights(
     .slice(0, 5)
     .map(([name, count]) => ({ name, count }));
 
-  let peakHour = 0;
+  let peakHourUtc = 0;
   let maxHourCount = 0;
   for (let h = 0; h < 24; h++) {
     if (hourCounts[h] > maxHourCount) {
       maxHourCount = hourCounts[h];
-      peakHour = h;
+      peakHourUtc = h;
     }
   }
+
+  const offsetMinutes = new Date(now).getTimezoneOffset();
+  const localPeakMinutes = (peakHourUtc * 60 - offsetMinutes + 24 * 60) % (24 * 60);
+  const peakHour = Math.floor(localPeakMinutes / 60);
 
   const frictionTotal = Object.values(frictionCounts).reduce((sum, v) => sum + v, 0);
 

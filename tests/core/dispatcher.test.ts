@@ -55,6 +55,13 @@ function makePayload(overrides: Partial<HookPayload> = {}): HookPayload {
   };
 }
 
+/** Get default config with analytics disabled (avoids better-sqlite3 module issues in tests). */
+function makeConfig(): HooksConfig {
+  const config = getDefaultConfig();
+  config.analytics = { enabled: false };
+  return config;
+}
+
 // --- Task 4.1: Stdin reading and event routing ---
 
 describe("readStdinPayload", () => {
@@ -118,7 +125,7 @@ describe("readStdinPayload", () => {
 
 describe("dispatch — event routing", () => {
   it("routes valid event to handler chain", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "inline-guard",
@@ -139,7 +146,7 @@ describe("dispatch — event routing", () => {
   });
 
   it("returns exit 0 with null stdout for unknown events", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     // Force an invalid event type through the type system
     const result = dispatch("InvalidEvent" as EventType, makePayload(), { config });
     expect(result.exitCode).toBe(0);
@@ -147,14 +154,14 @@ describe("dispatch — event routing", () => {
   });
 
   it("returns exit 0 for events with no handlers", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     const result = dispatch("PreToolUse", makePayload(), { config });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBeNull();
   });
 
   it("passes payload through to handlers", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "context-handler",
@@ -179,7 +186,7 @@ describe("dispatch — event routing", () => {
 
 describe("dispatch — three-phase execution", () => {
   it("Phase 1: guard block short-circuits execution", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "blocker",
@@ -207,7 +214,7 @@ describe("dispatch — three-phase execution", () => {
   });
 
   it("Phase 1: first block wins (first-match-wins)", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "first-guard",
@@ -231,7 +238,7 @@ describe("dispatch — three-phase execution", () => {
   });
 
   it("Phase 1: non-blocking guard allows continuation", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "warn-guard",
@@ -257,7 +264,7 @@ describe("dispatch — three-phase execution", () => {
   });
 
   it("Phase 2: context injection merges multiple handlers", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "greeting",
@@ -284,7 +291,7 @@ describe("dispatch — three-phase execution", () => {
   });
 
   it("Phase 2: context with no output returns null stdout", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "noop-context",
@@ -301,7 +308,7 @@ describe("dispatch — three-phase execution", () => {
   });
 
   it("Phase 3: side effects execute after context", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "context",
@@ -328,7 +335,7 @@ describe("dispatch — three-phase execution", () => {
 
   it("Phase 3: side effect errors are swallowed", () => {
     // This tests that Phase 3 errors don't crash the dispatch
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "error-side-effect",
@@ -347,7 +354,7 @@ describe("dispatch — three-phase execution", () => {
 
   it("all phases return exit 0 on error", () => {
     // A broken config passed directly should still exit 0
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "script-that-fails",
@@ -638,7 +645,7 @@ describe("dispatch — graceful config handling", () => {
   });
 
   it("config passed directly bypasses file loading", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "inline-test",
@@ -684,7 +691,7 @@ describe("dispatch — graceful config handling", () => {
 
 describe("dispatch — integration", () => {
   it("full pipeline: guard allows, context injects, side effect runs", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "allow-guard",
@@ -719,7 +726,7 @@ describe("dispatch — integration", () => {
   });
 
   it("guard block prevents context and side effects", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "blocker",
@@ -752,7 +759,7 @@ describe("dispatch — integration", () => {
   });
 
   it("multiple events dispatch independently", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "pre-tool-context",
@@ -824,7 +831,7 @@ describe("dispatch — script handler integration", () => {
       { mode: 0o755 }
     );
 
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "echo-script",
@@ -851,7 +858,7 @@ describe("dispatch — script handler integration", () => {
       { mode: 0o755 }
     );
 
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.handlers = [
       {
         name: "script-guard",
@@ -874,7 +881,7 @@ describe("dispatch — script handler integration", () => {
 
 describe("dispatch — declarative guard warn action", () => {
   it("warn action produces stdout JSON with additionalContext containing the reason", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.guards = [
       { match: "Bash", action: "warn", reason: "Shell usage detected" },
     ];
@@ -893,7 +900,7 @@ describe("dispatch — declarative guard warn action", () => {
   });
 
   it("warn action does NOT block (no decision: block in output)", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.guards = [
       { match: "Bash", action: "warn", reason: "Careful with shell" },
     ];
@@ -909,7 +916,7 @@ describe("dispatch — declarative guard warn action", () => {
   });
 
   it("warn + Phase 2 context merge correctly (both messages appear)", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.guards = [
       { match: "Bash", action: "warn", reason: "Shell warning from guard" },
     ];
@@ -935,7 +942,7 @@ describe("dispatch — declarative guard warn action", () => {
   });
 
   it("warn without reason produces no warn output", () => {
-    const config = getDefaultConfig();
+    const config = makeConfig();
     config.guards = [
       { match: "Bash", action: "warn" },
     ];

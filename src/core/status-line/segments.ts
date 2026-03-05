@@ -5,8 +5,12 @@
  * Returns empty string when data is unavailable.
  */
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { SegmentConfig, CacheEntry } from "../types.js";
 import { isFresh } from "../feeds/cache-bus.js";
+import { color, GREEN, YELLOW, RED, DIM } from "./ansi.js";
 
 type SegmentRenderer = (
   cache: Record<string, unknown>,
@@ -87,17 +91,6 @@ const practice: SegmentRenderer = (cache) => {
   return `\uD83C\uDFAF ${practiceData.todayTotal} today`;
 };
 
-const ai_ratio: SegmentRenderer = (cache) => {
-  const sessionData = cache.session as
-    | { aiRatio?: number }
-    | undefined;
-  if (sessionData?.aiRatio === undefined) return "";
-
-  const pct = Math.round(sessionData.aiRatio * 100);
-  const bar = renderBar(sessionData.aiRatio);
-  return `AI: ${pct}% ${bar}`;
-};
-
 const cost: SegmentRenderer = (cache) => {
   const costData = cache.cost as
     | { sessionCostUsd?: number }
@@ -151,19 +144,6 @@ const duration: SegmentRenderer = (cache) => {
 
   const minutes = Math.round(ms / 60_000);
   return formatDuration(minutes);
-};
-
-const practice_breadcrumb: SegmentRenderer = (cache) => {
-  const practiceData = cache.practice as
-    | { last_at?: string }
-    | undefined;
-  if (!practiceData?.last_at) return "";
-
-  const lastAtMs = Date.parse(practiceData.last_at);
-  if (Number.isNaN(lastAtMs)) return "";
-
-  const ts = Math.floor(lastAtMs / 1000);
-  return `Last practice: ${formatRelativeTime(ts)}`;
 };
 
 // --- Feed Platform Segments (v1.1) ---
@@ -369,12 +349,12 @@ const insights_friction: SegmentRenderer = (cache) => {
   if (recentFriction > 0) {
     const tip = topFrictionTip(frictionCounts);
     if (tip) {
-      return `\u26A0\uFE0F ${recentFriction} friction \u00B7 ${tip}`;
+      return `\u26A0\uFE0F ${recentFriction} friction this session \u00B7 ${tip}`;
     }
-    return `\u26A0\uFE0F ${recentFriction} friction in last session`;
+    return `\u26A0\uFE0F ${recentFriction} friction this session`;
   }
   if (totalFriction > 0) {
-    return `\u2705 Clean session | ${totalFriction} total friction`;
+    return `\u2705 Clean session \u00B7 ${totalFriction} in 30d`;
   }
   return "\u2705 No friction detected";
 };
@@ -391,7 +371,7 @@ const insights_pace: SegmentRenderer = (cache) => {
   const msgsPerDay = Math.round(totalMessages / daysActive);
   const formattedLines = formatLargeNumber(linesAdded);
 
-  return `\uD83D\uDCCA ${msgsPerDay} msgs/day | ${formattedLines}+ lines | ${sessions} sessions`;
+  return `\uD83D\uDCCA ${msgsPerDay} msgs/day | ${formattedLines}+ lines | ${sessions} sessions (30d)`;
 };
 
 const insights_trend: SegmentRenderer = (cache) => {
@@ -468,6 +448,111 @@ const memories: SegmentRenderer = (cache) => {
   return `\uD83D\uDD70\uFE0F On this day: ${sessionCount} session${sessionCount !== 1 ? "s" : ""} (${best.label})`;
 };
 
+// --- Agents Segment ---
+
+interface AgentEntry {
+  agent_id: string;
+  name: string;
+  status: string;
+  started_at: number;
+  stopped_at?: number;
+}
+
+interface ActiveAgentsData {
+  agents: AgentEntry[];
+  team_name?: string;
+  strategy?: string;
+  updated_at?: number;
+}
+
+const AGENTS_CACHE_PATH = join(homedir(), ".hookwise", "cache", "active-agents.json");
+
+const agents: SegmentRenderer = (cache) => {
+  // Read from cache.agents (merged by CLI command) or directly from file
+  let data: ActiveAgentsData | undefined = cache.agents as ActiveAgentsData | undefined;
+
+  if (!data) {
+    try {
+      if (!existsSync(AGENTS_CACHE_PATH)) return "";
+      const raw = readFileSync(AGENTS_CACHE_PATH, "utf-8");
+      data = JSON.parse(raw) as ActiveAgentsData;
+    } catch {
+      return "";
+    }
+  }
+
+  if (!data?.agents?.length) return "";
+
+  // Filter stale entries (older than 10 minutes)
+  const now = Math.floor(Date.now() / 1000);
+  const staleThreshold = 600;
+  const activeAgents = data.agents.filter(
+    (a) => (now - (a.started_at ?? now)) < staleThreshold
+  );
+
+  if (activeAgents.length === 0) return "";
+
+  const lines: string[] = [];
+
+  // Header with team info
+  if (data.team_name) {
+    const strategyPart = data.strategy ? ` (${data.strategy})` : "";
+    lines.push(`TEAM: ${data.team_name}${strategyPart}`);
+  }
+
+  // Tree-draw each agent
+  for (let i = 0; i < activeAgents.length; i++) {
+    const agent = activeAgents[i];
+    const isLast = i === activeAgents.length - 1;
+    const prefix = isLast ? "  +-- " : "  |-- ";
+
+    const elapsed = now - (agent.started_at ?? now);
+    const elapsedMin = Math.floor(elapsed / 60);
+    let timeStr: string;
+    if (agent.status === "done" && agent.stopped_at) {
+      const ago = now - agent.stopped_at;
+      const agoMin = Math.floor(ago / 60);
+      timeStr = `${agoMin}m ago`;
+    } else {
+      timeStr = formatDuration(elapsedMin);
+    }
+
+    const statusPadded = agent.status.padEnd(9);
+    const namePadded = agent.name.padEnd(14);
+    const raw = `${prefix}${namePadded}${statusPadded}${timeStr}`;
+
+    // Colorize by status
+    if (agent.status === "done") {
+      lines.push(color(raw, GREEN));
+    } else if (agent.status === "failed") {
+      lines.push(color(raw, RED));
+    } else {
+      lines.push(color(raw, YELLOW));
+    }
+  }
+
+  return lines.join("\n");
+};
+
+// --- Daemon Health Segment ---
+
+const daemon_health: SegmentRenderer = (cache) => {
+  const heartbeat = cache._daemon_heartbeat as
+    | { value?: number }
+    | undefined;
+  if (!heartbeat?.value) return "";
+
+  const ageMs = Date.now() - heartbeat.value;
+  const staleThresholdMs = 90_000; // 90 seconds
+
+  if (ageMs > staleThresholdMs) {
+    const staleMins = formatDuration(Math.round(ageMs / 60_000));
+    return `daemon stale (${staleMins})`;
+  }
+
+  return "daemon ok";
+};
+
 /**
  * Registry of all built-in segments.
  */
@@ -477,13 +562,11 @@ export const BUILTIN_SEGMENTS: Record<string, SegmentRenderer> = {
   builder_trap,
   session,
   practice,
-  ai_ratio,
   cost,
   streak,
   context_bar,
   mode_badge,
   duration,
-  practice_breadcrumb,
   pulse,
   project,
   calendar,
@@ -493,4 +576,6 @@ export const BUILTIN_SEGMENTS: Record<string, SegmentRenderer> = {
   insights_trend,
   weather,
   memories,
+  daemon_health,
+  agents,
 };

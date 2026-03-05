@@ -40,7 +40,7 @@ describe("insights_friction", () => {
       friction_total: 12,
     });
     const result = render(cache, defaultSegmentConfig);
-    expect(result).toContain("3 friction in last session");
+    expect(result).toContain("3 friction this session");
     expect(result).toContain("\u26A0\uFE0F");
   });
 
@@ -74,7 +74,7 @@ describe("insights_friction", () => {
       friction_counts: {},
     });
     const result = render(cache, defaultSegmentConfig);
-    expect(result).toContain("3 friction in last session");
+    expect(result).toContain("3 friction this session");
   });
 
   it("renders clean session message when zero recent but historical friction", () => {
@@ -84,7 +84,7 @@ describe("insights_friction", () => {
     });
     const result = render(cache, defaultSegmentConfig);
     expect(result).toContain("Clean session");
-    expect(result).toContain("12 total friction");
+    expect(result).toContain("12 in 30d");
     expect(result).toContain("\u2705");
   });
 
@@ -128,7 +128,7 @@ describe("insights_pace", () => {
     const result = render(cache, defaultSegmentConfig);
     expect(result).toContain("47 msgs/day");
     expect(result).toContain("5.4k+ lines");
-    expect(result).toContain("42 sessions");
+    expect(result).toContain("42 sessions (30d)");
   });
 
   it("formats large numbers correctly (28000 → 28k)", () => {
