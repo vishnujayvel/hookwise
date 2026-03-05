@@ -1,4 +1,7 @@
 /**
+ * @experimental This module is not part of the public API and should not
+ * be used in production. It may change or be removed without notice.
+ *
  * Authorship Ledger with AI Confidence Scoring for hookwise analytics.
  *
  * Implements heuristic-based AI confidence scoring that estimates

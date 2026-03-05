@@ -494,16 +494,16 @@ describe("inactivity monitoring", () => {
 // --- Initial heartbeat ---
 
 describe("initial heartbeat", () => {
-  it("writes heartbeat on startup via mergeKey (FR-2.9)", () => {
-    // Simulate the startup heartbeat write
+  it("writes daemon heartbeat on startup via mergeKey (FR-2.9)", () => {
+    // Simulate the startup daemon heartbeat write
     const now = Date.now();
-    mergeKey(TEST_CACHE_PATH, "_heartbeat", { value: now }, 999999);
+    mergeKey(TEST_CACHE_PATH, "_daemon_heartbeat", { value: now }, 90);
 
     expect(mockedMergeKey).toHaveBeenCalledWith(
       TEST_CACHE_PATH,
-      "_heartbeat",
+      "_daemon_heartbeat",
       { value: expect.any(Number) },
-      999999,
+      90,
     );
   });
 });

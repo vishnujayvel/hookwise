@@ -81,6 +81,18 @@ def read_config(config_path: Path | None = None) -> dict[str, Any]:
         return {}
 
 
+def write_config(config: dict[str, Any], config_path: Path | None = None) -> bool:
+    """Write hookwise.yaml config. Returns True on success."""
+    path = config_path or _default_config_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        return True
+    except Exception:
+        return False
+
+
 # --- Cache bus reader ---
 
 def read_cache(cache_path: Path | None = None) -> dict[str, Any]:
@@ -509,7 +521,9 @@ def read_insights(
     # Derived metrics
     avg_duration = total_duration / len(valid_sessions) if valid_sessions else 0
     top_tools = tool_counts.most_common(10)
-    peak_hour = max(range(24), key=lambda h: hour_counts[h]) if any(hour_counts) else 0
+    peak_hour_utc = max(range(24), key=lambda h: hour_counts[h]) if any(hour_counts) else 0
+    local_offset_hours = datetime.now().astimezone().utcoffset().total_seconds() / 3600
+    peak_hour = int((peak_hour_utc + local_offset_hours + 24) % 24)
     friction_total = sum(friction_counts.values())
 
     return InsightsData(

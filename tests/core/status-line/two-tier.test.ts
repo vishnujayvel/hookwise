@@ -209,14 +209,14 @@ describe("renderTwoTier - ANSI coloring", () => {
 describe("DEFAULT_TWO_TIER_CONFIG", () => {
   it("has expected fixed segments", () => {
     expect(DEFAULT_TWO_TIER_CONFIG.fixedSegments).toEqual([
-      "context_bar", "mode_badge", "cost", "duration",
+      "context_bar", "mode_badge", "cost", "duration", "daemon_health",
     ]);
   });
 
   it("has expected rotating segments", () => {
     expect(DEFAULT_TWO_TIER_CONFIG.rotatingSegments).toEqual([
       "insights_friction", "insights_pace", "insights_trend",
-      "news", "calendar", "practice_breadcrumb", "mantra", "project", "pulse",
+      "news", "calendar", "mantra", "project", "pulse",
     ]);
   });
 

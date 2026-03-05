@@ -486,7 +486,7 @@ export function dispatch(
     // Feed platform: write heartbeat + CWD for daemon consumption (on every dispatch)
     try {
       const cachePath = config.statusLine.cachePath;
-      mergeKey(cachePath, "_heartbeat", { value: Date.now() }, 999999);
+      mergeKey(cachePath, "_dispatch_heartbeat", { value: Date.now() }, 999999);
       mergeKey(cachePath, "_cwd", { value: process.cwd() }, 999999);
     } catch {
       // Fail-open: feed cache write errors must never affect dispatch result

@@ -272,13 +272,16 @@ function buildFeedHealth(
 ): FeedHealth[] {
   const health: FeedHealth[] = [];
 
-  // Built-in feeds
+  // Built-in feeds (all 8)
   const builtinFeeds = [
     { name: "pulse", enabled: feedsConfig.pulse.enabled, intervalSeconds: feedsConfig.pulse.intervalSeconds },
     { name: "project", enabled: feedsConfig.project.enabled, intervalSeconds: feedsConfig.project.intervalSeconds },
     { name: "calendar", enabled: feedsConfig.calendar.enabled, intervalSeconds: feedsConfig.calendar.intervalSeconds },
     { name: "news", enabled: feedsConfig.news.enabled, intervalSeconds: feedsConfig.news.intervalSeconds },
     { name: "insights", enabled: feedsConfig.insights.enabled, intervalSeconds: feedsConfig.insights.intervalSeconds },
+    { name: "practice", enabled: feedsConfig.practice.enabled, intervalSeconds: feedsConfig.practice.intervalSeconds },
+    { name: "weather", enabled: feedsConfig.weather.enabled, intervalSeconds: feedsConfig.weather.intervalSeconds },
+    { name: "memories", enabled: feedsConfig.memories.enabled, intervalSeconds: feedsConfig.memories.intervalSeconds },
   ];
 
   for (const feed of builtinFeeds) {

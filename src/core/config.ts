@@ -193,7 +193,7 @@ export function getDefaultConfig(): HooksConfig {
         tone: "gentle",
       },
     },
-    analytics: { enabled: false },
+    analytics: { enabled: true },
     greeting: { enabled: false },
     sounds: { enabled: false },
     statusLine: {

@@ -188,7 +188,7 @@ describe("pipeline-wiring: TTL, atomic merge, and orphan detection", () => {
     //   calendar → "calendar" segment
     //   news     → "news" segment
     //   insights → "insights_friction", "insights_pace", "insights_trend"
-    //   practice → "practice", "practice_breadcrumb"
+    //   practice → "practice"
     //   weather  → "weather" segment
     //   memories → "memories" segment
     const PRODUCER_TO_SEGMENTS: Record<string, string[]> = {
@@ -197,7 +197,7 @@ describe("pipeline-wiring: TTL, atomic merge, and orphan detection", () => {
       calendar: ["calendar"],
       news: ["news"],
       insights: ["insights_friction", "insights_pace", "insights_trend"],
-      practice: ["practice", "practice_breadcrumb"],
+      practice: ["practice"],
       weather: ["weather"],
       memories: ["memories"],
     };
@@ -326,7 +326,7 @@ describe("pipeline-wiring: reusable testPipelineFlow helper", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Task: Practice producer → practice & practice_breadcrumb segments (GH#8)
+// Task: Practice producer → practice segment (GH#8)
 // ---------------------------------------------------------------------------
 
 describe("pipeline-wiring: practice producer to segment pipeline", () => {
@@ -353,28 +353,6 @@ describe("pipeline-wiring: practice producer to segment pipeline", () => {
 
     expect(output).toBeTruthy();
     expect(output).toContain("3 today");
-  });
-
-  it("practice producer output → mergeKey → practice_breadcrumb renders relative time", async () => {
-    env = createTestEnv();
-
-    // Write practice data with a last_at timestamp from 10 minutes ago
-    const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString();
-    const practiceData = {
-      todayTotal: 2,
-      dueReviews: 4,
-      last_at: tenMinAgo,
-    };
-
-    mergeKey(env.cachePath, "practice", practiceData, 300);
-
-    const cache = readAll(env.cachePath);
-    const segmentFn = BUILTIN_SEGMENTS["practice_breadcrumb"];
-    const output = segmentFn(cache, { builtin: "practice_breadcrumb" });
-
-    expect(output).toBeTruthy();
-    expect(output).toContain("Last practice:");
-    expect(output).toContain("ago");
   });
 
   it("practice producer returns null → practice segment renders empty", () => {
@@ -412,7 +390,7 @@ describe("pipeline-wiring: practice producer to segment pipeline", () => {
   it("practice producer registered in orphan detection map", () => {
     // Verify the practice producer has corresponding segments
     const PRODUCER_TO_SEGMENTS: Record<string, string[]> = {
-      practice: ["practice", "practice_breadcrumb"],
+      practice: ["practice"],
     };
 
     const allSegmentNames = Object.keys(BUILTIN_SEGMENTS);

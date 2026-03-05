@@ -195,7 +195,7 @@ describe("aggregateInsights", () => {
     expect(result!.top_tools.length).toBeLessThanOrEqual(5);
   });
 
-  it("computes peak_hour correctly", () => {
+  it("computes peak_hour correctly (UTC→local conversion)", () => {
     const usageDir = setupFixtures(
       tempRoot,
       ["fresh-clean.json", "fresh-friction.json"],
@@ -206,8 +206,11 @@ describe("aggregateInsights", () => {
     expect(result).not.toBeNull();
     // fresh-clean: hours 14,14,14,14,14,14,15,15,15,15,15,15 → 14:6, 15:6
     // fresh-friction: hours 10:5, 11:20
-    // Total: 10:5, 11:20, 14:6, 15:6 → peak = 11
-    expect(result!.peak_hour).toBe(11);
+    // Total: 10:5, 11:20, 14:6, 15:6 → UTC peak = 11
+    // Converted to local time using system timezone offset
+    const offsetMinutes = new Date().getTimezoneOffset();
+    const expectedLocalPeak = ((11 - offsetMinutes / 60) + 24) % 24;
+    expect(result!.peak_hour).toBe(expectedLocalPeak);
   });
 
   it("identifies recent_session correctly (latest start_time)", () => {

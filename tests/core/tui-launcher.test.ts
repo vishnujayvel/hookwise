@@ -23,10 +23,11 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-// Mock child_process.spawn before importing the module under test
+// Mock child_process before importing the module under test
 vi.mock("node:child_process", () => ({
   spawn: vi.fn(),
   spawnSync: vi.fn(),
+  execSync: vi.fn(() => { throw new Error("no process found"); }),
 }));
 
 // Mock node:os platform() so we can control cross-platform behavior
@@ -39,7 +40,7 @@ vi.mock("node:os", async () => {
 });
 
 import { isTuiRunning, launchTui } from "../../src/core/tui-launcher.js";
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { platform } from "node:os";
 import { dispatch } from "../../src/core/dispatcher.js";
 import { getDefaultConfig } from "../../src/core/config.js";
@@ -47,6 +48,7 @@ import type { TuiConfig, HookPayload } from "../../src/core/types.js";
 
 const mockedSpawn = vi.mocked(spawn);
 const mockedPlatform = vi.mocked(platform);
+const mockedExecSync = vi.mocked(execSync);
 
 function makePayload(overrides: Partial<HookPayload> = {}): HookPayload {
   return {
@@ -178,7 +180,7 @@ describe("launchTui", () => {
 
     expect(mockedSpawn).toHaveBeenCalledWith(
       "osascript",
-      ["-e", 'tell application "Terminal" to do script "python3 -m hookwise_tui"'],
+      ["-e", expect.stringContaining("-m hookwise_tui")],
       expect.objectContaining({ detached: true, stdio: "ignore" }),
     );
   });
@@ -200,6 +202,22 @@ describe("launchTui", () => {
     expect(existsSync(pidPath)).toBe(false);
   });
 
+  it("skips newWindow launch when pgrep finds existing hookwise_tui process", () => {
+    const pidPath = join(tempDir, "tui.pid");
+    const config: TuiConfig = { autoLaunch: true, launchMethod: "newWindow" };
+
+    // pgrep returns a PID (process found)
+    mockedExecSync.mockReturnValue("12345\n");
+
+    const result = launchTui(config, pidPath);
+
+    expect(result).toBe(false);
+    expect(mockedSpawn).not.toHaveBeenCalled();
+
+    // Reset execSync to default (throws = no process found)
+    mockedExecSync.mockImplementation(() => { throw new Error("no process found"); });
+  });
+
   it("spawns with correct args for background method", () => {
     const pidPath = join(tempDir, "tui.pid");
     const config: TuiConfig = { autoLaunch: true, launchMethod: "background" };
@@ -213,7 +231,7 @@ describe("launchTui", () => {
     launchTui(config, pidPath);
 
     expect(mockedSpawn).toHaveBeenCalledWith(
-      "python3",
+      expect.stringContaining("python3"),
       ["-m", "hookwise_tui"],
       expect.objectContaining({ detached: true, stdio: "ignore" }),
     );

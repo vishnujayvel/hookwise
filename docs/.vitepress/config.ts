@@ -50,6 +50,7 @@ export default defineConfig({
           text: 'About',
           items: [
             { text: 'Architecture', link: '/architecture' },
+            { text: 'Tech Stack', link: '/tech-stack' },
             { text: 'Philosophy', link: '/philosophy' }
           ]
         }

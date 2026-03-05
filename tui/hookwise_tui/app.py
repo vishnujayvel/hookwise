@@ -1,5 +1,9 @@
 """Main Hookwise TUI application — Textual app with 8 tabbed views + weather background."""
 
+import atexit
+import os
+from pathlib import Path
+
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
@@ -97,7 +101,31 @@ class HookwiseTUI(App):
                     yield StatusTab()
         yield Footer()
 
+    def _get_pid_path(self) -> Path:
+        """Return the TUI PID file path (~/.hookwise/tui.pid)."""
+        return Path.home() / ".hookwise" / "tui.pid"
+
+    def _write_pid(self) -> None:
+        """Write current PID to ~/.hookwise/tui.pid and register cleanup."""
+        pid_path = self._get_pid_path()
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text(str(os.getpid()))
+        atexit.register(self._remove_pid)
+
+    def _remove_pid(self) -> None:
+        """Remove PID file on exit (best-effort)."""
+        try:
+            pid_path = self._get_pid_path()
+            if pid_path.exists():
+                stored_pid = pid_path.read_text().strip()
+                if stored_pid == str(os.getpid()):
+                    pid_path.unlink()
+        except OSError:
+            pass
+
     def on_mount(self) -> None:
+        self._write_pid()
+
         # Load weather (may do a network fetch if cache is empty)
         try:
             weather_info = get_weather()

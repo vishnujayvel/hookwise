@@ -42,7 +42,7 @@ describe("dispatcher-wiring: heartbeat and CWD cache writes", () => {
     }
   });
 
-  it("dispatch(any event) writes _heartbeat to real cache file with recent timestamp", () => {
+  it("dispatch(any event) writes _dispatch_heartbeat to real cache file with recent timestamp", () => {
     const beforeMs = Date.now();
 
     dispatch("PostToolUse", makePayload(), {
@@ -52,10 +52,10 @@ describe("dispatcher-wiring: heartbeat and CWD cache writes", () => {
 
     const afterMs = Date.now();
 
-    // Read _heartbeat from the real cache file on disk
+    // Read _dispatch_heartbeat from the real cache file on disk
     const heartbeat = readKey<CacheEntry & { value: number }>(
       env.config.statusLine.cachePath,
-      "_heartbeat",
+      "_dispatch_heartbeat",
     );
 
     expect(heartbeat).not.toBeNull();
@@ -265,7 +265,7 @@ describe("dispatcher-wiring: fail-open and fault isolation", () => {
     // Heartbeat + CWD also written (they run before handlers)
     const heartbeat = readKey<CacheEntry & { value: number }>(
       config.statusLine.cachePath,
-      "_heartbeat",
+      "_dispatch_heartbeat",
     );
     expect(heartbeat).not.toBeNull();
   });

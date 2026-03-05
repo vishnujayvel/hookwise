@@ -9,7 +9,7 @@
  * log a warning and skip the launch.
  */
 
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import {
   existsSync,
   openSync,
@@ -209,8 +209,17 @@ export function launchTui(config: TuiConfig, pidPath?: string): boolean {
 
     if (config.launchMethod === "newWindow") {
       // macOS: use osascript to open a new Terminal.app window running the TUI.
-      // Note: osascript is transient — its PID is not the python3 PID, so we
-      // skip PID-based duplicate prevention for newWindow mode.
+      // osascript is transient — its PID is not the python3 PID, so we
+      // use pgrep to check if a hookwise_tui process is already running.
+      try {
+        const result = execSync("pgrep -f hookwise_tui", { encoding: "utf-8", timeout: 3000 });
+        if (result.trim()) {
+          logDebug("TUI already running (pgrep found hookwise_tui process), skipping newWindow launch");
+          return false;
+        }
+      } catch {
+        // pgrep returns exit code 1 when no process found — that's fine, proceed
+      }
       const pythonCmd = resolveTuiPython();
       const child = spawn(
         "osascript",

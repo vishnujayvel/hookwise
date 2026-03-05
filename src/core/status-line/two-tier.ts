@@ -24,8 +24,8 @@ export interface TwoTierConfig {
 
 /** Default configuration. */
 export const DEFAULT_TWO_TIER_CONFIG: TwoTierConfig = {
-  fixedSegments: ["context_bar", "mode_badge", "cost", "duration"],
-  rotatingSegments: ["insights_friction", "insights_pace", "insights_trend", "news", "calendar", "practice_breadcrumb", "mantra", "project", "pulse"],
+  fixedSegments: ["context_bar", "mode_badge", "cost", "duration", "daemon_health"],
+  rotatingSegments: ["insights_friction", "insights_pace", "insights_trend", "news", "calendar", "mantra", "project", "pulse"],
   delimiter: " | ",
 };
 
@@ -73,6 +73,10 @@ function colorizeSegment(name: string, text: string, cache: Record<string, unkno
       return color(text, DIM);
     case "calendar":
       return color(text, CYAN);
+    case "daemon_health": {
+      if (text.includes("stale")) return color(text, YELLOW);
+      return color(text, GREEN);
+    }
     default:
       return text;
   }

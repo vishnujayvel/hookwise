@@ -34,6 +34,7 @@ function makePayload(overrides: Partial<HookPayload> = {}): HookPayload {
 function makeConfig(overrides?: Partial<HooksConfig>): HooksConfig {
   return {
     ...getDefaultConfig(),
+    analytics: { enabled: false },
     ...overrides,
   };
 }
