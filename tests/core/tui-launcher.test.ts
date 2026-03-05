@@ -206,16 +206,13 @@ describe("launchTui", () => {
     const pidPath = join(tempDir, "tui.pid");
     const config: TuiConfig = { autoLaunch: true, launchMethod: "newWindow" };
 
-    // pgrep returns a PID (process found)
-    mockedExecSync.mockReturnValue("12345\n");
+    // pgrep returns a PID (process found) — one-shot to avoid shared-state leak
+    mockedExecSync.mockReturnValueOnce("12345\n");
 
     const result = launchTui(config, pidPath);
 
     expect(result).toBe(false);
     expect(mockedSpawn).not.toHaveBeenCalled();
-
-    // Reset execSync to default (throws = no process found)
-    mockedExecSync.mockImplementation(() => { throw new Error("no process found"); });
   });
 
   it("spawns with correct args for background method", () => {

@@ -63,16 +63,24 @@ def _default_usage_data_path() -> Path:
 
 # --- Config reader ---
 
+def _effective_config_path(config_path: Path | None = None) -> Path:
+    """Resolve config path consistently for read/write operations."""
+    if config_path is not None:
+        return config_path
+    local_path = _default_config_path()
+    if local_path.exists():
+        return local_path
+    global_path = _config_dir() / "config.yaml"
+    if global_path.exists():
+        return global_path
+    return local_path
+
+
 def read_config(config_path: Path | None = None) -> dict[str, Any]:
     """Read hookwise.yaml config. Returns empty dict if missing."""
-    path = config_path or _default_config_path()
+    path = _effective_config_path(config_path)
     if not path.exists():
-        # Try global config
-        global_path = _config_dir() / "config.yaml"
-        if global_path.exists():
-            path = global_path
-        else:
-            return {}
+        return {}
     try:
         with open(path) as f:
             data = yaml.safe_load(f)
@@ -83,7 +91,7 @@ def read_config(config_path: Path | None = None) -> dict[str, Any]:
 
 def write_config(config: dict[str, Any], config_path: Path | None = None) -> bool:
     """Write hookwise.yaml config. Returns True on success."""
-    path = config_path or _default_config_path()
+    path = _effective_config_path(config_path)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:

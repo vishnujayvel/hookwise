@@ -202,8 +202,9 @@ export function aggregateInsights(
     }
   }
 
-  const offsetMinutes = new Date().getTimezoneOffset();
-  const peakHour = ((peakHourUtc - offsetMinutes / 60) + 24) % 24;
+  const offsetMinutes = new Date(now).getTimezoneOffset();
+  const localPeakMinutes = (peakHourUtc * 60 - offsetMinutes + 24 * 60) % (24 * 60);
+  const peakHour = Math.floor(localPeakMinutes / 60);
 
   const frictionTotal = Object.values(frictionCounts).reduce((sum, v) => sum + v, 0);
 

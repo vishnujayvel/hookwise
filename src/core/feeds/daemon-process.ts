@@ -257,7 +257,14 @@ export async function runDaemon(projectDir: string): Promise<void> {
   daemonLog(`PID ${process.pid} written to ${pidPath}`, logFile);
 
   // Step 5 (partial): Write initial daemon heartbeat + start refresh interval
-  mergeKey(cachePath, "_daemon_heartbeat", { value: Date.now() }, DAEMON_HEARTBEAT_TTL);
+  try {
+    mergeKey(cachePath, "_daemon_heartbeat", { value: Date.now() }, DAEMON_HEARTBEAT_TTL);
+  } catch (error) {
+    daemonLog(
+      `Initial daemon heartbeat write failed: ${error instanceof Error ? error.message : String(error)}`,
+      logFile,
+    );
+  }
 
   const heartbeatTimer = setInterval(() => {
     try {
@@ -300,8 +307,11 @@ export async function runDaemon(projectDir: string): Promise<void> {
   const inactivityTimer = setInterval(() => {
     try {
       const parsed = readAll(cachePath);
-      const heartbeat = (parsed?._dispatch_heartbeat as Record<string, unknown>)?.value as number | undefined;
-
+      const rawHeartbeat = (parsed?._dispatch_heartbeat as Record<string, unknown>)?.value;
+      const heartbeat =
+        typeof rawHeartbeat === "number" && Number.isFinite(rawHeartbeat)
+          ? rawHeartbeat
+          : undefined;
       const referenceTime = heartbeat ?? daemonStartTime;
       const timeoutMs = config.daemon.inactivityTimeoutMinutes * 60 * 1000;
 

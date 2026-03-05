@@ -244,16 +244,22 @@ class StatusTab(Widget):
             if text:
                 rotating_parts.append(text)
 
+        other_parts = []
+        for seg in OTHER_SEGMENTS:
+            if seg not in active_set:
+                continue
+            text = self._render_segment(seg, cache)
+            if text:
+                other_parts.append(text)
+
         line1 = delimiter.join(fixed_parts) if fixed_parts else ""
         # Show first non-empty rotating segment (simulates rotation)
         line2 = rotating_parts[0] if rotating_parts else ""
+        line3 = delimiter.join(other_parts) if other_parts else ""
 
-        if line1 and line2:
-            preview_text = f"{line1}\n{line2}"
-        elif line1:
-            preview_text = line1
-        elif line2:
-            preview_text = line2
+        lines = [line for line in (line1, line2, line3) if line]
+        if lines:
+            preview_text = "\n".join(lines)
         else:
             preview_text = "[dim]No segments enabled[/dim]"
 
@@ -264,6 +270,7 @@ class StatusTab(Widget):
         # Update tier summary
         fixed_active = [s for s in FIXED_SEGMENTS if s in active_set]
         rotating_active = [s for s in ROTATING_SEGMENTS if s in active_set]
+        other_active = [s for s in OTHER_SEGMENTS if s in active_set]
 
         summary_lines = []
         if fixed_active:
@@ -273,6 +280,10 @@ class StatusTab(Widget):
         if rotating_active:
             summary_lines.append(
                 f"[bold]Line 2 (rotating):[/bold] {' \u2192 '.join(rotating_active)}"
+            )
+        if other_active:
+            summary_lines.append(
+                f"[bold]Other:[/bold] {delimiter.join(other_active)}"
             )
         if not summary_lines:
             summary_lines.append("[dim]No segments active[/dim]")

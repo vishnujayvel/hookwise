@@ -16,6 +16,7 @@ from hookwise_tui.data import (
     InsightsData,
     InsightsSummary,
     Recipe,
+    _effective_config_path,
     is_fresh,
     read_analytics,
     read_cache,
@@ -25,6 +26,7 @@ from hookwise_tui.data import (
     read_insights,
     read_insights_summary,
     read_recipes,
+    write_config,
 )
 
 
@@ -63,6 +65,63 @@ class TestReadConfig:
         config_path.write_text("- item1\n- item2\n")
         result = read_config(config_path)
         assert result == {}
+
+
+# --- write_config ---
+
+
+class TestWriteConfig:
+    def test_round_trip_consistency(self, tmp_dir):
+        config_path = tmp_dir / "hookwise.yaml"
+        original = {"version": 1, "guards": [{"match": "Bash", "action": "block"}]}
+        assert write_config(original, config_path) is True
+        result = read_config(config_path)
+        assert result == original
+
+    def test_creates_parent_directories(self, tmp_dir):
+        nested_path = tmp_dir / "a" / "b" / "hookwise.yaml"
+        assert write_config({"key": "val"}, nested_path) is True
+        assert read_config(nested_path) == {"key": "val"}
+
+    def test_overwrites_existing_config(self, tmp_dir):
+        config_path = tmp_dir / "hookwise.yaml"
+        write_config({"old": True}, config_path)
+        write_config({"new": True}, config_path)
+        assert read_config(config_path) == {"new": True}
+
+
+# --- _effective_config_path ---
+
+
+class TestEffectiveConfigPath:
+    def test_explicit_path_takes_priority(self, tmp_dir):
+        explicit = tmp_dir / "explicit.yaml"
+        result = _effective_config_path(explicit)
+        assert result == explicit
+
+    def test_local_path_when_exists(self, tmp_dir, monkeypatch):
+        local = tmp_dir / "hookwise.yaml"
+        local.write_text("version: 1\n")
+        monkeypatch.setattr("hookwise_tui.data._default_config_path", lambda: local)
+        result = _effective_config_path(None)
+        assert result == local
+
+    def test_falls_back_to_global_when_local_missing(self, tmp_dir, monkeypatch):
+        local = tmp_dir / "nonexistent" / "hookwise.yaml"
+        global_path = tmp_dir / "global" / "config.yaml"
+        global_path.parent.mkdir(parents=True)
+        global_path.write_text("version: 2\n")
+        monkeypatch.setattr("hookwise_tui.data._default_config_path", lambda: local)
+        monkeypatch.setattr("hookwise_tui.data._config_dir", lambda: tmp_dir / "global")
+        result = _effective_config_path(None)
+        assert result == global_path
+
+    def test_defaults_to_local_when_neither_exists(self, tmp_dir, monkeypatch):
+        local = tmp_dir / "nonexistent" / "hookwise.yaml"
+        monkeypatch.setattr("hookwise_tui.data._default_config_path", lambda: local)
+        monkeypatch.setattr("hookwise_tui.data._config_dir", lambda: tmp_dir / "also_nonexistent")
+        result = _effective_config_path(None)
+        assert result == local
 
 
 # --- read_cache ---

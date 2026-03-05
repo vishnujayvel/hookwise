@@ -208,8 +208,9 @@ describe("aggregateInsights", () => {
     // fresh-friction: hours 10:5, 11:20
     // Total: 10:5, 11:20, 14:6, 15:6 → UTC peak = 11
     // Converted to local time using system timezone offset
-    const offsetMinutes = new Date().getTimezoneOffset();
-    const expectedLocalPeak = ((11 - offsetMinutes / 60) + 24) % 24;
+    const offsetMinutes = new Date(NOW).getTimezoneOffset();
+    const localPeakMinutes = (11 * 60 - offsetMinutes + 24 * 60) % (24 * 60);
+    const expectedLocalPeak = Math.floor(localPeakMinutes / 60);
     expect(result!.peak_hour).toBe(expectedLocalPeak);
   });
 
