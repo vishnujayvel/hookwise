@@ -8,6 +8,7 @@ first invocation (or after intentional visual changes) to regenerate baselines.
 from __future__ import annotations
 
 import pytest
+from textual.css.query import NoMatches
 from textual.widgets import Static
 
 from hookwise_tui.app import HookwiseTUI
@@ -41,7 +42,7 @@ async def _stabilise_feeds(pilot) -> None:
     try:
         timer = pilot.app.query_one("#timer-display", Static)
         timer.update("Last refresh: 00:00:00 UTC | Next in 3s | Refresh #1")
-    except Exception:
+    except NoMatches:
         pass  # Tab not visible / widget not yet mounted — safe to skip
 
 

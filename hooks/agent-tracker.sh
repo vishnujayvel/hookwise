@@ -21,7 +21,6 @@ EVENT="${CLAUDE_CODE_HOOK_EVENT_NAME:-}"
 
 # Parse fields from stdin JSON
 agent_id=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('agent_id',''))" 2>/dev/null || echo "")
-session_id=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('session_id',''))" 2>/dev/null || echo "")
 worktree=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('cwd',''))" 2>/dev/null || echo "")
 team_name=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('team_name',''))" 2>/dev/null || echo "")
 strategy=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('strategy',''))" 2>/dev/null || echo "")
@@ -47,18 +46,21 @@ else
 fi
 
 # Use python3 for JSON manipulation (available on macOS)
-UPDATED=$(python3 -c "
-import json, sys
+# Pass variables via environment to avoid shell interpolation issues in Python
+UPDATED=$(CURRENT="$CURRENT" EVENT="$EVENT" AGENT_ID="$agent_id" NAME="$name" \
+  TEAM_NAME="$team_name" STRATEGY="$strategy" NOW="$NOW" STALE="$STALE_SECONDS" \
+  python3 -c "
+import json, os
 
-current = json.loads('''$CURRENT''')
+current = json.loads(os.environ.get('CURRENT', '{}'))
 agents = current.get('agents', [])
-event = '$EVENT'
-agent_id = '$agent_id'
-name = '$name'
-now = $NOW
-stale = $STALE_SECONDS
-team_name = '$team_name' or current.get('team_name', '')
-strategy = '$strategy' or current.get('strategy', '')
+event = os.environ.get('EVENT', '')
+agent_id = os.environ.get('AGENT_ID', '')
+name = os.environ.get('NAME', '')
+now = int(os.environ.get('NOW', '0'))
+stale = int(os.environ.get('STALE', '600'))
+team_name = os.environ.get('TEAM_NAME', '') or current.get('team_name', '')
+strategy = os.environ.get('STRATEGY', '') or current.get('strategy', '')
 
 # Clean stale entries (older than 10 minutes)
 agents = [a for a in agents if (now - a.get('started_at', now)) < stale]

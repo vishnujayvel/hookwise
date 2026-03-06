@@ -5,9 +5,6 @@
  * Returns empty string when data is unavailable.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import type { SegmentConfig, CacheEntry } from "../types.js";
 import { isFresh } from "../feeds/cache-bus.js";
 import { color, GREEN, YELLOW, RED, DIM } from "./ansi.js";
@@ -477,21 +474,9 @@ interface ActiveAgentsData {
   updated_at?: number;
 }
 
-const AGENTS_CACHE_PATH = join(homedir(), ".hookwise", "cache", "active-agents.json");
-
 const agents: SegmentRenderer = (cache) => {
-  // Read from cache.agents (merged by CLI command) or directly from file
-  let data: ActiveAgentsData | undefined = cache.agents as ActiveAgentsData | undefined;
-
-  if (!data) {
-    try {
-      if (!existsSync(AGENTS_CACHE_PATH)) return "";
-      const raw = readFileSync(AGENTS_CACHE_PATH, "utf-8");
-      data = JSON.parse(raw) as ActiveAgentsData;
-    } catch {
-      return "";
-    }
-  }
+  // Read from cache.agents only — merged by CLI command or agent-tracker hook
+  const data = cache.agents as ActiveAgentsData | undefined;
 
   if (!data?.agents?.length) return "";
 

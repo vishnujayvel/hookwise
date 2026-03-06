@@ -10,12 +10,11 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { safeReadJSON, atomicWriteJSON } from "../../core/state.js";
-import { DEFAULT_CACHE_PATH } from "../../core/constants.js";
+import { DEFAULT_CACHE_PATH, DEFAULT_STATE_DIR } from "../../core/constants.js";
 import { renderTwoTier, DEFAULT_TWO_TIER_CONFIG } from "../../core/status-line/two-tier.js";
 
-const ACTIVE_AGENTS_PATH = join(homedir(), ".hookwise", "cache", "active-agents.json");
+const ACTIVE_AGENTS_PATH = join(DEFAULT_STATE_DIR, "cache", "active-agents.json");
 
 /**
  * Stdin data shape from Claude Code's status line protocol.
