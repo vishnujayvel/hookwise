@@ -283,12 +283,49 @@ class StatusTab(Widget):
         except Exception:
             pass
 
+    # Friction category → actionable tip (mirrors TS FRICTION_TIPS)
+    _FRICTION_TIPS = {
+        "wrong_approach": "break tasks into steps",
+        "misunderstood_request": "be more specific",
+        "stale_context": "try a fresh session",
+        "tool_error": "check tool setup",
+        "scope_creep": "define done upfront",
+        "repeated_errors": "read error output first",
+    }
+
+    @staticmethod
+    def _top_friction_tip(friction_counts: dict) -> str:
+        """Find the top friction category and return its tip."""
+        if not isinstance(friction_counts, dict):
+            return ""
+        top_cat = ""
+        top_count = 0
+        for cat, count in friction_counts.items():
+            if isinstance(count, (int, float)) and count > top_count:
+                top_cat = cat
+                top_count = count
+        if not top_cat:
+            return ""
+        human_name = top_cat.replace("_", " ")
+        tip = StatusTab._FRICTION_TIPS.get(top_cat)
+        return f"{human_name} \u2192 {tip}" if tip else human_name
+
     @staticmethod
     def _render_segment(seg: str, cache: dict) -> str:
         """Render a segment from cache data with real rendering logic."""
         # Segments that need live stdin data — use placeholders
         if seg in STDIN_PLACEHOLDERS:
             return STDIN_PLACEHOLDERS[seg]
+
+        # -- mode_badge reads from builder_trap cache entry (not its own key) --
+        if seg == "mode_badge":
+            bt = cache.get("builder_trap")
+            if not isinstance(bt, dict):
+                return ""
+            mode = bt.get("current_mode", "")
+            if not mode or mode == "neutral":
+                return ""
+            return f"[{mode}]"
 
         # -- insights segments read from the shared "insights" cache entry --
         insights = cache.get("insights")
@@ -299,7 +336,11 @@ class StatusTab(Widget):
                 if isinstance(rs, dict):
                     recent_friction = rs.get("friction_count", 0) or 0
                 total_friction = insights.get("friction_total", 0) or 0
+                friction_counts = insights.get("friction_counts", {})
                 if recent_friction > 0:
+                    tip = StatusTab._top_friction_tip(friction_counts)
+                    if tip:
+                        return f"\u26a0\ufe0f {recent_friction} friction this session \u00b7 {tip}"
                     return f"\u26a0\ufe0f {recent_friction} friction this session"
                 window = insights.get("staleness_days", 30)
                 if total_friction > 0:
@@ -375,21 +416,41 @@ class StatusTab(Widget):
 
         if seg == "calendar":
             events = entry.get("events", [])
+            if not isinstance(events, list):
+                events = []
             next_event = entry.get("next_event")
             current = next((e for e in events if isinstance(e, dict) and e.get("is_current")), None)
             if current:
-                return f"\U0001f4c5 {current.get('title', '?')}"
-            if isinstance(next_event, dict) and next_event.get("title"):
-                start_ms = 0
+                ends_in = ""
                 try:
-                    start_ms = int(datetime.fromisoformat(next_event["start"].replace("Z", "+00:00")).timestamp() * 1000)
+                    end_ms = int(datetime.fromisoformat(current["end"].replace("Z", "+00:00")).timestamp() * 1000)
+                    now_ms = int(time.time() * 1000)
+                    ends_in_min = round((end_ms - now_ms) / 60000)
+                    ends_in = f" (ends in {ends_in_min}min)"
                 except (ValueError, KeyError):
                     pass
-                diff_min = max(0, (start_ms - int(time.time() * 1000)) // 60000)
-                if diff_min <= 60:
-                    return f"\U0001f4c5 {next_event['title']} in {diff_min}min"
-                return f"\U0001f4c5 Free for {diff_min // 60}h"
-            return "\U0001f4c5 Free"
+                suffix = f" (+{len(events) - 1} more)" if len(events) > 1 else ""
+                return f"\U0001f4c5 {current.get('title', '?')}{ends_in}{suffix}"
+            if not isinstance(next_event, dict) or not next_event.get("title"):
+                return "\U0001f4c5 Free"
+            try:
+                start_ms = int(datetime.fromisoformat(next_event["start"].replace("Z", "+00:00")).timestamp() * 1000)
+            except (ValueError, KeyError):
+                return f"\U0001f4c5 {next_event['title']}"
+            now_ms = int(time.time() * 1000)
+            diff_min = round((start_ms - now_ms) / 60000)
+            other_count = len(events) - 1 if len(events) > 1 else 0
+            more_suffix = f" (+{other_count} more)" if other_count > 0 else ""
+            if diff_min < 5:
+                text = f"\U0001f4c5 {next_event['title']} NOW"
+            elif diff_min < 15:
+                text = f"\U0001f4c5 {next_event['title']} in {diff_min}min \u26a1"
+            elif diff_min <= 60:
+                text = f"\U0001f4c5 {next_event['title']} in {diff_min}min"
+            else:
+                hours = round(diff_min / 60)
+                text = f"\U0001f4c5 Free for {hours}h"
+            return f"{text}{more_suffix}"
 
         if seg == "news":
             story = entry.get("current_story")
@@ -399,7 +460,7 @@ class StatusTab(Widget):
             if len(title) > 45:
                 title = title[:45] + "\u2026"
             score = story.get("score", 0)
-            if score:
+            if isinstance(score, (int, float)) and score != 0:
                 return f"\U0001f4f0 {title} ({score}pts)"
             return f"\U0001f4f0 {title}"
 
@@ -415,6 +476,8 @@ class StatusTab(Widget):
             return text
 
         if seg == "memories":
+            if not entry.get("hasMemories"):
+                return ""
             mems = entry.get("memories", [])
             if not mems:
                 return ""
@@ -437,12 +500,6 @@ class StatusTab(Widget):
                 return ""
             mins = round(entry.get("toolingMinutes", 0))
             return f"\u26a0\ufe0f {mins}m tooling"
-
-        if seg == "mode_badge":
-            mode = entry.get("current_mode", "")
-            if not mode or mode == "neutral":
-                return ""
-            return f"[{mode}]"
 
         if seg == "clock":
             return datetime.now().strftime("%I:%M %p").lstrip("0")
