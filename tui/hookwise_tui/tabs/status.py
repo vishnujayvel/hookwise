@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +17,8 @@ from hookwise_tui.data import read_cache, read_config, write_config
 
 
 # Path where the TS status-line command persists its ANSI-stripped output
-_LAST_STATUS_OUTPUT_PATH = Path.home() / ".hookwise" / "cache" / "last-status-output.txt"
+_STATE_DIR = Path(os.environ.get("HOOKWISE_STATE_DIR", str(Path.home() / ".hookwise")))
+_LAST_STATUS_OUTPUT_PATH = _STATE_DIR / "cache" / "last-status-output.txt"
 
 # Maximum age (seconds) before the live output file is considered stale
 _LIVE_OUTPUT_MAX_AGE = 60
