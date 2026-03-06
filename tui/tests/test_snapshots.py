@@ -7,6 +7,9 @@ first invocation (or after intentional visual changes) to regenerate baselines.
 
 from __future__ import annotations
 
+import os
+import time
+
 import pytest
 from textual.css.query import NoMatches
 from textual.widgets import Static
@@ -46,10 +49,26 @@ async def _stabilise_feeds(pilot) -> None:
         pass  # Tab not visible / widget not yet mounted — safe to skip
 
 
+async def _stabilise_insights(pilot) -> None:
+    """Pin TZ to UTC before rendering the Insights tab.
+
+    The ``peak_hour`` metric is computed from UTC hours offset by the local
+    timezone, so different contributor machines produce different snapshots.
+    Pinning ``TZ=UTC`` ensures the golden file is reproducible everywhere.
+    """
+    os.environ["TZ"] = "UTC"
+    time.tzset()
+
+
 @pytest.mark.parametrize("tab_id, keys", TAB_SPECS, ids=[t[0] for t in TAB_SPECS])
 def test_tab_snapshot(snap_compare, tab_id, keys):
     """Each TUI tab renders correctly at 80x24."""
-    run_before = _stabilise_feeds if tab_id == "feeds" else None
+    if tab_id == "feeds":
+        run_before = _stabilise_feeds
+    elif tab_id == "insights":
+        run_before = _stabilise_insights
+    else:
+        run_before = None
     assert snap_compare(
         HookwiseTUI(),
         press=keys,

@@ -6,7 +6,7 @@
  * - Delimiter applied
  * - Missing cache uses fallbacks
  * - Unknown segment name skipped
- * - 8 built-in segments with populated cache data
+ * - 7 built-in segments with populated cache data
  * - Each segment with missing/empty cache (fallback)
  * - Edge cases (zero values)
  * - Custom segment: command output, timeout, command failure

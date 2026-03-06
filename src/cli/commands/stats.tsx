@@ -76,12 +76,15 @@ function loadStats(
   options: StatsCommandProps["options"] = {}
 ): StatsData {
   if (!existsSync(dbPath)) {
+    const usingDefaultDb = dbPath === DEFAULT_DB_PATH;
     return {
       stats: null,
       agents: null,
       costState: null,
       streaks: null,
-      error: `No analytics database found. Analytics is enabled by default — use Claude Code to generate data. If disabled, run "hookwise init --preset analytics" to re-enable.`,
+      error: usingDefaultDb
+        ? `No analytics database found at ${dbPath}. Analytics is enabled by default — use Claude Code to generate data. If you disabled it, re-enable analytics in config or run "hookwise init --preset analytics".`
+        : `No analytics database found at ${dbPath}. Check the provided --db-path and point this command at an existing analytics database.`,
     };
   }
 

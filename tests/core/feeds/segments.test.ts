@@ -519,12 +519,12 @@ describe("BUILTIN_SEGMENTS registry", () => {
       "context_bar", "mode_badge", "duration",
       "pulse", "project", "calendar", "news",
       "insights_friction", "insights_pace", "insights_trend",
-      "weather", "memories",
+      "weather", "memories", "daemon_health", "agents",
     ];
     for (const name of expected) {
       expect(BUILTIN_SEGMENTS[name]).toBeDefined();
       expect(typeof BUILTIN_SEGMENTS[name]).toBe("function");
     }
-    expect(Object.keys(BUILTIN_SEGMENTS)).toHaveLength(20);
+    expect(Object.keys(BUILTIN_SEGMENTS)).toHaveLength(21);
   });
 });
