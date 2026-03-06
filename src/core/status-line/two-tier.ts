@@ -11,12 +11,15 @@ import { BUILTIN_SEGMENTS } from "./segments.js";
 import { color, GREEN, YELLOW, RED, DIM, CYAN } from "./ansi.js";
 
 /**
- * Configuration for the two-tier renderer.
+ * Configuration for the multi-tier renderer.
+ *
+ * Supports N fixed lines, collapsible middle segments, and a rotating last line.
+ * Default layout produces a minimum of 5 visible lines.
  */
 export interface TwoTierConfig {
-  /** Segment names for line 1 (always shown). */
-  fixedSegments: string[];
-  /** Segment names for line 2 (rotating). */
+  /** Array of fixed lines — each inner array is segment names for one line. */
+  fixedLines: string[][];
+  /** Segment names for the last line (rotating). */
   rotatingSegments: string[];
   /** Segment names for middle section (multi-line, between fixed and rotating). */
   middleSegments?: string[];
@@ -26,10 +29,15 @@ export interface TwoTierConfig {
   delimiter: string;
 }
 
-/** Default configuration. */
+/** Default 5-line configuration. */
 export const DEFAULT_TWO_TIER_CONFIG: TwoTierConfig = {
-  fixedSegments: ["context_bar", "mode_badge", "cost", "duration", "daemon_health"],
-  rotatingSegments: ["insights_friction", "insights_pace", "insights_trend", "news", "calendar", "mantra", "project", "pulse"],
+  fixedLines: [
+    ["context_bar", "mode_badge", "cost", "duration", "daemon_health"],
+    ["project", "calendar", "weather"],
+    ["insights_friction", "insights_pace"],
+    ["insights_trend"],
+  ],
+  rotatingSegments: ["news", "mantra", "memories", "pulse", "streak", "builder_trap", "clock"],
   middleSegments: ["agents"],
   showSeparator: true,
   delimiter: " | ",
@@ -100,22 +108,28 @@ export function renderTwoTier(
   cache: Record<string, unknown>,
 ): string {
   try {
-    // Line 1: fixed segments
-    const line1Parts: string[] = [];
-    for (const name of config.fixedSegments) {
-      const renderer = BUILTIN_SEGMENTS[name];
-      if (!renderer) continue;
-      try {
-        const raw = renderer(cache, {});
-        if (raw) {
-          line1Parts.push(colorizeSegment(name, raw, cache));
+    // Fixed lines: render each fixedLines entry as one output line
+    const fixedOutputLines: string[] = [];
+    for (const lineSegments of config.fixedLines) {
+      const parts: string[] = [];
+      for (const name of lineSegments) {
+        const renderer = BUILTIN_SEGMENTS[name];
+        if (!renderer) continue;
+        try {
+          const raw = renderer(cache, {});
+          if (raw) {
+            parts.push(colorizeSegment(name, raw, cache));
+          }
+        } catch {
+          // Skip failing segment — don't blank the entire line
         }
-      } catch {
-        // Skip failing segment — don't blank the entire line
+      }
+      if (parts.length > 0) {
+        fixedOutputLines.push(parts.join(config.delimiter));
       }
     }
 
-    // Line 2: rotating segment — pick the next non-empty one
+    // Rotating line: pick the next non-empty one
     const rotatingNames = config.rotatingSegments;
     const rotationIndex = (cache._rotation_index as number) ?? 0;
     let line2 = "";
@@ -159,14 +173,13 @@ export function renderTwoTier(
       }
     }
 
-    const line1 = line1Parts.join(config.delimiter);
     const hasMiddle = middleLines.length > 0;
     const showSep = config.showSeparator ?? true;
 
-    if (!line1 && !hasMiddle && !line2) return "";
+    if (fixedOutputLines.length === 0 && !hasMiddle && !line2) return "";
 
     const outputLines: string[] = [];
-    if (line1) outputLines.push(line1);
+    outputLines.push(...fixedOutputLines);
 
     if (hasMiddle) {
       if (showSep && outputLines.length > 0) {

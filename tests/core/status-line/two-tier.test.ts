@@ -1,5 +1,5 @@
 /**
- * Tests for the two-tier status line renderer.
+ * Tests for the multi-tier status line renderer.
  */
 
 import { describe, it, expect } from "vitest";
@@ -11,7 +11,7 @@ function makeConfig(overrides: Partial<TwoTierConfig> = {}): TwoTierConfig {
   return { ...DEFAULT_TWO_TIER_CONFIG, ...overrides };
 }
 
-describe("renderTwoTier - line 1 (fixed)", () => {
+describe("renderTwoTier - fixed lines", () => {
   it("renders context_bar and cost on line 1", () => {
     const cache = {
       _stdin: {
@@ -32,21 +32,65 @@ describe("renderTwoTier - line 1 (fixed)", () => {
     expect(line1).toContain("45m");
   });
 
-  it("skips empty fixed segments", () => {
+  it("skips empty fixed segments within a line", () => {
     const cache = {
       _stdin: { context_window: { used_percentage: 30 } },
       // No builder_trap, no cost, no duration
     };
-    const config = makeConfig();
+    const config = makeConfig({
+      fixedLines: [["context_bar", "mode_badge", "cost"]],
+      rotatingSegments: [],
+    });
     const result = renderTwoTier(config, cache);
     const stripped = strip(result);
-    // Should only have context_bar
     expect(stripped).toContain("30%");
     expect(stripped).not.toContain("[");
     expect(stripped).not.toContain("$");
   });
 
-  it("uses configured delimiter between fixed segments", () => {
+  it("skips entirely empty fixed lines", () => {
+    const cache = {
+      _stdin: { context_window: { used_percentage: 30 } },
+    };
+    const config = makeConfig({
+      fixedLines: [
+        ["context_bar"],
+        ["mode_badge", "cost"], // all empty — should be skipped
+      ],
+      rotatingSegments: [],
+    });
+    const result = renderTwoTier(config, cache);
+    const lines = result.split("\n");
+    expect(lines.length).toBe(1);
+    const stripped = strip(result);
+    expect(stripped).toContain("30%");
+  });
+
+  it("renders multiple fixed lines", () => {
+    const cache = {
+      _stdin: {
+        context_window: { used_percentage: 50 },
+        cost: { total_cost_usd: 2.00, total_duration_ms: 600_000 },
+      },
+      cost: { sessionCostUsd: 2.00 },
+      mantra: { text: "Ship it" },
+    };
+    const config = makeConfig({
+      fixedLines: [
+        ["context_bar", "cost"],
+        ["mantra"],
+      ],
+      rotatingSegments: [],
+    });
+    const result = renderTwoTier(config, cache);
+    const lines = result.split("\n");
+    expect(lines.length).toBe(2);
+    expect(strip(lines[0])).toContain("50%");
+    expect(strip(lines[0])).toContain("$2.00");
+    expect(strip(lines[1])).toContain("Ship it");
+  });
+
+  it("uses configured delimiter between segments on a line", () => {
     const cache = {
       _stdin: {
         context_window: { used_percentage: 50 },
@@ -54,22 +98,26 @@ describe("renderTwoTier - line 1 (fixed)", () => {
       },
       builder_trap: { current_mode: "practice" },
     };
-    const config = makeConfig({ delimiter: " :: " });
+    const config = makeConfig({
+      fixedLines: [["context_bar", "mode_badge"]],
+      delimiter: " :: ",
+      rotatingSegments: [],
+    });
     const result = renderTwoTier(config, cache);
     const stripped = strip(result.split("\n")[0]);
     expect(stripped).toContain(" :: ");
   });
 });
 
-describe("renderTwoTier - line 2 (rotating)", () => {
+describe("renderTwoTier - rotating line", () => {
   it("picks the first non-empty rotating segment", () => {
     const cache = {
       _stdin: { context_window: { used_percentage: 30 } },
       mantra: { text: "Stay focused" },
       _rotation_index: 0,
     };
-    // Configure rotation to start with mantra
     const config = makeConfig({
+      fixedLines: [["context_bar"]],
       rotatingSegments: ["mantra"],
     });
     const result = renderTwoTier(config, cache);
@@ -80,11 +128,11 @@ describe("renderTwoTier - line 2 (rotating)", () => {
   it("skips empty rotating segments and finds next", () => {
     const cache = {
       _stdin: { context_window: { used_percentage: 30 } },
-      // news is empty (no data), but mantra has data
       mantra: { text: "Ship it" },
       _rotation_index: 0,
     };
     const config = makeConfig({
+      fixedLines: [["context_bar"]],
       rotatingSegments: ["news", "mantra"],
     });
     const result = renderTwoTier(config, cache);
@@ -96,9 +144,10 @@ describe("renderTwoTier - line 2 (rotating)", () => {
     const cache = {
       _stdin: { context_window: { used_percentage: 30 } },
       mantra: { text: "Focus" },
-      _rotation_index: 100, // Way past array bounds, should wrap
+      _rotation_index: 100,
     };
     const config = makeConfig({
+      fixedLines: [["context_bar"]],
       rotatingSegments: ["mantra"],
     });
     const result = renderTwoTier(config, cache);
@@ -106,16 +155,16 @@ describe("renderTwoTier - line 2 (rotating)", () => {
     expect(stripped).toContain("Focus");
   });
 
-  it("renders single line when all rotating segments empty", () => {
+  it("renders without rotating line when all rotating segments empty", () => {
     const cache = {
       _stdin: { context_window: { used_percentage: 50 } },
       _rotation_index: 0,
     };
     const config = makeConfig({
+      fixedLines: [["context_bar"]],
       rotatingSegments: ["news", "calendar"],
     });
     const result = renderTwoTier(config, cache);
-    // Should have no newline (single line)
     expect(result).not.toContain("\n");
     const stripped = strip(result);
     expect(stripped).toContain("50%");
@@ -126,7 +175,7 @@ describe("renderTwoTier - edge cases", () => {
   it("returns empty string when no segments produce output", () => {
     const cache = {};
     const config = makeConfig({
-      fixedSegments: [],
+      fixedLines: [],
       rotatingSegments: [],
     });
     const result = renderTwoTier(config, cache);
@@ -134,18 +183,23 @@ describe("renderTwoTier - edge cases", () => {
   });
 
   it("handles empty cache gracefully", () => {
-    const config = makeConfig();
+    // Default config includes weather (renders fallback) and clock (always renders),
+    // so use a config with no always-on segments to test the empty path
+    const config = makeConfig({
+      fixedLines: [["context_bar", "mode_badge"]],
+      rotatingSegments: ["news"],
+    });
     const result = renderTwoTier(config, {});
     expect(result).toBe("");
   });
 
-  it("returns only line 2 when all fixed segments are empty", () => {
+  it("returns only rotating line when all fixed lines are empty", () => {
     const cache = {
       mantra: { text: "Hello" },
       _rotation_index: 0,
     };
     const config = makeConfig({
-      fixedSegments: [],
+      fixedLines: [],
       rotatingSegments: ["mantra"],
     });
     const result = renderTwoTier(config, cache);
@@ -159,7 +213,7 @@ describe("renderTwoTier - edge cases", () => {
       _stdin: { context_window: { used_percentage: 30 } },
     };
     const config = makeConfig({
-      fixedSegments: ["nonexistent", "context_bar"],
+      fixedLines: [["nonexistent", "context_bar"]],
       rotatingSegments: ["also_nonexistent"],
     });
     const result = renderTwoTier(config, cache);
@@ -173,9 +227,8 @@ describe("renderTwoTier - ANSI coloring", () => {
     const cache = {
       _stdin: { context_window: { used_percentage: 30 } },
     };
-    const config = makeConfig({ fixedSegments: ["context_bar"], rotatingSegments: [] });
+    const config = makeConfig({ fixedLines: [["context_bar"]], rotatingSegments: [] });
     const result = renderTwoTier(config, cache);
-    // Should contain green ANSI code
     expect(result).toContain("\x1b[32m");
   });
 
@@ -183,7 +236,7 @@ describe("renderTwoTier - ANSI coloring", () => {
     const cache = {
       _stdin: { context_window: { used_percentage: 60 } },
     };
-    const config = makeConfig({ fixedSegments: ["context_bar"], rotatingSegments: [] });
+    const config = makeConfig({ fixedLines: [["context_bar"]], rotatingSegments: [] });
     const result = renderTwoTier(config, cache);
     expect(result).toContain("\x1b[33m");
   });
@@ -192,16 +245,15 @@ describe("renderTwoTier - ANSI coloring", () => {
     const cache = {
       _stdin: { context_window: { used_percentage: 80 } },
     };
-    const config = makeConfig({ fixedSegments: ["context_bar"], rotatingSegments: [] });
+    const config = makeConfig({ fixedLines: [["context_bar"]], rotatingSegments: [] });
     const result = renderTwoTier(config, cache);
     expect(result).toContain("\x1b[31m");
   });
 
   it("colors mode_badge by mode type", () => {
     const cache = { builder_trap: { current_mode: "practice" } };
-    const config = makeConfig({ fixedSegments: ["mode_badge"], rotatingSegments: [] });
+    const config = makeConfig({ fixedLines: [["mode_badge"]], rotatingSegments: [] });
     const result = renderTwoTier(config, cache);
-    // Practice mode should be green
     expect(result).toContain("\x1b[32m");
   });
 });
@@ -222,6 +274,7 @@ describe("renderTwoTier - middle segments (N-tier)", () => {
       _rotation_index: 0,
     };
     const config = makeConfig({
+      fixedLines: [["context_bar"]],
       middleSegments: ["agents"],
       showSeparator: true,
       rotatingSegments: ["mantra"],
@@ -229,7 +282,6 @@ describe("renderTwoTier - middle segments (N-tier)", () => {
     const result = renderTwoTier(config, cache);
     const lines = result.split("\n");
 
-    // Should have: line1, separator, team header, agent line, rotating line = 5 lines
     expect(lines.length).toBeGreaterThanOrEqual(4);
 
     const stripped = strip(result);
@@ -251,6 +303,7 @@ describe("renderTwoTier - middle segments (N-tier)", () => {
       },
     };
     const config = makeConfig({
+      fixedLines: [["context_bar"]],
       middleSegments: ["agents"],
       showSeparator: true,
       rotatingSegments: [],
@@ -273,6 +326,7 @@ describe("renderTwoTier - middle segments (N-tier)", () => {
       },
     };
     const config = makeConfig({
+      fixedLines: [["context_bar"]],
       middleSegments: ["agents"],
       showSeparator: false,
       rotatingSegments: [],
@@ -282,13 +336,14 @@ describe("renderTwoTier - middle segments (N-tier)", () => {
     expect(stripped).not.toContain("---");
   });
 
-  it("collapses to 2-line output when all middle segments are empty", () => {
+  it("collapses middle when all middle segments are empty", () => {
     const cache = {
       _stdin: { context_window: { used_percentage: 30 } },
       mantra: { text: "Ship it" },
       _rotation_index: 0,
     };
     const config = makeConfig({
+      fixedLines: [["context_bar"]],
       middleSegments: ["agents"],
       showSeparator: true,
       rotatingSegments: ["mantra"],
@@ -311,6 +366,7 @@ describe("renderTwoTier - middle segments (N-tier)", () => {
       _rotation_index: 0,
     };
     const config = makeConfig({
+      fixedLines: [["context_bar"]],
       middleSegments: [],
       showSeparator: true,
       rotatingSegments: ["mantra"],
@@ -322,16 +378,18 @@ describe("renderTwoTier - middle segments (N-tier)", () => {
 });
 
 describe("DEFAULT_TWO_TIER_CONFIG", () => {
-  it("has expected fixed segments", () => {
-    expect(DEFAULT_TWO_TIER_CONFIG.fixedSegments).toEqual([
-      "context_bar", "mode_badge", "cost", "duration", "daemon_health",
+  it("has 4 fixed lines for 5-line minimum layout", () => {
+    expect(DEFAULT_TWO_TIER_CONFIG.fixedLines).toEqual([
+      ["context_bar", "mode_badge", "cost", "duration", "daemon_health"],
+      ["project", "calendar", "weather"],
+      ["insights_friction", "insights_pace"],
+      ["insights_trend"],
     ]);
   });
 
   it("has expected rotating segments", () => {
     expect(DEFAULT_TWO_TIER_CONFIG.rotatingSegments).toEqual([
-      "insights_friction", "insights_pace", "insights_trend",
-      "news", "calendar", "mantra", "project", "pulse",
+      "news", "mantra", "memories", "pulse", "streak", "builder_trap", "clock",
     ]);
   });
 

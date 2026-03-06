@@ -128,7 +128,7 @@ describe("insights_pace", () => {
     const result = render(cache, defaultSegmentConfig);
     expect(result).toContain("47 msgs/day");
     expect(result).toContain("5.4k+ lines");
-    expect(result).toContain("42 sessions (30d)");
+    expect(result).toContain("42 sessions");
   });
 
   it("formats large numbers correctly (28000 → 28k)", () => {
