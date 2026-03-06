@@ -1,0 +1,16 @@
+{
+  "name": "PreToolUse with empty guards produces no stdout",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": []
+  },
+  "stdin": {
+    "session_id": "contract-session-016",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo hello"
+    }
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

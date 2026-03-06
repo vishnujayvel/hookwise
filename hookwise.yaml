@@ -27,5 +27,5 @@ status_line:
     - calendar
 
 tui:
-  auto_launch: true
+  auto_launch: false
   launch_method: "newWindow"

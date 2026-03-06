@@ -1,0 +1,14 @@
+{
+  "name": "SubagentStart event produces no stdout",
+  "event_type": "SubagentStart",
+  "config": {
+    "guards": []
+  },
+  "stdin": {
+    "session_id": "contract-session-026",
+    "tool_name": "",
+    "tool_input": {}
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

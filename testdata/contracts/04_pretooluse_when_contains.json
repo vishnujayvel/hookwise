@@ -1,0 +1,23 @@
+{
+  "name": "PreToolUse block with when condition using contains operator",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Force push is forbidden",
+        "when": "tool_input.command contains \"force\""
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-004",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "git push --force origin main"
+    }
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Force push is forbidden\"}}",
+  "expected_exit_code": 0
+}

@@ -1,0 +1,20 @@
+{
+  "name": "UserPromptSubmit event produces no stdout (no handlers)",
+  "event_type": "UserPromptSubmit",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Should not apply to non-PreToolUse"
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-020",
+    "tool_name": "",
+    "tool_input": {}
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}
