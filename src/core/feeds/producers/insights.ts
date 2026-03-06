@@ -26,6 +26,10 @@ export interface InsightsData {
   friction_total: number;
   peak_hour: number;
   days_active: number;
+  staleness_days: number;
+  recent_msgs_per_day: number;
+  recent_messages: number;
+  recent_days_active: number;
   recent_session: {
     id: string;
     duration_minutes: number;
@@ -140,16 +144,19 @@ export function aggregateInsights(
       }
     }
 
-    // Days active — unique dates
+    // Days active — unique dates (converted to local timezone)
     const startTime = session.start_time as string | undefined;
     if (startTime) {
-      const dateStr = startTime.slice(0, 10); // YYYY-MM-DD
-      if (dateStr.length === 10) activeDates.add(dateStr);
-
       const ts = Date.parse(startTime);
-      if (!Number.isNaN(ts) && ts > recentStartTime) {
-        recentStartTime = ts;
-        recentSession = session;
+      if (!Number.isNaN(ts)) {
+        const localDate = new Date(ts - new Date(ts).getTimezoneOffset() * 60000);
+        const dateStr = localDate.toISOString().slice(0, 10);
+        if (dateStr.length === 10) activeDates.add(dateStr);
+
+        if (ts > recentStartTime) {
+          recentStartTime = ts;
+          recentSession = session;
+        }
       }
     }
   }
@@ -208,6 +215,28 @@ export function aggregateInsights(
 
   const frictionTotal = Object.values(frictionCounts).reduce((sum, v) => sum + v, 0);
 
+  // Compute recent (last 7 days) metrics for trend detection
+  const recentCutoffMs = now - 7 * 24 * 60 * 60 * 1000;
+  let recentMessages = 0;
+  const recentActiveDates = new Set<string>();
+
+  for (const s of validSessions) {
+    const st = s.start_time as string | undefined;
+    if (!st) continue;
+    const sTs = Date.parse(st);
+    if (Number.isNaN(sTs) || sTs < recentCutoffMs) continue;
+
+    recentMessages += (s.user_message_count as number | undefined) ?? 0;
+    const localDate = new Date(sTs - new Date(sTs).getTimezoneOffset() * 60000);
+    const dStr = localDate.toISOString().slice(0, 10);
+    if (dStr.length === 10) recentActiveDates.add(dStr);
+  }
+
+  const recentDaysActive = recentActiveDates.size;
+  const recentMsgsPerDay = recentDaysActive > 0
+    ? Math.round(recentMessages / recentDaysActive)
+    : 0;
+
   const result: InsightsData = {
     total_sessions: validSessions.length,
     total_messages: totalMessages,
@@ -218,6 +247,10 @@ export function aggregateInsights(
     friction_total: frictionTotal,
     peak_hour: peakHour,
     days_active: activeDates.size,
+    staleness_days: stalenessDays,
+    recent_msgs_per_day: recentMsgsPerDay,
+    recent_messages: recentMessages,
+    recent_days_active: recentDaysActive,
     recent_session: {
       id: (recentSession?.session_id as string | undefined) ?? "",
       duration_minutes: (recentSession?.duration_minutes as number | undefined) ?? 0,
