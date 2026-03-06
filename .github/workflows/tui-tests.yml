@@ -34,7 +34,7 @@ jobs:
 
       - name: Run TUI tests
         working-directory: tui
-        run: uv run --no-project pytest tests/ -v
+        run: python -m pytest tests/ -v
 
       - name: Upload snapshot diffs on failure
         if: failure()
