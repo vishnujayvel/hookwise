@@ -1,0 +1,45 @@
+name: TUI Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tui/**"
+      - ".github/workflows/tui-tests.yml"
+  pull_request:
+    paths:
+      - "tui/**"
+      - ".github/workflows/tui-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        working-directory: tui
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Run TUI tests
+        working-directory: tui
+        run: uv run --no-project pytest tests/ -v
+
+      - name: Upload snapshot diffs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-diffs-py${{ matrix.python-version }}
+          path: tui/tests/**/snapshot_tests_output/
+          retention-days: 7
