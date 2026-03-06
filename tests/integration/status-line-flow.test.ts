@@ -145,7 +145,7 @@ describe("status-line-flow: two-tier rendering", () => {
     };
 
     const twoTierConfig: TwoTierConfig = {
-      fixedSegments: ["context_bar", "cost"],
+      fixedLines: [["context_bar", "cost"]],
       rotatingSegments: ["pulse"],
       delimiter: " | ",
     };
@@ -218,7 +218,7 @@ describe("status-line-flow: segment fault isolation", () => {
     const twoTierConfig: TwoTierConfig = {
       // context_bar will return "" because _stdin is missing
       // mode_badge will return "" because builder_trap is missing
-      fixedSegments: ["context_bar", "mode_badge", "cost"],
+      fixedLines: [["context_bar", "mode_badge", "cost"]],
       rotatingSegments: ["pulse"],
       delimiter: " | ",
     };

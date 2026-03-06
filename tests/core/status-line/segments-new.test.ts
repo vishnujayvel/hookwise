@@ -145,6 +145,122 @@ describe("BUILTIN_SEGMENTS registry", () => {
   });
 });
 
+// --- Insights segment regression tests ---
+
+describe("insights_pace trend arrow (RC-2)", () => {
+  const freshEntry = {
+    updated_at: new Date().toISOString(),
+    ttl_seconds: 9999,
+  };
+
+  it("shows up arrow when recent pace exceeds average by >20%", () => {
+    const cache = {
+      insights: {
+        ...freshEntry,
+        total_messages: 100,
+        days_active: 10,
+        total_lines_added: 500,
+        total_sessions: 5,
+        recent_msgs_per_day: 15, // 15 > 10 * 1.2 = 12
+      },
+    };
+    const result = BUILTIN_SEGMENTS.insights_pace(cache, {});
+    expect(result).toContain("\u2191"); // ↑
+    expect(result).toContain("10 msgs/day");
+  });
+
+  it("shows down arrow when recent pace is below average by >20%", () => {
+    const cache = {
+      insights: {
+        ...freshEntry,
+        total_messages: 100,
+        days_active: 10,
+        total_lines_added: 500,
+        total_sessions: 5,
+        recent_msgs_per_day: 5, // 5 < 10 * 0.8 = 8
+      },
+    };
+    const result = BUILTIN_SEGMENTS.insights_pace(cache, {});
+    expect(result).toContain("\u2193"); // ↓
+  });
+
+  it("shows stable arrow when recent pace is within 20% of average", () => {
+    const cache = {
+      insights: {
+        ...freshEntry,
+        total_messages: 100,
+        days_active: 10,
+        total_lines_added: 500,
+        total_sessions: 5,
+        recent_msgs_per_day: 10, // exactly equal
+      },
+    };
+    const result = BUILTIN_SEGMENTS.insights_pace(cache, {});
+    expect(result).toContain("\u2192"); // →
+  });
+
+  it("does not include hardcoded (30d) in output", () => {
+    const cache = {
+      insights: {
+        ...freshEntry,
+        total_messages: 100,
+        days_active: 10,
+        total_lines_added: 500,
+        total_sessions: 5,
+        recent_msgs_per_day: 10,
+      },
+    };
+    const result = BUILTIN_SEGMENTS.insights_pace(cache, {});
+    expect(result).not.toContain("(30d)");
+  });
+});
+
+describe("insights_friction staleness_days (RC-4)", () => {
+  const freshEntry = {
+    updated_at: new Date().toISOString(),
+    ttl_seconds: 9999,
+  };
+
+  it("uses staleness_days from cache data instead of hardcoded 30d", () => {
+    const cache = {
+      insights: {
+        ...freshEntry,
+        friction_total: 7,
+        staleness_days: 14,
+        recent_session: { friction_count: 0 },
+      },
+    };
+    const result = BUILTIN_SEGMENTS.insights_friction(cache, {});
+    expect(result).toContain("in 14d");
+    expect(result).not.toContain("in 30d");
+  });
+
+  it("falls back to 30d when staleness_days is not provided", () => {
+    const cache = {
+      insights: {
+        ...freshEntry,
+        friction_total: 3,
+        recent_session: { friction_count: 0 },
+      },
+    };
+    const result = BUILTIN_SEGMENTS.insights_friction(cache, {});
+    expect(result).toContain("in 30d");
+  });
+
+  it("shows friction count with custom window", () => {
+    const cache = {
+      insights: {
+        ...freshEntry,
+        friction_total: 12,
+        staleness_days: 90,
+        recent_session: { friction_count: 0 },
+      },
+    };
+    const result = BUILTIN_SEGMENTS.insights_friction(cache, {});
+    expect(result).toContain("12 in 90d");
+  });
+});
+
 describe("daemon_health segment", () => {
   it("returns empty string when no heartbeat exists", () => {
     const cache = {};

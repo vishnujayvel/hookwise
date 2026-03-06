@@ -5,9 +5,6 @@
  * Returns empty string when data is unavailable.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import type { SegmentConfig, CacheEntry } from "../types.js";
 import { isFresh } from "../feeds/cache-bus.js";
 import { color, GREEN, YELLOW, RED, DIM } from "./ansi.js";
@@ -298,6 +295,8 @@ interface InsightsCacheEntry extends CacheEntry {
   total_messages?: number;
   total_lines_added?: number;
   days_active?: number;
+  staleness_days?: number;
+  recent_msgs_per_day?: number;
   top_tools?: Array<{ name: string; count: number }>;
   peak_hour?: number;
   friction_total?: number;
@@ -354,7 +353,8 @@ const insights_friction: SegmentRenderer = (cache) => {
     return `\u26A0\uFE0F ${recentFriction} friction this session`;
   }
   if (totalFriction > 0) {
-    return `\u2705 Clean session \u00B7 ${totalFriction} in 30d`;
+    const window = data.staleness_days ?? 30;
+    return `\u2705 Clean session \u00B7 ${totalFriction} in ${window}d`;
   }
   return "\u2705 No friction detected";
 };
@@ -369,9 +369,18 @@ const insights_pace: SegmentRenderer = (cache) => {
   const sessions = data.total_sessions ?? 0;
 
   const msgsPerDay = Math.round(totalMessages / daysActive);
+  const recentMsgsPerDay = data.recent_msgs_per_day ?? msgsPerDay;
   const formattedLines = formatLargeNumber(linesAdded);
 
-  return `\uD83D\uDCCA ${msgsPerDay} msgs/day | ${formattedLines}+ lines | ${sessions} sessions (30d)`;
+  // Trend arrow: compare recent (7d) to full-window average
+  let trendArrow = "\u2192"; // stable →
+  if (recentMsgsPerDay > msgsPerDay * 1.2) {
+    trendArrow = "\u2191"; // trending up ↑
+  } else if (recentMsgsPerDay < msgsPerDay * 0.8) {
+    trendArrow = "\u2193"; // trending down ↓
+  }
+
+  return `\uD83D\uDCCA ${msgsPerDay} msgs/day ${trendArrow} | ${formattedLines}+ lines | ${sessions} sessions`;
 };
 
 const insights_trend: SegmentRenderer = (cache) => {
@@ -465,23 +474,11 @@ interface ActiveAgentsData {
   updated_at?: number;
 }
 
-const AGENTS_CACHE_PATH = join(homedir(), ".hookwise", "cache", "active-agents.json");
-
 const agents: SegmentRenderer = (cache) => {
-  // Read from cache.agents (merged by CLI command) or directly from file
-  let data: ActiveAgentsData | undefined = cache.agents as ActiveAgentsData | undefined;
+  // Read from cache.agents only — merged by CLI command or agent-tracker hook
+  const data = cache.agents as ActiveAgentsData | undefined;
 
-  if (!data) {
-    try {
-      if (!existsSync(AGENTS_CACHE_PATH)) return "";
-      const raw = readFileSync(AGENTS_CACHE_PATH, "utf-8");
-      data = JSON.parse(raw) as ActiveAgentsData;
-    } catch {
-      return "";
-    }
-  }
-
-  if (!data?.agents?.length) return "";
+  if (!data?.agents || !Array.isArray(data.agents) || data.agents.length === 0) return "";
 
   // Filter stale entries (older than 10 minutes)
   const now = Math.floor(Date.now() / 1000);

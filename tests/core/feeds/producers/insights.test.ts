@@ -4,6 +4,7 @@ import {
   rmSync,
   mkdirSync,
   copyFileSync,
+  writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -289,6 +290,74 @@ describe("aggregateInsights", () => {
     expect(result!.total_lines_added).toBe(20);
     expect(result!.top_tools).toEqual([]);
     expect(result!.recent_session.id).toBe("minimal-005");
+  });
+
+  it("days_active uses local timezone, not UTC date boundaries (RC-1)", () => {
+    // Create two sessions near UTC midnight that fall on different UTC dates
+    // but the SAME local date for UTC-5 timezone.
+    // Session 1: 2026-02-22T04:30:00Z (Feb 22 UTC, but Feb 21 at UTC-5)
+    // Session 2: 2026-02-22T03:00:00Z (Feb 22 UTC, but Feb 21 at UTC-5)
+    // Without local conversion, these are both Feb 22 UTC → 1 day.
+    // With proper conversion for UTC-5, both are Feb 21 local → still 1 day.
+    // The key test: a session at 2026-02-21T23:30:00Z (Feb 21 UTC)
+    // is Feb 21 at UTC-5 too → same day.
+    // But a session at 2026-02-22T06:00:00Z (Feb 22 UTC) is also Feb 22 at UTC-5 → different day.
+
+    // We use writeFileSync to create custom sessions with specific timestamps
+    const usageDir = join(tempRoot, "usage-data-tz");
+    const sessionMetaDir = join(usageDir, "session-meta");
+    const facetsDir = join(usageDir, "facets");
+    mkdirSync(sessionMetaDir, { recursive: true });
+    mkdirSync(facetsDir, { recursive: true });
+
+    // Two sessions both on Feb 22 UTC but potentially different local dates
+    const session1 = {
+      session_id: "tz-test-1",
+      start_time: "2026-02-22T00:30:00Z", // Feb 22 UTC, Feb 21 local (UTC-5 to UTC-1)
+      user_message_count: 5,
+      lines_added: 10,
+      duration_minutes: 10,
+    };
+    const session2 = {
+      session_id: "tz-test-2",
+      start_time: "2026-02-22T14:00:00Z", // Feb 22 UTC and Feb 22 local for most timezones
+      user_message_count: 5,
+      lines_added: 10,
+      duration_minutes: 10,
+    };
+
+    writeFileSync(join(sessionMetaDir, "tz-1.json"), JSON.stringify(session1));
+    writeFileSync(join(sessionMetaDir, "tz-2.json"), JSON.stringify(session2));
+
+    const testNow = new Date("2026-02-23T12:00:00Z").getTime();
+    const result = aggregateInsights(usageDir, 30, testNow);
+    expect(result).not.toBeNull();
+
+    // The key assertion: days_active should use local timezone conversion.
+    // We verify by computing expected days the same way the code does.
+    const offsetMinutes = new Date(testNow).getTimezoneOffset();
+    const localDate1 = new Date(Date.parse("2026-02-22T00:30:00Z") - offsetMinutes * 60000);
+    const localDate2 = new Date(Date.parse("2026-02-22T14:00:00Z") - offsetMinutes * 60000);
+    const expectedDates = new Set([
+      localDate1.toISOString().slice(0, 10),
+      localDate2.toISOString().slice(0, 10),
+    ]);
+    expect(result!.days_active).toBe(expectedDates.size);
+  });
+
+  it("includes staleness_days and recent_msgs_per_day in output (RC-2)", () => {
+    const usageDir = setupFixtures(
+      tempRoot,
+      ["fresh-clean.json", "fresh-friction.json"],
+      [],
+    );
+
+    const result = aggregateInsights(usageDir, 30, NOW);
+    expect(result).not.toBeNull();
+    expect(result!.staleness_days).toBe(30);
+    expect(typeof result!.recent_msgs_per_day).toBe("number");
+    expect(typeof result!.recent_messages).toBe("number");
+    expect(typeof result!.recent_days_active).toBe("number");
   });
 });
 

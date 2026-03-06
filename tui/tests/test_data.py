@@ -401,3 +401,36 @@ class TestReadRecipes:
         recipes = read_recipes({})
         assert recipes == []
         del os.environ["HOOKWISE_CONFIG"]
+
+
+# --- read_analytics localtime (RC-3) ---
+
+
+class TestAnalyticsLocaltime:
+    """Verify that read_analytics SQL uses 'localtime' modifier (RC-3)."""
+
+    def test_sql_uses_localtime_modifier(self, tmp_dir):
+        """The SQL queries in read_analytics must use 'localtime' for DATE()
+        to avoid UTC date boundaries grouping events on wrong local dates."""
+        import inspect
+
+        source = inspect.getsource(read_analytics)
+        # All DATE(timestamp) calls should include 'localtime'
+        assert "DATE(timestamp, 'localtime')" in source
+        # The WHERE clause should use localtime for the date cutoff
+        assert "DATE('now', ?, 'localtime')" in source
+        # GROUP BY should also use localtime
+        assert "GROUP BY DATE(timestamp, 'localtime')" in source
+
+    def test_analytics_query_does_not_use_bare_date(self, tmp_dir):
+        """Ensure no bare DATE(timestamp) without localtime remains."""
+        import inspect
+        import re
+
+        source = inspect.getsource(read_analytics)
+        # Find DATE(timestamp) without 'localtime' — should not exist
+        # Match DATE(timestamp) NOT followed by , 'localtime'
+        bare_matches = re.findall(r"DATE\(timestamp\)(?!\s*#)", source)
+        assert len(bare_matches) == 0, (
+            f"Found {len(bare_matches)} bare DATE(timestamp) without 'localtime'"
+        )

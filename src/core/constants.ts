@@ -60,5 +60,12 @@ export const DEFAULT_CALENDAR_CREDENTIALS_PATH = join(DEFAULT_STATE_DIR, "calend
 /** Default calendar token path: ~/.hookwise/calendar-token.json */
 export const DEFAULT_CALENDAR_TOKEN_PATH = join(DEFAULT_STATE_DIR, "calendar-token.json");
 
+/** Last rendered status-line output (ANSI-stripped) for TUI preview sync */
+export const LAST_STATUS_OUTPUT_PATH = join(
+  DEFAULT_STATE_DIR,
+  "cache",
+  "last-status-output.txt"
+);
+
 /** Default feed timeout in seconds */
 export const DEFAULT_FEED_TIMEOUT = 10; // seconds

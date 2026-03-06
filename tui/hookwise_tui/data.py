@@ -183,15 +183,15 @@ def read_analytics(db_path: Path | None = None, days: int = 7) -> AnalyticsData:
         daily_rows = conn.execute(
             """
             SELECT
-                DATE(timestamp) as date,
+                DATE(timestamp, 'localtime') as date,
                 COUNT(*) as total_events,
                 COUNT(tool_name) as total_tool_calls,
                 COALESCE(SUM(lines_added), 0) as lines_added,
                 COALESCE(SUM(lines_removed), 0) as lines_removed,
                 COUNT(DISTINCT session_id) as sessions
             FROM events
-            WHERE timestamp >= DATE('now', ?)
-            GROUP BY DATE(timestamp)
+            WHERE timestamp >= DATE('now', ?, 'localtime')
+            GROUP BY DATE(timestamp, 'localtime')
             ORDER BY date DESC
             """,
             (f"-{days} days",),
@@ -504,10 +504,16 @@ def read_insights(
                 if isinstance(h, int) and 0 <= h < 24:
                     hour_counts[h] += 1
 
-        # Days active + daily breakdowns
+        # Days active + daily breakdowns (local timezone, not UTC)
         start_time = session.get("start_time", "")
         if isinstance(start_time, str) and len(start_time) >= 10:
-            date_str = start_time[:10]
+            try:
+                from datetime import datetime as _dt, timezone as _tz
+                utc_dt = _dt.fromisoformat(start_time.replace("Z", "+00:00"))
+                local_dt = utc_dt.astimezone()
+                date_str = local_dt.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                date_str = start_time[:10]
             active_dates.add(date_str)
             daily_sessions[date_str] += 1
             daily_messages[date_str] += msgs if isinstance(msgs, (int, float)) else 0

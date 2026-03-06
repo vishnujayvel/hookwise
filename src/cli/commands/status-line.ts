@@ -8,14 +8,14 @@
  * This is the hot path — Claude Code calls it on every render tick.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
+import { join, dirname } from "node:path";
 import { safeReadJSON, atomicWriteJSON } from "../../core/state.js";
-import { DEFAULT_CACHE_PATH } from "../../core/constants.js";
+import { DEFAULT_CACHE_PATH, DEFAULT_STATE_DIR, LAST_STATUS_OUTPUT_PATH } from "../../core/constants.js";
 import { renderTwoTier, DEFAULT_TWO_TIER_CONFIG } from "../../core/status-line/two-tier.js";
+import { strip } from "../../core/status-line/ansi.js";
 
-const ACTIVE_AGENTS_PATH = join(homedir(), ".hookwise", "cache", "active-agents.json");
+const ACTIVE_AGENTS_PATH = join(DEFAULT_STATE_DIR, "cache", "active-agents.json");
 
 /**
  * Stdin data shape from Claude Code's status line protocol.
@@ -102,6 +102,16 @@ export async function runStatusLineCommand(): Promise<void> {
     const output = renderTwoTier(DEFAULT_TWO_TIER_CONFIG, cache);
     if (output) {
       process.stdout.write(output);
+
+      // Persist ANSI-stripped output for TUI preview sync (atomic write)
+      try {
+        mkdirSync(dirname(LAST_STATUS_OUTPUT_PATH), { recursive: true });
+        const tmpPath = `${LAST_STATUS_OUTPUT_PATH}.tmp.${process.pid}`;
+        writeFileSync(tmpPath, strip(output), "utf-8");
+        renameSync(tmpPath, LAST_STATUS_OUTPUT_PATH);
+      } catch {
+        // Non-critical — TUI will fall back to re-rendering from cache
+      }
     }
   } catch {
     // Fail-open: output nothing rather than break Claude Code's UI
