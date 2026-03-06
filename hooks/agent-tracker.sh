@@ -37,19 +37,23 @@ else
 fi
 
 NOW=$(date +%s)
+LOCKFILE="$CACHE_DIR/.active-agents.lock"
 
-# Read existing state (or start fresh)
-if [ -f "$STATE_FILE" ]; then
-  CURRENT=$(cat "$STATE_FILE" 2>/dev/null || echo '{"agents":[],"team_name":"","strategy":""}')
-else
-  CURRENT='{"agents":[],"team_name":"","strategy":""}'
-fi
+# Use flock to prevent race conditions from concurrent hook invocations.
+# macOS: flock is available via Homebrew (util-linux) or we fall back to no-lock.
+lock_and_update() {
+  # Read existing state (or start fresh)
+  if [ -f "$STATE_FILE" ]; then
+    CURRENT=$(cat "$STATE_FILE" 2>/dev/null || echo '{"agents":[],"team_name":"","strategy":""}')
+  else
+    CURRENT='{"agents":[],"team_name":"","strategy":""}'
+  fi
 
-# Use python3 for JSON manipulation (available on macOS)
-# Pass variables via environment to avoid shell interpolation issues in Python
-UPDATED=$(CURRENT="$CURRENT" EVENT="$EVENT" AGENT_ID="$agent_id" NAME="$name" \
-  TEAM_NAME="$team_name" STRATEGY="$strategy" NOW="$NOW" STALE="$STALE_SECONDS" \
-  python3 -c "
+  # Use python3 for JSON manipulation (available on macOS)
+  # Pass variables via environment to avoid shell interpolation issues in Python
+  UPDATED=$(CURRENT="$CURRENT" EVENT="$EVENT" AGENT_ID="$agent_id" NAME="$name" \
+    TEAM_NAME="$team_name" STRATEGY="$strategy" NOW="$NOW" STALE="$STALE_SECONDS" \
+    python3 -c "
 import json, os
 
 current = json.loads(os.environ.get('CURRENT', '{}'))
@@ -88,11 +92,22 @@ result = {
     'updated_at': now
 }
 print(json.dumps(result, indent=2))
-" 2>/dev/null) || exit 0
+" 2>/dev/null) || return 0
 
-# Atomic write via temp file + rename
-TMPFILE="$CACHE_DIR/.active-agents.tmp.$$"
-echo "$UPDATED" > "$TMPFILE"
-mv "$TMPFILE" "$STATE_FILE"
+  # Atomic write via temp file + rename
+  TMPFILE="$CACHE_DIR/.active-agents.tmp.$$"
+  echo "$UPDATED" > "$TMPFILE"
+  mv "$TMPFILE" "$STATE_FILE"
+}
+
+# Try flock if available; fall back to unguarded update
+if command -v flock >/dev/null 2>&1; then
+  (
+    flock -w 5 200 || exit 0
+    lock_and_update
+  ) 200>"$LOCKFILE"
+else
+  lock_and_update
+fi
 
 exit 0

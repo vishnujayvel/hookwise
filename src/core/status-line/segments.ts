@@ -478,7 +478,7 @@ const agents: SegmentRenderer = (cache) => {
   // Read from cache.agents only — merged by CLI command or agent-tracker hook
   const data = cache.agents as ActiveAgentsData | undefined;
 
-  if (!data?.agents?.length) return "";
+  if (!data?.agents || !Array.isArray(data.agents) || data.agents.length === 0) return "";
 
   // Filter stale entries (older than 10 minutes)
   const now = Math.floor(Date.now() / 1000);
