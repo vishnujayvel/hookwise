@@ -4,13 +4,22 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
+from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Container
+from textual.css.query import NoMatches
 from textual.widget import Widget
 from textual.widgets import Static, Switch
 
 from hookwise_tui.data import read_cache, read_config, write_config
+
+
+# Path where the TS status-line command persists its ANSI-stripped output
+_LAST_STATUS_OUTPUT_PATH = Path.home() / ".hookwise" / "cache" / "last-status-output.txt"
+
+# Maximum age (seconds) before the live output file is considered stale
+_LIVE_OUTPUT_MAX_AGE = 60
 
 
 # 5-line default layout (matches TS DEFAULT_TWO_TIER_CONFIG)
@@ -18,19 +27,15 @@ FIXED_LINE_1 = ["context_bar", "mode_badge", "cost", "duration", "daemon_health"
 FIXED_LINE_2 = ["project", "calendar", "weather"]
 FIXED_LINE_3 = ["insights_friction", "insights_pace"]
 FIXED_LINE_4 = ["insights_trend"]
+MIDDLE_SEGMENTS = ["agents"]
 ROTATING_SEGMENTS = [
     "news", "mantra", "memories", "pulse", "streak", "builder_trap", "clock",
 ]
 ALL_FIXED = FIXED_LINE_1 + FIXED_LINE_2 + FIXED_LINE_3 + FIXED_LINE_4
-ALL_SEGMENTS = ALL_FIXED + ROTATING_SEGMENTS
+ALL_SEGMENTS = ALL_FIXED + MIDDLE_SEGMENTS + ROTATING_SEGMENTS
 
-# Placeholders for segments that need live stdin data (not in cache)
-STDIN_PLACEHOLDERS = {
-    "context_bar": "50% \u2588\u2588\u2588\u2588\u2588\u2591\u2591\u2591\u2591\u2591",
-    "cost": "$3.45",
-    "duration": "1h23m",
-    "daemon_health": "daemon: ok",
-}
+# Segments that need live stdin data (not available in cache alone)
+STDIN_SEGMENTS = {"context_bar", "cost", "duration", "daemon_health"}
 
 
 class SegmentRow(Widget):
@@ -166,7 +171,7 @@ class StatusTab(Widget):
         yield Container(id="tier-summary", classes="tier-summary")
 
         # Fixed line groups
-        for i, (label, segs) in enumerate([
+        for _, (label, segs) in enumerate([
             ("Line 1 \u2014 Status bar", FIXED_LINE_1),
             ("Line 2 \u2014 Context", FIXED_LINE_2),
             ("Line 3 \u2014 Insights", FIXED_LINE_3),
@@ -175,6 +180,14 @@ class StatusTab(Widget):
             yield Static(f"{label} (fixed)", classes="tier-header")
             with Container(classes="segment-group"):
                 for seg in segs:
+                    has_data = self._segment_has_data(seg, cache)
+                    yield SegmentRow(seg, seg in active_set, has_data)
+
+        # Middle segments (agents — shown between fixed and rotating)
+        if MIDDLE_SEGMENTS:
+            yield Static("Middle \u2014 Agents", classes="tier-header")
+            with Container(classes="segment-group"):
+                for seg in MIDDLE_SEGMENTS:
                     has_data = self._segment_has_data(seg, cache)
                     yield SegmentRow(seg, seg in active_set, has_data)
 
@@ -188,8 +201,9 @@ class StatusTab(Widget):
     @staticmethod
     def _segment_has_data(seg: str, cache: dict) -> bool:
         """Check if a segment has real data available in the cache."""
-        if seg in STDIN_PLACEHOLDERS:
-            return False  # These need live stdin
+        if seg in STDIN_SEGMENTS:
+            # These get data from live stdin; check if live output is fresh
+            return StatusTab._read_live_output() is not None
         if seg in ("insights_friction", "insights_pace", "insights_trend"):
             ins = cache.get("insights")
             return isinstance(ins, dict) and bool(ins.get("total_sessions"))
@@ -210,11 +224,37 @@ class StatusTab(Widget):
                 switch = self.query_one(f"#seg-{seg}", Switch)
                 if switch.value:
                     active.append(seg)
-            except Exception:
+            except NoMatches:
                 continue
         return active
 
+    @staticmethod
+    def _read_live_output() -> str | None:
+        """Read the persisted status-line output if it exists and is fresh."""
+        try:
+            if not _LAST_STATUS_OUTPUT_PATH.exists():
+                return None
+            age = time.time() - _LAST_STATUS_OUTPUT_PATH.stat().st_mtime
+            if age > _LIVE_OUTPUT_MAX_AGE:
+                return None
+            content = _LAST_STATUS_OUTPUT_PATH.read_text("utf-8").strip()
+            return content if content else None
+        except Exception:
+            return None
+
     def _refresh_preview(self) -> None:
+        # Try live output from the TS status-line command first
+        live_output = self._read_live_output()
+        if live_output is not None:
+            preview = self.query_one("#preview-box", Container)
+            preview.remove_children()
+            preview.mount(Static(live_output, classes="preview-line"))
+        else:
+            self._refresh_preview_from_cache()
+
+        self._refresh_tier_summary()
+
+    def _refresh_preview_from_cache(self) -> None:
         config = read_config()
         cache = read_cache()
         status_config = config.get("status_line", {})
@@ -249,15 +289,25 @@ class StatusTab(Widget):
         if lines:
             preview_text = "\n".join(lines)
         else:
-            preview_text = "[dim]No segments enabled[/dim]"
+            preview_text = "[dim]No active session — start Claude Code to see live preview[/dim]"
 
         preview = self.query_one("#preview-box", Container)
         preview.remove_children()
         preview.mount(Static(preview_text, classes="preview-line"))
 
-        # Update tier summary
+    def _refresh_tier_summary(self) -> None:
+        """Update the tier summary widget showing active segments per line."""
+        config = read_config()
+        status_config = config.get("status_line", {})
+        if not isinstance(status_config, dict):
+            status_config = {}
+
+        delimiter = status_config.get("delimiter", " | ")
+        active = self._get_active_segments()
+        active_set = set(active)
+
         summary_lines = []
-        for i, (label, segs) in enumerate([
+        for _, (label, segs) in enumerate([
             ("Line 1 (status)", FIXED_LINE_1),
             ("Line 2 (context)", FIXED_LINE_2),
             ("Line 3 (insights)", FIXED_LINE_3),
@@ -268,6 +318,11 @@ class StatusTab(Widget):
                 summary_lines.append(
                     f"[bold]{label}:[/bold] {delimiter.join(active_segs)}"
                 )
+        middle_active = [s for s in MIDDLE_SEGMENTS if s in active_set]
+        if middle_active:
+            summary_lines.append(
+                f"[bold]Middle (agents):[/bold] {delimiter.join(middle_active)}"
+            )
         rotating_active = [s for s in ROTATING_SEGMENTS if s in active_set]
         if rotating_active:
             summary_lines.append(
@@ -280,7 +335,7 @@ class StatusTab(Widget):
             tier_summary = self.query_one("#tier-summary", Container)
             tier_summary.remove_children()
             tier_summary.mount(Static("\n".join(summary_lines)))
-        except Exception:
+        except NoMatches:
             pass
 
     # Friction category → actionable tip (mirrors TS FRICTION_TIPS)
@@ -313,9 +368,9 @@ class StatusTab(Widget):
     @staticmethod
     def _render_segment(seg: str, cache: dict) -> str:
         """Render a segment from cache data with real rendering logic."""
-        # Segments that need live stdin data — use placeholders
-        if seg in STDIN_PLACEHOLDERS:
-            return STDIN_PLACEHOLDERS[seg]
+        # Segments that need live stdin data — skip in cache-only mode
+        if seg in STDIN_SEGMENTS:
+            return ""
 
         # -- mode_badge reads from builder_trap cache entry (not its own key) --
         if seg == "mode_badge":
@@ -500,6 +555,18 @@ class StatusTab(Widget):
                 return ""
             mins = round(entry.get("toolingMinutes", 0))
             return f"\u26a0\ufe0f {mins}m tooling"
+
+        if seg == "agents":
+            agents_list = entry.get("agents", [])
+            if not isinstance(agents_list, list) or not agents_list:
+                return ""
+            active = [a for a in agents_list if isinstance(a, dict) and a.get("status") == "active"]
+            count = len(active)
+            if count == 0:
+                return ""
+            names = ", ".join(a.get("name", "?")[:15] for a in active[:3])
+            suffix = f" +{count - 3}" if count > 3 else ""
+            return f"\U0001f916 {count} agent{'s' if count != 1 else ''}: {names}{suffix}"
 
         if seg == "clock":
             return datetime.now().strftime("%I:%M %p").lstrip("0")
