@@ -14,6 +14,7 @@ from textual.widget import Widget
 from textual.widgets import Static, Switch
 
 from hookwise_tui.data import read_cache, read_config, write_config
+from hookwise_tui.tabs.insights import _format_peak_hour
 
 
 # Path where the TS status-line command persists its ANSI-stripped output
@@ -327,8 +328,9 @@ class StatusTab(Widget):
             )
         rotating_active = [s for s in ROTATING_SEGMENTS if s in active_set]
         if rotating_active:
+            arrow = " \u2192 "
             summary_lines.append(
-                f"[bold]Line 5 (rotating):[/bold] {' \u2192 '.join(rotating_active)}"
+                f"[bold]Line 5 (rotating):[/bold] {arrow.join(rotating_active)}"
             )
         if not summary_lines:
             summary_lines.append("[dim]No segments active[/dim]")
@@ -434,15 +436,7 @@ class StatusTab(Widget):
                 tool_names = ", ".join(t.get("name", "") for t in top_tools[:2] if isinstance(t, dict))
                 if not tool_names:
                     return ""
-                if 6 <= peak_hour < 12:
-                    peak_label = "morning"
-                elif 12 <= peak_hour < 18:
-                    peak_label = "afternoon"
-                elif 18 <= peak_hour < 24:
-                    peak_label = "evening"
-                else:
-                    peak_label = "night"
-                return f"\U0001f527 Top: {tool_names} | Peak: {peak_label}"
+                return f"\U0001f527 Top: {tool_names} | Peak: {_format_peak_hour(peak_hour)}"
 
         # -- other segments with direct cache entries --
         entry = cache.get(seg)

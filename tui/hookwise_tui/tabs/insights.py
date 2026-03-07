@@ -13,6 +13,17 @@ from hookwise_tui.data import (
 from hookwise_tui.widgets.sparkline import SparklineWidget
 
 
+def _format_peak_hour(hour: int) -> str:
+    """Format a 24-hour value as 12-hour AM/PM (e.g., 14 → '2 PM')."""
+    if hour == 0:
+        return "12 AM"
+    if hour < 12:
+        return f"{hour} AM"
+    if hour == 12:
+        return "12 PM"
+    return f"{hour - 12} PM"
+
+
 class InsightsTab(Widget):
     """Insights — Claude Code usage patterns and productivity metrics."""
 
@@ -118,7 +129,7 @@ class InsightsTab(Widget):
 
         with Horizontal(classes="metric-row"):
             yield Static(
-                f"Peak Hour\n[bold cyan]{insights.peak_hour}:00[/bold cyan]",
+                f"Peak Hour\n[bold cyan]{_format_peak_hour(insights.peak_hour)}[/bold cyan]",
                 classes="metric-box",
             )
             yield Static(
@@ -126,7 +137,7 @@ class InsightsTab(Widget):
                 classes="metric-box",
             )
             yield Static(
-                f"Friction Events\n[bold cyan]{insights.friction_total}[/bold cyan]",
+                f"Friction (30d)\n[bold cyan]{insights.friction_total}[/bold cyan]",
                 classes="metric-box",
             )
             yield Static(
