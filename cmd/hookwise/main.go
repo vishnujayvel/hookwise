@@ -159,6 +159,7 @@ tui:
 #     interval_seconds: 900
 #     latitude: 37.7749
 #     longitude: -122.4194
+#     temperature_unit: "fahrenheit" # or "celsius"
 `
 
 func newInitCmd() *cobra.Command {

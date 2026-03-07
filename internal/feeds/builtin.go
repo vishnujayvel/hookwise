@@ -241,9 +241,15 @@ func (p *WeatherProducer) Produce(ctx context.Context) (interface{}, error) {
 }
 
 // fallbackResult returns the last cached result if available, or a placeholder.
+// When no cached data exists, temperature and weatherCode are nil so the Python
+// TUI renders "--" instead of a plausible-looking 0°F.
 func (p *WeatherProducer) fallbackResult(reason string) map[string]interface{} {
 	p.mu.Lock()
 	last := p.lastResult
+	unit := "fahrenheit"
+	if p.feedsCfg.Weather.TemperatureUnit == "celsius" {
+		unit = "celsius"
+	}
 	p.mu.Unlock()
 
 	if last != nil {
@@ -251,17 +257,37 @@ func (p *WeatherProducer) fallbackResult(reason string) map[string]interface{} {
 		return last
 	}
 
-	// No cached data — return a safe placeholder with correct field names.
+	// No cached data — return placeholder with nil numerics so consumers
+	// show "--" instead of interpreting 0 as a real reading.
 	return map[string]interface{}{
 		"type":      "weather",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
-			"temperature":     0,
-			"temperatureUnit": "fahrenheit",
+			"temperature":     nil,
+			"temperatureUnit": unit,
 			"windSpeed":       0,
-			"weatherCode":     0,
+			"weatherCode":     nil,
 			"emoji":           "\U0001f324\ufe0f",
 			"description":     "Unavailable",
+		},
+	}
+}
+
+// WeatherTestFixture returns a deterministic weather envelope for use in
+// cross-package tests (e.g., bridge_test.go). This is a shared fixture so
+// that bridge tests bind to the producer's actual field names rather than
+// hardcoding keys that can silently drift.
+func WeatherTestFixture() map[string]interface{} {
+	return map[string]interface{}{
+		"type":      "weather",
+		"timestamp": "2026-03-07T10:00:00Z",
+		"data": map[string]interface{}{
+			"temperature":     float64(72),
+			"temperatureUnit": "fahrenheit",
+			"windSpeed":       float64(5.3),
+			"weatherCode":     float64(0),
+			"emoji":           "\u2600\ufe0f",
+			"description":     "Clear",
 		},
 	}
 }
