@@ -822,8 +822,9 @@ func tuiPIDPath() string {
 	return filepath.Join(core.DefaultStateDir, "tui.pid")
 }
 
-// isTUIRunning checks if a TUI process is already running by reading the PID file
-// and checking if the process exists.
+// isTUIRunning checks if a TUI process is already running by reading the PID file,
+// checking if the process exists, and verifying it's actually hookwise-tui
+// (not a stale PID reused by an unrelated process).
 func isTUIRunning() bool {
 	data, err := os.ReadFile(tuiPIDPath())
 	if err != nil {
@@ -838,8 +839,17 @@ func isTUIRunning() bool {
 	if err != nil {
 		return false
 	}
-	err = process.Signal(syscall.Signal(0))
-	return err == nil
+	if err := process.Signal(syscall.Signal(0)); err != nil {
+		return false
+	}
+	// Verify the PID belongs to hookwise-tui, not a stale PID reused by
+	// an unrelated process. Uses `ps` which works on macOS and Linux.
+	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
+	if err != nil {
+		return false
+	}
+	comm := strings.TrimSpace(string(out))
+	return strings.Contains(comm, "hookwise-tui") || strings.Contains(comm, "python") || strings.Contains(comm, "Python")
 }
 
 // acquireTUILaunchLock atomically creates a lock file to prevent concurrent
