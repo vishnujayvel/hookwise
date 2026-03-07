@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -92,7 +96,14 @@ func newDispatchCmd() *cobra.Command {
 				}
 
 				// Run the three-phase dispatch engine
-				return core.Dispatch(eventType, payload, config)
+				dispatchResult := core.Dispatch(eventType, payload, config)
+
+				// Auto-launch TUI on SessionStart if configured and not already running
+				if eventType == core.EventSessionStart && config.TUI.AutoLaunch {
+					go launchTUIIfNeeded(config.TUI.LaunchMethod)
+				}
+
+				return dispatchResult
 			})
 
 			if result.Stdout != nil {
@@ -340,6 +351,12 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 
 	line := strings.Join(segments, ansiGray+delimiter+ansiReset)
 	fmt.Fprintln(cmd.OutOrStdout(), line)
+
+	// Write ANSI-stripped output to cache file for TUI preview (Bug #20)
+	if err := writeStatusLineCache(line); err != nil {
+		core.Logger().Warn("failed to write status-line cache", "error", err)
+	}
+
 	return nil
 }
 
@@ -784,6 +801,100 @@ Original files are never modified (non-destructive).`,
 	cmd.Flags().StringVar(&projectDir, "project-dir", "", "Project directory for config validation (defaults to cwd)")
 
 	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// TUI launcher (Bug #14 — duplicate terminal tabs)
+// ---------------------------------------------------------------------------
+
+// tuiPIDPath returns the path to the TUI PID file.
+func tuiPIDPath() string {
+	return filepath.Join(core.DefaultStateDir, "tui.pid")
+}
+
+// isTUIRunning checks if a TUI process is already running by reading the PID file
+// and checking if the process exists.
+func isTUIRunning() bool {
+	data, err := os.ReadFile(tuiPIDPath())
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	// Check if process exists (signal 0 = existence check)
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+// launchTUIIfNeeded launches the TUI if it's not already running.
+// Called as a goroutine from dispatch on SessionStart events.
+func launchTUIIfNeeded(launchMethod string) {
+	defer func() {
+		if r := recover(); r != nil {
+			core.Logger().Error("panic in TUI launcher", "recovered", fmt.Sprintf("%v", r))
+		}
+	}()
+
+	if isTUIRunning() {
+		core.Logger().Debug("TUI already running, skipping launch")
+		return
+	}
+
+	// Find hookwise-tui executable
+	tuiCmd, err := exec.LookPath("hookwise-tui")
+	if err != nil {
+		core.Logger().Debug("hookwise-tui not found in PATH, skipping auto-launch")
+		return
+	}
+
+	var cmd *exec.Cmd
+	switch launchMethod {
+	case "newWindow":
+		// macOS: open in a new Terminal window
+		cmd = exec.Command("open", "-a", "Terminal", tuiCmd)
+	default:
+		// background: launch directly as a background process
+		cmd = exec.Command(tuiCmd)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
+
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+
+	if err := cmd.Start(); err != nil {
+		core.Logger().Warn("failed to launch TUI", "method", launchMethod, "error", err)
+		return
+	}
+
+	core.Logger().Info("TUI launched", "method", launchMethod, "pid", cmd.Process.Pid)
+}
+
+// ---------------------------------------------------------------------------
+// Status line cache writer (Bug #20 — TUI preview out of sync)
+// ---------------------------------------------------------------------------
+
+// ansiRegex matches ANSI escape sequences for stripping.
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// writeStatusLineCache writes the ANSI-stripped status line output to the cache file
+// so the TUI can display a live preview.
+func writeStatusLineCache(line string) error {
+	cachePath := core.LastStatusOutputPath
+	cacheDir := filepath.Dir(cachePath)
+
+	if err := os.MkdirAll(cacheDir, core.DefaultDirMode); err != nil {
+		return fmt.Errorf("mkdir %s: %w", cacheDir, err)
+	}
+
+	stripped := ansiRegex.ReplaceAllString(line, "")
+	return os.WriteFile(cachePath, []byte(stripped+"\n"), 0o644)
 }
 
 // ---------------------------------------------------------------------------

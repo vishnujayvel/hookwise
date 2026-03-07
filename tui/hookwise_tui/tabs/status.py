@@ -434,14 +434,15 @@ class StatusTab(Widget):
                 tool_names = ", ".join(t.get("name", "") for t in top_tools[:2] if isinstance(t, dict))
                 if not tool_names:
                     return ""
-                if 6 <= peak_hour < 12:
-                    peak_label = "morning"
-                elif 12 <= peak_hour < 18:
-                    peak_label = "afternoon"
-                elif 18 <= peak_hour < 24:
-                    peak_label = "evening"
+                # Convert 24h to human-friendly AM/PM label
+                if peak_hour == 0:
+                    peak_label = "12 AM"
+                elif peak_hour < 12:
+                    peak_label = f"{peak_hour} AM"
+                elif peak_hour == 12:
+                    peak_label = "12 PM"
                 else:
-                    peak_label = "night"
+                    peak_label = f"{peak_hour - 12} PM"
                 return f"\U0001f527 Top: {tool_names} | Peak: {peak_label}"
 
         # -- other segments with direct cache entries --
