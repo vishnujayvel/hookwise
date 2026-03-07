@@ -336,15 +336,12 @@ def read_feed_health(
     if not isinstance(feeds_config, dict):
         return []
 
+    # Derive builtin feeds dynamically from config keys instead of hardcoding.
+    # "custom" is handled separately below; all other keys under feeds: are builtins.
     builtin_feeds = [
-        ("pulse", feeds_config.get("pulse", {})),
-        ("project", feeds_config.get("project", {})),
-        ("calendar", feeds_config.get("calendar", {})),
-        ("news", feeds_config.get("news", {})),
-        ("insights", feeds_config.get("insights", {})),
-        ("practice", feeds_config.get("practice", {})),
-        ("weather", feeds_config.get("weather", {})),
-        ("memories", feeds_config.get("memories", {})),
+        (name, feeds_config[name])
+        for name in feeds_config
+        if name != "custom" and isinstance(feeds_config[name], dict)
     ]
 
     results = []
@@ -591,7 +588,7 @@ def read_insights_summary(
 def generate_insights_summary(
     insights: InsightsData,
     summary_path: Path | None = None,
-) -> InsightsSummary:
+) -> InsightsSummary | None:
     """Generate a daily LLM summary of usage insights using Claude API (haiku).
 
     Caches the result to disk. Returns cached version if already generated today.

@@ -26,7 +26,7 @@ COACHING_FEATURES = [
         "description": "Alerts when you've been in tooling/config too long without shipping value",
         "detail_fn": lambda cfg: (
             "Thresholds: yellow={yellow}m, orange={orange}m, red={red}m".format(
-                **cfg.get("thresholds", {"yellow": "?", "orange": "?", "red": "?"})
+                **{**{"yellow": 30, "orange": 60, "red": 90}, **cfg.get("thresholds", {})}
             )
             if cfg.get("enabled")
             else "Disabled"
