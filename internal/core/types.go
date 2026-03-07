@@ -299,22 +299,6 @@ type SessionSummary struct {
 	EstimatedCostUSD   float64 `json:"estimatedCostUsd,omitempty"`
 }
 
-type DailySummary struct {
-	Date           string `json:"date"`
-	TotalEvents    int    `json:"totalEvents"`
-	TotalToolCalls int    `json:"totalToolCalls"`
-	LinesAdded     int    `json:"linesAdded"`
-	LinesRemoved   int    `json:"linesRemoved"`
-	Sessions       int    `json:"sessions"`
-}
-
-type ToolBreakdownEntry struct {
-	ToolName     string `json:"toolName"`
-	Count        int    `json:"count"`
-	LinesAdded   int    `json:"linesAdded"`
-	LinesRemoved int    `json:"linesRemoved"`
-}
-
 type AuthorshipSummary struct {
 	TotalEntries            int                        `json:"totalEntries"`
 	TotalLinesChanged       int                        `json:"totalLinesChanged"`
@@ -327,22 +311,6 @@ type StatsOptions struct {
 	Days      int    `json:"days,omitempty"`
 	From      string `json:"from,omitempty"`
 	To        string `json:"to,omitempty"`
-}
-
-type StatsResult struct {
-	Daily         []DailySummary       `json:"daily"`
-	ToolBreakdown []ToolBreakdownEntry `json:"toolBreakdown"`
-	Authorship    AuthorshipSummary    `json:"authorship"`
-}
-
-type AuthorshipEntry struct {
-	SessionID      string           `json:"sessionId"`
-	FilePath       string           `json:"filePath"`
-	ToolName       string           `json:"toolName"`
-	LinesChanged   int              `json:"linesChanged"`
-	AIScore        float64          `json:"aiScore"`
-	Classification AIClassification `json:"classification"`
-	Timestamp      string           `json:"timestamp"`
 }
 
 // --- Coaching Types ---
@@ -413,13 +381,6 @@ type CostEstimate struct {
 	EstimatedTokens int     `json:"estimatedTokens"`
 	EstimatedCostUSD float64 `json:"estimatedCostUsd"`
 	Model           string  `json:"model"`
-}
-
-type CostState struct {
-	DailyCosts   map[string]float64 `json:"dailyCosts"`
-	SessionCosts map[string]float64 `json:"sessionCosts"`
-	Today        string             `json:"today"`
-	TotalToday   float64            `json:"totalToday"`
 }
 
 // --- Agent Types ---

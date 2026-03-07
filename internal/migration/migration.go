@@ -539,18 +539,11 @@ func Run(opts MigrationOpts) MigrationResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// parseTimeFlexible attempts to parse a timestamp string using several common formats.
+// parseTimeFlexible delegates to core.ParseTimeFlex, falling back to time.Now().
 func parseTimeFlexible(s string) time.Time {
-	formats := []string{
-		time.RFC3339,
-		"2006-01-02T15:04:05Z",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
+	t, err := core.ParseTimeFlex(s)
+	if err != nil {
+		return time.Now()
 	}
-	for _, f := range formats {
-		if t, err := time.Parse(f, s); err == nil {
-			return t
-		}
-	}
-	return time.Now()
+	return t
 }

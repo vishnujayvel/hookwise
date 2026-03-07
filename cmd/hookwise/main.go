@@ -724,17 +724,10 @@ func runLog(cmd *cobra.Command, dataDir string, limit int) error {
 
 	for _, e := range entries {
 		dateStr := e.Date.Format("2006-01-02 15:04:05")
-		fmt.Fprintf(w, "%s  %s  %s\n", e.CommitHash[:minInt(7, len(e.CommitHash))], dateStr, e.Message)
+		fmt.Fprintf(w, "%s  %s  %s\n", e.CommitHash[:min(7, len(e.CommitHash))], dateStr, e.Message)
 	}
 
 	return nil
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // ---------------------------------------------------------------------------

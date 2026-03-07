@@ -4,8 +4,15 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/gobwas/glob"
+)
+
+// Caches for compiled patterns (hot-path optimization).
+var (
+	globCache  sync.Map // pattern string -> glob.Glob
+	regexCache sync.Map // pattern string -> *regexp.Regexp
 )
 
 // --- Condition Parser ---
@@ -134,15 +141,21 @@ func EvaluateCondition(expression string, data map[string]interface{}) *bool {
 		result = strings.EqualFold(*fieldValue, parsed.Value)
 
 	case "matches":
-		re, err := regexp.Compile(parsed.Value)
-		if err != nil {
-			// Invalid regex — treat as no match (fail-open)
-			Logger().Debug("invalid regex in guard condition", "pattern", parsed.Value, "error", err)
-			result = false
+		var re *regexp.Regexp
+		if cached, ok := regexCache.Load(parsed.Value); ok {
+			re = cached.(*regexp.Regexp)
 		} else {
-			// matches is case-SENSITIVE (unlike all other operators)
-			result = re.MatchString(*fieldValue)
+			compiled, err := regexp.Compile(parsed.Value)
+			if err != nil {
+				Logger().Debug("invalid regex in guard condition", "pattern", parsed.Value, "error", err)
+				result = false
+				break
+			}
+			regexCache.Store(parsed.Value, compiled)
+			re = compiled
 		}
+		// matches is case-SENSITIVE (unlike all other operators)
+		result = re.MatchString(*fieldValue)
 
 	default:
 		// Unknown operator
@@ -207,7 +220,7 @@ func Evaluate(toolName string, payload map[string]interface{}, rules []GuardRule
 	}
 
 	// No match = allow
-	return GuardResult{Action: "allow"}
+	return GuardResult{Action: ActionAllow}
 }
 
 // matchToolName checks if a tool name matches a rule's match pattern.
@@ -224,13 +237,15 @@ func matchToolName(toolName string, pattern string) bool {
 		return false
 	}
 
-	// Compile glob pattern
+	// Check cache first, compile and cache on miss
+	if cached, ok := globCache.Load(pattern); ok {
+		return cached.(glob.Glob).Match(toolName)
+	}
 	g, err := glob.Compile(pattern)
 	if err != nil {
-		// Invalid glob pattern — fail open, no match
 		Logger().Debug("invalid glob pattern in guard rule", "pattern", pattern, "error", err)
 		return false
 	}
-
+	globCache.Store(pattern, g)
 	return g.Match(toolName)
 }

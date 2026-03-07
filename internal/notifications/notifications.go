@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/vishnujayvel/hookwise/internal/analytics"
+	"github.com/vishnujayvel/hookwise/internal/core"
 )
 
 // Notification represents a single notification row from the Dolt table.
@@ -131,18 +132,8 @@ func scanNotifications(rows *sql.Rows) ([]Notification, error) {
 	return result, nil
 }
 
-// parseTime attempts to parse a time string in common formats.
+// parseTime delegates to core.ParseTimeFlex, returning zero time on failure.
 func parseTime(s string) time.Time {
-	formats := []string{
-		time.RFC3339,
-		"2006-01-02T15:04:05Z",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, f := range formats {
-		if t, err := time.Parse(f, s); err == nil {
-			return t
-		}
-	}
-	return time.Time{}
+	t, _ := core.ParseTimeFlex(s)
+	return t
 }

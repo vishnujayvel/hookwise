@@ -89,11 +89,12 @@ func Logger() *slog.Logger {
 }
 
 // SafeDispatch wraps a function with panic recovery for fail-open guarantee.
-// On panic, logs the error and returns exit code 0.
-func SafeDispatch(fn func() DispatchResult) DispatchResult {
+// On panic, logs the error and returns exit code 0 (fail-open per ARCH-1).
+func SafeDispatch(fn func() DispatchResult) (result DispatchResult) {
 	defer func() {
 		if r := recover(); r != nil {
 			Logger().Error("panic in dispatch", "recovered", fmt.Sprintf("%v", r))
+			result = DispatchResult{ExitCode: 0}
 		}
 	}()
 	return fn()

@@ -2,7 +2,6 @@ package feeds
 
 import (
 	"context"
-	"log"
 	"path/filepath"
 	"time"
 
@@ -45,14 +44,14 @@ func (d *Daemon) pollFeed(ctx context.Context, p Producer, interval time.Duratio
 func (d *Daemon) runProducer(ctx context.Context, p Producer) {
 	data, err := p.Produce(ctx)
 	if err != nil {
-		log.Printf("feeds: producer %q error: %v", p.Name(), err)
+		core.Logger().Error("feeds: producer error", "producer", p.Name(), "error", err)
 		return
 	}
 
 	// ARCH-3: Write to JSON cache only, NOT Dolt.
 	cachePath := filepath.Join(d.cacheDir, p.Name()+".json")
 	if err := core.AtomicWriteJSON(cachePath, data); err != nil {
-		log.Printf("feeds: cache write %q error: %v", p.Name(), err)
+		core.Logger().Error("feeds: cache write error", "producer", p.Name(), "error", err)
 	}
 }
 

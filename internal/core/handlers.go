@@ -10,6 +10,37 @@ import (
 	"time"
 )
 
+// --- Action and Phase Constants ---
+
+const (
+	ActionAllow   = "allow"
+	ActionBlock   = "block"
+	ActionWarn    = "warn"
+	ActionConfirm = "confirm"
+
+	PhaseGuard      = "guard"
+	PhaseContext     = "context"
+	PhaseSideEffect = "side_effect"
+)
+
+// Package-level lookup maps (static data, allocated once).
+var (
+	guardEventsSet = map[string]bool{
+		EventPreToolUse:        true,
+		EventUserPromptSubmit:  true,
+		EventPermissionRequest: true,
+	}
+	contextEventsSet = map[string]bool{
+		EventSessionStart:  true,
+		EventSubagentStart: true,
+	}
+	phaseOrderMap = map[string]int{
+		PhaseGuard:      0,
+		PhaseContext:    1,
+		PhaseSideEffect: 2,
+	}
+)
+
 // --- Phase Inference ---
 
 // inferPhase determines the execution phase of a handler based on its config.
@@ -22,35 +53,24 @@ func inferPhase(handler CustomHandlerConfig) string {
 		return handler.Phase
 	}
 
-	guardEvents := map[string]bool{
-		EventPreToolUse:       true,
-		EventUserPromptSubmit: true,
-		EventPermissionRequest: true,
-	}
-
-	contextEvents := map[string]bool{
-		EventSessionStart:  true,
-		EventSubagentStart: true,
-	}
-
 	isGuardEvent := false
 	isContextEvent := false
 	for _, e := range handler.Events {
-		if guardEvents[e] {
+		if guardEventsSet[e] {
 			isGuardEvent = true
 		}
-		if contextEvents[e] {
+		if contextEventsSet[e] {
 			isContextEvent = true
 		}
 	}
 
 	if isGuardEvent && handler.Type != "inline" {
-		return "guard"
+		return PhaseGuard
 	}
 	if isContextEvent {
-		return "context"
+		return PhaseContext
 	}
-	return "side_effect"
+	return PhaseSideEffect
 }
 
 // --- Handler Resolution ---
@@ -93,12 +113,6 @@ func ResolveHandlers(config HooksConfig) []ResolvedHandler {
 // GetHandlersForEvent filters handlers by event type and sorts them by phase:
 // guard (0) < context (1) < side_effect (2).
 func GetHandlersForEvent(handlers []ResolvedHandler, eventType string) []ResolvedHandler {
-	phaseOrder := map[string]int{
-		"guard":       0,
-		"context":     1,
-		"side_effect": 2,
-	}
-
 	var matching []ResolvedHandler
 	for i := range handlers {
 		if handlers[i].HasEvent(eventType) {
@@ -108,7 +122,7 @@ func GetHandlersForEvent(handlers []ResolvedHandler, eventType string) []Resolve
 
 	// Stable sort by phase order
 	for i := 1; i < len(matching); i++ {
-		for j := i; j > 0 && phaseOrder[matching[j].Phase] < phaseOrder[matching[j-1].Phase]; j-- {
+		for j := i; j > 0 && phaseOrderMap[matching[j].Phase] < phaseOrderMap[matching[j-1].Phase]; j-- {
 			matching[j], matching[j-1] = matching[j-1], matching[j]
 		}
 	}
@@ -255,7 +269,7 @@ func executeScriptHandler(handler ResolvedHandler, payload HookPayload) HandlerR
 		}
 	}
 
-	return mapToHandlerResult(parsed)
+	return actionToResult(parsed)
 }
 
 // executeInlineHandler evaluates a handler's static action object.
@@ -291,19 +305,3 @@ func actionToResult(action map[string]interface{}) HandlerResult {
 	return result
 }
 
-func mapToHandlerResult(m map[string]interface{}) HandlerResult {
-	result := HandlerResult{}
-	if v, ok := m["decision"].(string); ok {
-		result.Decision = &v
-	}
-	if v, ok := m["reason"].(string); ok {
-		result.Reason = &v
-	}
-	if v, ok := m["additionalContext"].(string); ok {
-		result.AdditionalContext = &v
-	}
-	if v, ok := m["output"].(map[string]interface{}); ok {
-		result.Output = v
-	}
-	return result
-}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // GetStateDir returns the hookwise state directory.
@@ -53,6 +54,26 @@ func AtomicWriteJSON(filePath string, data interface{}) error {
 		return fmt.Errorf("rename: %w", err)
 	}
 	return nil
+}
+
+// timeFormats is the canonical list of time formats tried by ParseTimeFlex.
+var timeFormats = []string{
+	time.RFC3339,
+	"2006-01-02T15:04:05Z",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
+}
+
+// ParseTimeFlex parses a time string trying multiple common formats.
+// Returns the parsed time and nil error on success, or zero time and error if
+// none of the formats match. Callers choose their own fallback behavior.
+func ParseTimeFlex(s string) (time.Time, error) {
+	for _, layout := range timeFormats {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot parse time %q", s)
 }
 
 // SafeReadJSON reads and parses a JSON file, returning the fallback on any error.

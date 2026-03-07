@@ -46,7 +46,7 @@ func Dispatch(eventType string, payload HookPayload, config HooksConfig) Dispatc
 			guardEval := Evaluate(payload.ToolName, payloadAsMap, config.Guards)
 
 			switch guardEval.Action {
-			case "block":
+			case ActionBlock:
 				reason := guardEval.Reason
 				if reason == "" {
 					reason = "Blocked by guard rule"
@@ -54,7 +54,7 @@ func Dispatch(eventType string, payload HookPayload, config HooksConfig) Dispatc
 				stdout := buildPermissionJSON("deny", reason)
 				return &DispatchResult{Stdout: &stdout, ExitCode: 0}
 
-			case "confirm":
+			case ActionConfirm:
 				reason := guardEval.Reason
 				if reason == "" {
 					reason = "Requires confirmation"
@@ -62,7 +62,7 @@ func Dispatch(eventType string, payload HookPayload, config HooksConfig) Dispatc
 				stdout := buildPermissionJSON("ask", reason)
 				return &DispatchResult{Stdout: &stdout, ExitCode: 0}
 
-			case "warn":
+			case ActionWarn:
 				if guardEval.Reason != "" {
 					warnContext = "Guard warning: " + guardEval.Reason
 				}
@@ -106,7 +106,7 @@ func Dispatch(eventType string, payload HookPayload, config HooksConfig) Dispatc
 // Returns nil if no guard blocked.
 func executeGuardPhase(handlers []ResolvedHandler, payload HookPayload) *DispatchResult {
 	for i := range handlers {
-		if handlers[i].Phase != "guard" {
+		if handlers[i].Phase != PhaseGuard {
 			continue
 		}
 
@@ -119,7 +119,7 @@ func executeGuardPhase(handlers []ResolvedHandler, payload HookPayload) *Dispatc
 
 			hr := ExecuteHandler(handlers[i], payload)
 
-			if hr.Decision != nil && *hr.Decision == "block" {
+			if hr.Decision != nil && *hr.Decision == ActionBlock {
 				reason := "Blocked by guard rule"
 				if hr.Reason != nil {
 					reason = *hr.Reason
@@ -145,7 +145,7 @@ func executeContextPhase(handlers []ResolvedHandler, payload HookPayload) string
 	var parts []string
 
 	for i := range handlers {
-		if handlers[i].Phase != "context" {
+		if handlers[i].Phase != PhaseContext {
 			continue
 		}
 
@@ -175,37 +175,22 @@ func executeContextPhase(handlers []ResolvedHandler, payload HookPayload) string
 // Each goroutine has its own defer/recover boundary (ARCH-7).
 // Side effects do NOT block the response.
 func fireSideEffects(handlers []ResolvedHandler, payload HookPayload) {
-	var wg sync.WaitGroup
-
-	for i := range handlers {
-		if handlers[i].Phase != "side_effect" {
-			continue
-		}
-
-		wg.Add(1)
-		go func(h ResolvedHandler) {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					Logger().Error("panic in side-effect handler", "handler", h.Name, "recovered", fmt.Sprintf("%v", r))
-				}
-			}()
-			ExecuteHandler(h, payload)
-		}(handlers[i])
-	}
-
-	// Do NOT wait — side effects are non-blocking.
-	// The goroutines will run and complete on their own.
-	// We use WaitGroup only if callers need synchronization (e.g., tests).
+	runSideEffects(handlers, payload, false)
 }
 
 // FireSideEffectsSync is like fireSideEffects but waits for completion.
 // Used in tests to verify side effects ran without blocking dispatch.
 func FireSideEffectsSync(handlers []ResolvedHandler, payload HookPayload) {
+	runSideEffects(handlers, payload, true)
+}
+
+// runSideEffects is the shared implementation for side-effect execution.
+// If wait is true, blocks until all goroutines complete.
+func runSideEffects(handlers []ResolvedHandler, payload HookPayload, wait bool) {
 	var wg sync.WaitGroup
 
 	for i := range handlers {
-		if handlers[i].Phase != "side_effect" {
+		if handlers[i].Phase != PhaseSideEffect {
 			continue
 		}
 
@@ -221,7 +206,9 @@ func FireSideEffectsSync(handlers []ResolvedHandler, payload HookPayload) {
 		}(handlers[i])
 	}
 
-	wg.Wait()
+	if wait {
+		wg.Wait()
+	}
 }
 
 // --- Output Construction ---
@@ -297,26 +284,23 @@ func buildGuardBlockJSON(reason string) string {
 
 // payloadToMap converts a HookPayload to map[string]interface{} for guard evaluation.
 // This allows field paths like "tool_input.command" to resolve correctly.
+// Uses direct struct field access instead of JSON round-trip for hot-path performance.
 func payloadToMap(payload HookPayload) map[string]interface{} {
-	// Marshal then unmarshal to get a clean map representation
-	// This handles the struct tags correctly
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return map[string]interface{}{}
+	result := make(map[string]interface{}, 3+len(payload.Extra))
+	if payload.SessionID != "" {
+		result["session_id"] = payload.SessionID
 	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return map[string]interface{}{}
+	if payload.ToolName != "" {
+		result["tool_name"] = payload.ToolName
 	}
-
-	// Merge in Extra fields (these are captured by custom UnmarshalJSON if present)
+	if payload.ToolInput != nil {
+		result["tool_input"] = payload.ToolInput
+	}
 	for k, v := range payload.Extra {
 		if _, exists := result[k]; !exists {
 			result[k] = v
 		}
 	}
-
 	return result
 }
 
