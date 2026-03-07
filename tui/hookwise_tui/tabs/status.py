@@ -14,6 +14,7 @@ from textual.widget import Widget
 from textual.widgets import Static, Switch
 
 from hookwise_tui.data import read_cache, read_config, write_config
+from hookwise_tui.tabs.insights import _format_peak_hour
 
 
 # Path where the TS status-line command persists its ANSI-stripped output
@@ -435,16 +436,7 @@ class StatusTab(Widget):
                 tool_names = ", ".join(t.get("name", "") for t in top_tools[:2] if isinstance(t, dict))
                 if not tool_names:
                     return ""
-                # Convert 24h to human-friendly AM/PM label
-                if peak_hour == 0:
-                    peak_label = "12 AM"
-                elif peak_hour < 12:
-                    peak_label = f"{peak_hour} AM"
-                elif peak_hour == 12:
-                    peak_label = "12 PM"
-                else:
-                    peak_label = f"{peak_hour - 12} PM"
-                return f"\U0001f527 Top: {tool_names} | Peak: {peak_label}"
+                return f"\U0001f527 Top: {tool_names} | Peak: {_format_peak_hour(peak_hour)}"
 
         # -- other segments with direct cache entries --
         entry = cache.get(seg)
