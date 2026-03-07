@@ -60,6 +60,23 @@ async def _stabilise_insights(pilot) -> None:
     time.tzset()
 
 
+async def _stabilise_status(pilot) -> None:
+    """Pin the clock segment and preview to fixed content to avoid snapshot flakiness.
+
+    The status tab includes a live clock segment and an auto-refreshing preview
+    that both render time-dependent content, causing spurious mismatches.
+    """
+    os.environ["TZ"] = "UTC"
+    time.tzset()
+    from textual.containers import Container
+    try:
+        preview = pilot.app.query_one("#preview-box", Container)
+        preview.remove_children()
+        preview.mount(Static("[dim]No active session — start Claude Code to see live preview[/dim]"))
+    except NoMatches:
+        pass
+
+
 @pytest.mark.parametrize("tab_id, keys", TAB_SPECS, ids=[t[0] for t in TAB_SPECS])
 def test_tab_snapshot(snap_compare, tab_id, keys):
     """Each TUI tab renders correctly at 80x24."""
@@ -67,6 +84,8 @@ def test_tab_snapshot(snap_compare, tab_id, keys):
         run_before = _stabilise_feeds
     elif tab_id == "insights":
         run_before = _stabilise_insights
+    elif tab_id == "status":
+        run_before = _stabilise_status
     else:
         run_before = None
     assert snap_compare(

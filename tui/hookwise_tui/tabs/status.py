@@ -25,7 +25,7 @@ _LIVE_OUTPUT_MAX_AGE = 60
 
 
 # 5-line default layout (matches TS DEFAULT_TWO_TIER_CONFIG)
-FIXED_LINE_1 = ["context_bar", "mode_badge", "cost", "duration", "daemon_health"]
+FIXED_LINE_1 = ["session", "context_bar", "mode_badge", "cost", "duration", "daemon_health"]
 FIXED_LINE_2 = ["project", "calendar", "weather"]
 FIXED_LINE_3 = ["insights_friction", "insights_pace"]
 FIXED_LINE_4 = ["insights_trend"]
@@ -373,6 +373,15 @@ class StatusTab(Widget):
         # Segments that need live stdin data — skip in cache-only mode
         if seg in STDIN_SEGMENTS:
             return ""
+
+        # -- session segment: shows session ID or active session indicator --
+        if seg == "session":
+            session_entry = cache.get("session")
+            if isinstance(session_entry, dict):
+                sid = session_entry.get("session_id", "")
+                if sid:
+                    return f"\U0001f4bb {sid[:8]}"
+            return "\U0001f4bb session"
 
         # -- mode_badge reads from builder_trap cache entry (not its own key) --
         if seg == "mode_badge":

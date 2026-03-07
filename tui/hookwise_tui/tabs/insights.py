@@ -218,5 +218,9 @@ class InsightsTab(Widget):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "refresh-summary":
             insights = read_insights()
-            generate_insights_summary(insights)
+            summary = generate_insights_summary(insights)
             self._load_summary()
+            if summary and summary.patterns and "Unable to generate" not in summary.patterns:
+                self.notify("Summary refreshed")
+            else:
+                self.notify("Failed to refresh — using cached summary", severity="warning")
