@@ -11,6 +11,7 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -29,8 +30,5 @@ jobs:
         run: |
           go build -ldflags "-X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" ./cmd/hookwise/
 
-      - name: Cross-compile (linux/amd64)
-        run: GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" ./cmd/hookwise/
-
-      - name: Cross-compile (darwin/arm64)
-        run: GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" ./cmd/hookwise/
+      # Cross-compilation removed: Dolt's gozstd dependency requires CGO,
+      # which needs a platform-specific C toolchain unavailable on CI runners.
