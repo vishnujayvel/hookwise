@@ -678,7 +678,59 @@ func TestValidateCacheFormat_TUIFormat_EmptyMap(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 30: FlattenForTUI preserves ttl_seconds from data if present
+// Test 30: Weather producer output -> FlattenForTUI -> Python TUI field names (BP5)
+// ---------------------------------------------------------------------------
+
+func TestFlattenForTUI_WeatherFieldNamesForPythonTUI(t *testing.T) {
+	// Simulate the output from the Go WeatherProducer (BP3/BP4 field names).
+	ts := "2026-03-07T10:00:00Z"
+	merged := map[string]interface{}{
+		"weather": map[string]interface{}{
+			"type":      "weather",
+			"timestamp": ts,
+			"data": map[string]interface{}{
+				"temperature":     float64(72),
+				"temperatureUnit": "fahrenheit",
+				"windSpeed":       float64(5.3),
+				"weatherCode":     float64(0),
+				"emoji":           "\u2600\ufe0f",
+				"description":     "Clear",
+			},
+		},
+	}
+
+	flat := FlattenForTUI(merged)
+
+	weatherEntry, ok := flat["weather"].(map[string]interface{})
+	require.True(t, ok, "weather entry should be a map after flattening")
+
+	// These are the EXACT field names the Python TUI expects in
+	// tui/hookwise_tui/tabs/status.py:_render_segment("weather", ...).
+	assert.Equal(t, float64(72), weatherEntry["temperature"],
+		"Python TUI reads entry.get('temperature')")
+	assert.Equal(t, "fahrenheit", weatherEntry["temperatureUnit"],
+		"Python TUI reads entry.get('temperatureUnit') to decide F vs C")
+	assert.Equal(t, float64(5.3), weatherEntry["windSpeed"],
+		"Python TUI reads entry.get('windSpeed') for wind indicator")
+	assert.Equal(t, "\u2600\ufe0f", weatherEntry["emoji"],
+		"Python TUI reads entry.get('emoji') for weather icon")
+
+	// Verify envelope fields are stripped.
+	assert.NotContains(t, weatherEntry, "type")
+	assert.NotContains(t, weatherEntry, "timestamp")
+	assert.NotContains(t, weatherEntry, "data")
+
+	// Verify TUI metadata is added.
+	assert.Equal(t, ts, weatherEntry["updated_at"])
+	assert.Equal(t, DefaultTTLSeconds, weatherEntry["ttl_seconds"])
+
+	// Also verify additional fields are present.
+	assert.Equal(t, float64(0), weatherEntry["weatherCode"])
+	assert.Equal(t, "Clear", weatherEntry["description"])
+}
+
+// ---------------------------------------------------------------------------
+// Test 31: FlattenForTUI preserves ttl_seconds from data if present
 // ---------------------------------------------------------------------------
 
 func TestFlattenForTUI_PreservesTTLFromData(t *testing.T) {
