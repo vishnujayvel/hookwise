@@ -223,6 +223,8 @@ func TestDaemon_PollFeedWritesCache(t *testing.T) {
 	r.Register(mp)
 
 	d, tmpDir := newTestDaemon(t, r)
+	// Enable the weather feed so the daemon doesn't skip it (BP1).
+	d.feeds.Weather.Enabled = true
 	cacheDir := filepath.Join(tmpDir, "cache")
 	d.SetCacheDir(cacheDir)
 
@@ -516,4 +518,52 @@ func TestDaemon_IntervalFor(t *testing.T) {
 func TestCustomProducer_DefaultTimeout(t *testing.T) {
 	cp := NewCustomProducer("default-timeout", `echo '{"ok":true}'`, 0)
 	assert.Equal(t, 10*time.Second, cp.timeout)
+}
+
+// ---------------------------------------------------------------------------
+// Test 19: Daemon skips disabled feeds (BP1)
+// ---------------------------------------------------------------------------
+
+func TestDaemon_SkipsDisabledFeeds(t *testing.T) {
+	r := NewRegistry()
+
+	// Register two producers: one for an enabled feed, one for a disabled feed.
+	enabledProducer := newMockProducer("pulse", map[string]interface{}{"ok": true})
+	disabledProducer := newMockProducer("weather", map[string]interface{}{"temp": 72})
+	r.Register(enabledProducer)
+	r.Register(disabledProducer)
+
+	d, _ := newTestDaemon(t, r)
+	// Enable pulse, leave weather disabled (zero value = false).
+	d.feeds.Pulse.Enabled = true
+	// Weather.Enabled is false by default (zero value).
+	d.SetStaggerOffset(0)
+
+	require.NoError(t, d.Start())
+	time.Sleep(300 * time.Millisecond)
+	require.NoError(t, d.Stop())
+
+	// Pulse (enabled) should have been called.
+	assert.GreaterOrEqual(t, enabledProducer.callCount.Load(), int64(1),
+		"enabled producer should have been called")
+
+	// Weather (disabled) should NOT have been called.
+	assert.Equal(t, int64(0), disabledProducer.callCount.Load(),
+		"disabled producer should not have been called")
+}
+
+// ---------------------------------------------------------------------------
+// Test 20: Daemon isEnabled — default for unknown feeds is true (fail-open)
+// ---------------------------------------------------------------------------
+
+func TestDaemon_IsEnabled(t *testing.T) {
+	r := NewRegistry()
+	d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{
+		Pulse:   core.PulseFeedConfig{Enabled: true},
+		Weather: core.WeatherFeedConfig{Enabled: false},
+	}, r)
+
+	assert.True(t, d.isEnabled("pulse"), "pulse should be enabled")
+	assert.False(t, d.isEnabled("weather"), "weather should be disabled")
+	assert.True(t, d.isEnabled("unknown-custom-feed"), "unknown feeds default to enabled (fail-open)")
 }

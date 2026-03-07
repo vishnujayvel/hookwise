@@ -9,6 +9,12 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
 
+// ConfigAware is an optional interface that producers can implement to receive
+// the feed configuration before producing data.
+type ConfigAware interface {
+	SetFeedsConfig(cfg core.FeedsConfig)
+}
+
 // defaultInterval is the fallback polling interval when a producer has no
 // explicit configuration.
 const defaultInterval = 60 * time.Second
@@ -65,7 +71,8 @@ func (d *Daemon) runProducer(ctx context.Context, p Producer) {
 }
 
 // runAllFeeds launches goroutines for all registered producers with
-// staggered start times.
+// staggered start times. Producers whose feed is disabled in the config
+// are skipped entirely (BP1).
 func (d *Daemon) runAllFeeds() {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -78,14 +85,26 @@ func (d *Daemon) runAllFeeds() {
 	}()
 
 	producers := d.registry.All()
-	for i, p := range producers {
+	started := 0
+	for _, p := range producers {
+		if !d.isEnabled(p.Name()) {
+			core.Logger().Debug("feeds: skipping disabled producer", "producer", p.Name())
+			continue
+		}
+
+		// Inject config into config-aware producers.
+		if ca, ok := p.(ConfigAware); ok {
+			ca.SetFeedsConfig(d.feeds)
+		}
+
 		interval := d.intervalFor(p.Name())
 		d.wg.Add(1)
 
 		// Stagger start: offset each feed goroutine.
-		if i > 0 && d.staggerOffset > 0 {
+		if started > 0 && d.staggerOffset > 0 {
 			time.Sleep(d.staggerOffset)
 		}
+		started++
 
 		go d.pollFeed(ctx, p, interval)
 	}
@@ -119,4 +138,31 @@ func (d *Daemon) intervalFor(name string) time.Duration {
 		return time.Duration(seconds) * time.Second
 	}
 	return defaultInterval
+}
+
+// isEnabled returns true if the named feed is enabled in the config.
+// Feeds that have no explicit Enabled field default to true (fail-open:
+// unrecognised feeds are also considered enabled).
+func (d *Daemon) isEnabled(name string) bool {
+	switch name {
+	case "pulse":
+		return d.feeds.Pulse.Enabled
+	case "project":
+		return d.feeds.Project.Enabled
+	case "calendar":
+		return d.feeds.Calendar.Enabled
+	case "news":
+		return d.feeds.News.Enabled
+	case "weather":
+		return d.feeds.Weather.Enabled
+	case "practice":
+		return d.feeds.Practice.Enabled
+	case "memories":
+		return d.feeds.Memories.Enabled
+	case "insights":
+		return d.feeds.Insights.Enabled
+	default:
+		// Unknown feeds (custom, etc.) are enabled by default (fail-open).
+		return true
+	}
 }

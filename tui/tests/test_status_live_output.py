@@ -106,6 +106,86 @@ class TestReadLiveOutput:
         assert _LAST_STATUS_OUTPUT_PATH == expected
 
 
+class TestWeatherSegmentFromGoProducer:
+    """BP5: Cross-boundary tests validating Go producer output renders in Python TUI.
+
+    The Go WeatherProducer (internal/feeds/builtin.go) produces data with
+    camelCase field names. After FlattenForTUI, the cache entry has these
+    fields at the top level. The Python TUI's _render_segment("weather", ...)
+    must render them correctly, not show "--".
+    """
+
+    def test_go_weather_fields_render_temperature(self):
+        """Cache data with Go producer field names renders temperature, not '--'."""
+        cache = {
+            "weather": {
+                "temperature": 72,
+                "temperatureUnit": "fahrenheit",
+                "windSpeed": 5.3,
+                "weatherCode": 0,
+                "emoji": "\u2600\ufe0f",
+                "description": "Clear",
+                "updated_at": "2026-03-07T10:00:00Z",
+                "ttl_seconds": 300,
+            }
+        }
+        result = StatusTab._render_segment("weather", cache)
+        assert result is not None
+        assert "--" not in result, "Should render real temp, not placeholder '--'"
+        assert "72" in result, "Should show temperature value"
+        assert "F" in result, "Should show Fahrenheit unit"
+        assert "\u2600\ufe0f" in result, "Should show the emoji"
+
+    def test_go_weather_celsius_renders_c_unit(self):
+        """Celsius unit from Go producer renders as C."""
+        cache = {
+            "weather": {
+                "temperature": 22,
+                "temperatureUnit": "celsius",
+                "windSpeed": 3,
+                "weatherCode": 1,
+                "emoji": "\u26c5",
+                "description": "Partly Cloudy",
+                "updated_at": "2026-03-07T10:00:00Z",
+                "ttl_seconds": 300,
+            }
+        }
+        result = StatusTab._render_segment("weather", cache)
+        assert "22" in result
+        assert "C" in result
+
+    def test_go_weather_high_wind_shows_indicator(self):
+        """Wind speed > 20 from Go producer adds wind indicator."""
+        cache = {
+            "weather": {
+                "temperature": 55,
+                "temperatureUnit": "fahrenheit",
+                "windSpeed": 25,
+                "weatherCode": 61,
+                "emoji": "\U0001f327\ufe0f",
+                "description": "Rain",
+                "updated_at": "2026-03-07T10:00:00Z",
+                "ttl_seconds": 300,
+            }
+        }
+        result = StatusTab._render_segment("weather", cache)
+        assert "\U0001f4a8" in result, "High wind should show wind emoji"
+
+    def test_go_weather_no_temperature_shows_placeholder(self):
+        """Missing temperature from Go producer shows '--'."""
+        cache = {
+            "weather": {
+                "temperatureUnit": "fahrenheit",
+                "windSpeed": 0,
+                "emoji": "\U0001f324\ufe0f",
+                "updated_at": "2026-03-07T10:00:00Z",
+                "ttl_seconds": 300,
+            }
+        }
+        result = StatusTab._render_segment("weather", cache)
+        assert "--" in result, "Missing temperature should show '--'"
+
+
 class TestSegmentHasDataWithLiveOutput:
     """Tests for StatusTab._segment_has_data() with stdin segments."""
 

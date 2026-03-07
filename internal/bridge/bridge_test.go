@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/vishnujayvel/hookwise/internal/feeds"
 )
 
 // ---------------------------------------------------------------------------
@@ -678,7 +679,52 @@ func TestValidateCacheFormat_TUIFormat_EmptyMap(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 30: FlattenForTUI preserves ttl_seconds from data if present
+// Test 30: Weather producer output -> FlattenForTUI -> Python TUI field names (BP5)
+// ---------------------------------------------------------------------------
+
+func TestFlattenForTUI_WeatherFieldNamesForPythonTUI(t *testing.T) {
+	// Use the shared fixture from the feeds package so that field name
+	// renames in WeatherProducer surface as test failures here too.
+	fixture := feeds.WeatherTestFixture()
+	merged := map[string]interface{}{
+		"weather": fixture,
+	}
+
+	flat := FlattenForTUI(merged)
+
+	weatherEntry, ok := flat["weather"].(map[string]interface{})
+	require.True(t, ok, "weather entry should be a map after flattening")
+
+	// Extract expected values from the fixture's data envelope.
+	fixtureData := fixture["data"].(map[string]interface{})
+
+	// These are the EXACT field names the Python TUI expects in
+	// tui/hookwise_tui/tabs/status.py:_render_segment("weather", ...).
+	assert.Equal(t, fixtureData["temperature"], weatherEntry["temperature"],
+		"Python TUI reads entry.get('temperature')")
+	assert.Equal(t, fixtureData["temperatureUnit"], weatherEntry["temperatureUnit"],
+		"Python TUI reads entry.get('temperatureUnit') to decide F vs C")
+	assert.Equal(t, fixtureData["windSpeed"], weatherEntry["windSpeed"],
+		"Python TUI reads entry.get('windSpeed') for wind indicator")
+	assert.Equal(t, fixtureData["emoji"], weatherEntry["emoji"],
+		"Python TUI reads entry.get('emoji') for weather icon")
+
+	// Verify envelope fields are stripped.
+	assert.NotContains(t, weatherEntry, "type")
+	assert.NotContains(t, weatherEntry, "timestamp")
+	assert.NotContains(t, weatherEntry, "data")
+
+	// Verify TUI metadata is added.
+	assert.Equal(t, fixture["timestamp"], weatherEntry["updated_at"])
+	assert.Equal(t, DefaultTTLSeconds, weatherEntry["ttl_seconds"])
+
+	// Also verify additional fields are present.
+	assert.Equal(t, fixtureData["weatherCode"], weatherEntry["weatherCode"])
+	assert.Equal(t, fixtureData["description"], weatherEntry["description"])
+}
+
+// ---------------------------------------------------------------------------
+// Test 31: FlattenForTUI preserves ttl_seconds from data if present
 // ---------------------------------------------------------------------------
 
 func TestFlattenForTUI_PreservesTTLFromData(t *testing.T) {
