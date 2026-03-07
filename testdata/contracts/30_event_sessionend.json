@@ -1,0 +1,14 @@
+{
+  "name": "SessionEnd event produces no stdout",
+  "event_type": "SessionEnd",
+  "config": {
+    "guards": []
+  },
+  "stdin": {
+    "session_id": "contract-session-030",
+    "tool_name": "",
+    "tool_input": {}
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

@@ -1,0 +1,24 @@
+{
+  "name": "PreToolUse block with == operator",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Production mode is blocked",
+        "when": "tool_input.mode == \"production\""
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-009",
+    "tool_name": "Bash",
+    "tool_input": {
+      "mode": "production",
+      "command": "deploy.sh"
+    }
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Production mode is blocked\"}}",
+  "expected_exit_code": 0
+}

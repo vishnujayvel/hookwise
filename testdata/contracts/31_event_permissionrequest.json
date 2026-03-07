@@ -1,0 +1,14 @@
+{
+  "name": "PermissionRequest event produces no stdout",
+  "event_type": "PermissionRequest",
+  "config": {
+    "guards": []
+  },
+  "stdin": {
+    "session_id": "contract-session-031",
+    "tool_name": "",
+    "tool_input": {}
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

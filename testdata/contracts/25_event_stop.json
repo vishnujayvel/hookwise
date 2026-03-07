@@ -1,0 +1,14 @@
+{
+  "name": "Stop event produces no stdout",
+  "event_type": "Stop",
+  "config": {
+    "guards": []
+  },
+  "stdin": {
+    "session_id": "contract-session-025",
+    "tool_name": "",
+    "tool_input": {}
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

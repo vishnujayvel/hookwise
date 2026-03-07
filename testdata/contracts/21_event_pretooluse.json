@@ -1,0 +1,22 @@
+{
+  "name": "PreToolUse event type with block guard",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Write",
+        "action": "block",
+        "reason": "Write is blocked"
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-021",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "/tmp/test.txt"
+    }
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Write is blocked\"}}",
+  "expected_exit_code": 0
+}

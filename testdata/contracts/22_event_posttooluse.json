@@ -1,0 +1,20 @@
+{
+  "name": "PostToolUse event produces no stdout (guards only apply to PreToolUse)",
+  "event_type": "PostToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Should not apply to PostToolUse"
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-022",
+    "tool_name": "Bash",
+    "tool_input": {}
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

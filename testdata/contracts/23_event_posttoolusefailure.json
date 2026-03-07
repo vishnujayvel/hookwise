@@ -1,0 +1,14 @@
+{
+  "name": "PostToolUseFailure event produces no stdout",
+  "event_type": "PostToolUseFailure",
+  "config": {
+    "guards": []
+  },
+  "stdin": {
+    "session_id": "contract-session-023",
+    "tool_name": "Bash",
+    "tool_input": {}
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

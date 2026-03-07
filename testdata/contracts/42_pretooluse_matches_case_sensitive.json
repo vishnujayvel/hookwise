@@ -1,0 +1,24 @@
+{
+  "name": "PreToolUse matches operator is case-sensitive (no match on uppercase)",
+  "description": "The matches operator uses case-sensitive regex. Uppercase input should not match lowercase pattern.",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "rm command blocked",
+        "when": "tool_input.command matches \"rm\\s+-rf\""
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-042",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "RM -RF /tmp"
+    }
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

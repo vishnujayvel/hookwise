@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Build
+        run: |
+          go build -ldflags "-X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" ./cmd/hookwise/
+
+      # Cross-compilation removed: Dolt's gozstd dependency requires CGO,
+      # which needs a platform-specific C toolchain unavailable on CI runners.

@@ -1,0 +1,21 @@
+{
+  "name": "Unrecognized event type produces no stdout (ARCH-1 fail-open)",
+  "description": "Per ARCH-1, unrecognized event types return exit 0 with no stdout.",
+  "event_type": "CompletelyMadeUpEvent",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Should never fire"
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-040",
+    "tool_name": "Bash",
+    "tool_input": {}
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

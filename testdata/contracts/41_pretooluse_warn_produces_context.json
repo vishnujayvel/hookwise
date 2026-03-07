@@ -1,0 +1,23 @@
+{
+  "name": "PreToolUse warn action produces additionalContext output",
+  "description": "A warn guard action does not block, but injects context via additionalContext.",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "warn",
+        "reason": "Be careful with bash commands"
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-041",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo hello"
+    }
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"additionalContext\":\"Guard warning: Be careful with bash commands\"}}",
+  "expected_exit_code": 0
+}

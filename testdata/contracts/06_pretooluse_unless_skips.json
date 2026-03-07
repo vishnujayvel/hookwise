@@ -1,0 +1,23 @@
+{
+  "name": "PreToolUse allow when unless condition is true (starts_with operator)",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Bash is blocked",
+        "unless": "tool_input.command starts_with \"ls\""
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-006",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "ls -la /home"
+    }
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

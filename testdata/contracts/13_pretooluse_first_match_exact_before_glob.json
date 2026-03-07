@@ -1,0 +1,26 @@
+{
+  "name": "PreToolUse first-match-wins: exact block before glob warn",
+  "description": "When a specific Bash block rule precedes a broad glob(*) warn rule, the exact match wins and produces a deny.",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Bash specifically blocked"
+      },
+      {
+        "match": "*",
+        "action": "warn",
+        "reason": "Global warning for all tools"
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-013",
+    "tool_name": "Bash",
+    "tool_input": {}
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash specifically blocked\"}}",
+  "expected_exit_code": 0
+}
