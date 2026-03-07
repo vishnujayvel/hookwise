@@ -204,8 +204,15 @@ func ValidateCacheFormat(data map[string]interface{}) error {
 		if _, ok := entry["updated_at"].(string); !ok {
 			return fmt.Errorf("bridge: entry %q field \"updated_at\" is not a string", key)
 		}
-		if _, ok := entry["ttl_seconds"]; !ok {
+		ttl, hasTTL := entry["ttl_seconds"]
+		if !hasTTL {
 			return fmt.Errorf("bridge: entry %q missing required field \"ttl_seconds\"", key)
+		}
+		switch ttl.(type) {
+		case int, float64, json.Number:
+			// valid numeric types
+		default:
+			return fmt.Errorf("bridge: entry %q field \"ttl_seconds\" is not a number (got %T)", key, ttl)
 		}
 	}
 

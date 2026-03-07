@@ -236,9 +236,11 @@ func buildPermissionJSON(decision, reason string) string {
 
 	b, err := json.Marshal(data)
 	if err != nil {
-		// Should never happen — fallback
+		// Should never happen — fallback with properly escaped values.
 		Logger().Error("failed to marshal permission JSON", "error", err)
-		return fmt.Sprintf(`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%s"}}`, decision, reason)
+		safeDecision, _ := json.Marshal(decision)
+		safeReason, _ := json.Marshal(reason)
+		return fmt.Sprintf(`{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":%s,"permissionDecisionReason":%s}}`, safeDecision, safeReason)
 	}
 	return string(b)
 }

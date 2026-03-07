@@ -1,6 +1,6 @@
 # Hookwise Roadmap
 
-hookwise is a developer-tool framework that wraps Claude Code with composable hooks, a feed-backed status line, coaching nudges, and a Textual TUI dashboard. It shipped its first public release (v1.3) on 2026-03-03. This roadmap covers the known bugs from that launch, the planned versions through v2.0, and the principles that govern what gets prioritized.
+hookwise is a developer-tool framework that wraps Claude Code with composable hooks, a feed-backed status line, coaching nudges, and a Textual TUI dashboard. The core engine is written in Go with a Dolt-backed data layer; the TUI is a Python Textual application. It shipped its first public release (v1.3) on 2026-03-03. This roadmap covers the known bugs from that launch, the planned versions through v2.0, and the principles that govern what gets prioritized.
 
 For architecture context, see [architecture.md](architecture.md). For design philosophy, see [philosophy.md](philosophy.md).
 
@@ -32,7 +32,7 @@ These seven bugs were identified in the v1.3 post-launch retrospective. None cra
 
 **Bug #167 — AI authorship metric is meaningless.** The timing-based heuristic uses hardcoded thresholds with no empirical basis, no calibration data, and no ground-truth validation. The in-memory prompt cache resets on process restart, defaulting all scores to 0.30 regardless of actual behavior. Displaying it with a progress bar implies precision that does not exist. This metric should be removed from all user-facing surfaces until it can be properly validated.
 
-**Bug #168 — Status Line tab does not configure anything.** The tab is titled "Segment Configurator" but yields only `Static` and `Container` widgets. It hardcodes 9 default segments while the TypeScript backend supports 20 built-in segments with a two-tier layout the TUI is completely unaware of.
+**Bug #168 — Status Line tab does not configure anything.** The tab is titled "Segment Configurator" but yields only `Static` and `Container` widgets. It hardcodes 9 default segments while the Go backend supports 20 built-in segments with a two-tier layout the TUI is completely unaware of.
 
 ---
 
@@ -105,7 +105,7 @@ These seven bugs were identified in the v1.3 post-launch retrospective. None cra
 - **Team analytics (opt-in).** Aggregate insights across team members who opt in. See team-wide patterns: which guards fire most often, average session duration, common tool usage. All data stays local unless explicitly shared.
 - **VS Code / Cursor extension.** Native IDE integration that surfaces the hookwise status line in the editor sidebar, shows guard decisions in real time, and provides a GUI for editing `hookwise.yaml`. Replaces the need to run the TUI in a separate terminal.
 - **Webhook notifications.** Slack and Discord integration for alerts. Get notified when a guard blocks a dangerous operation, when a session exceeds a cost threshold, or when the daemon detects an anomaly. Configurable per-channel with severity filters.
-- **Plugin API for custom feed producers.** A stable public API for writing custom feed producers that plug into the cache bus. Third parties can create producers for any data source (Jira tickets, CI status, deployment health) and distribute them as npm packages.
+- **Plugin API for custom feed producers.** A stable public API for writing custom feed producers that plug into the cache bus. Third parties can create producers for any data source (Jira tickets, CI status, deployment health) and distribute them as Go modules.
 
 ---
 

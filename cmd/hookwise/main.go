@@ -98,6 +98,9 @@ func newDispatchCmd() *cobra.Command {
 			if result.Stdout != nil {
 				fmt.Print(*result.Stdout)
 			}
+			// Brief grace period for side-effect goroutines (analytics, coaching)
+			// to finish before the process exits.
+			time.Sleep(50 * time.Millisecond)
 			os.Exit(result.ExitCode)
 			return nil
 		},
@@ -369,9 +372,12 @@ func renderNotificationSegment() string {
 		ansiYellow, len(unsurfaced), pluralS(len(unsurfaced)), ansiReset,
 		ansiGray, content, ansiReset)
 
-	// Mark them as surfaced.
+	// Mark as surfaced (write side-effect during render; intentional since
+	// this is the only moment we know the user saw the notification).
 	for _, n := range unsurfaced {
-		_ = ns.MarkSurfaced(ctx, n.ID)
+		if err := ns.MarkSurfaced(ctx, n.ID); err != nil {
+			core.Logger().Warn("failed to mark notification surfaced", "id", n.ID, "error", err)
+		}
 	}
 
 	return segment

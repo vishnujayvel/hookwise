@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -494,9 +493,6 @@ func TestDispatch_SideEffects_DontBlockResponse(t *testing.T) {
 }
 
 func TestFireSideEffectsSync_RunsHandlers(t *testing.T) {
-	// Use a channel to verify the handler ran
-	var ran atomic.Bool
-
 	handlers := []ResolvedHandler{
 		{
 			Name:        "test-side-effect",
@@ -509,14 +505,12 @@ func TestFireSideEffectsSync_RunsHandlers(t *testing.T) {
 		},
 	}
 
-	// Modify approach: just verify the function completes without panic
-	ran.Store(false)
-
-	FireSideEffectsSync(handlers, HookPayload{SessionID: "test"})
-
-	// If we got here, the side effects ran without blocking
-	// (the actual handler result is discarded for side effects)
-	assert.True(t, true, "side effects completed without panic")
+	// Verify the function completes without panic.
+	// FireSideEffectsSync discards return values, so reaching this point
+	// without panic is the assertion.
+	require.NotPanics(t, func() {
+		FireSideEffectsSync(handlers, HookPayload{SessionID: "test"})
+	})
 }
 
 func TestFireSideEffects_PanicRecovery(t *testing.T) {

@@ -24,6 +24,7 @@ func TestReadCoachingState_DefaultsWhenEmpty(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+	expectedDate := time.Now().Format("2006-01-02")
 	state, err := db.ReadCoachingState(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, state)
@@ -36,8 +37,7 @@ func TestReadCoachingState_DefaultsWhenEmpty(t *testing.T) {
 	assert.Nil(t, state.ModeStartedAt)
 	assert.Nil(t, state.PromptHistory)
 	assert.Nil(t, state.LastLargeChange)
-	// TodayDate should be today's date.
-	assert.Equal(t, time.Now().Format("2006-01-02"), state.TodayDate)
+	assert.Equal(t, expectedDate, state.TodayDate)
 }
 
 // Test 2: WriteCoachingState + ReadCoachingState roundtrip
@@ -204,11 +204,12 @@ func TestReadCostState_DefaultsWhenEmpty(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
+	expectedDate := time.Now().Format("2006-01-02")
 	state, err := db.ReadCostState(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, state)
 
-	assert.Equal(t, time.Now().Format("2006-01-02"), state.Today)
+	assert.Equal(t, expectedDate, state.Today)
 	assert.Equal(t, float64(0), state.TotalToday)
 	assert.NotNil(t, state.DailyCosts)
 	assert.NotNil(t, state.SessionCosts)
@@ -273,10 +274,11 @@ func TestCostState_DateBoundaryReset(t *testing.T) {
 	require.NoError(t, db.WriteCostState(ctx, state))
 
 	// Reading should detect the date boundary and reset TotalToday.
+	expectedDate := time.Now().Format("2006-01-02")
 	loaded, err := db.ReadCostState(ctx)
 	require.NoError(t, err)
 
-	assert.Equal(t, time.Now().Format("2006-01-02"), loaded.Today)
+	assert.Equal(t, expectedDate, loaded.Today)
 	assert.Equal(t, float64(0), loaded.TotalToday, "TotalToday should be reset on date boundary")
 	// DailyCosts and SessionCosts are preserved.
 	assert.InDelta(t, 5.00, loaded.DailyCosts[yesterday], 0.01)

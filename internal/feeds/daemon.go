@@ -97,7 +97,10 @@ func (d *Daemon) Start() error {
 		os.Remove(d.pidFile)
 		return fmt.Errorf("feeds: write pid: %w", err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		os.Remove(d.pidFile)
+		return fmt.Errorf("feeds: close pid file: %w", err)
+	}
 
 	d.stopCh = make(chan struct{})
 

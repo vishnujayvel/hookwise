@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,15 +34,10 @@ func TestVersionOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Should contain the version, commit, and build date variables.
-	if !strings.Contains(output, version) {
-		t.Errorf("version output should contain version=%q, got: %s", version, output)
-	}
-	if !strings.Contains(output, commit) {
-		t.Errorf("version output should contain commit=%q, got: %s", commit, output)
-	}
-	if !strings.Contains(output, buildDate) {
-		t.Errorf("version output should contain buildDate=%q, got: %s", buildDate, output)
+	// Verify the exact version format: "hookwise version X (commit: Y, built: Z)"
+	expected := fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, buildDate)
+	if !strings.Contains(output, expected) {
+		t.Errorf("version output should contain %q, got: %s", expected, output)
 	}
 }
 

@@ -148,7 +148,10 @@ func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB
 	defer rows.Close()
 
 	count := 0
-	a := analytics.NewAnalytics(doltDB)
+	var a *analytics.Analytics
+	if !dryRun {
+		a = analytics.NewAnalytics(doltDB)
+	}
 	for rows.Next() {
 		var (
 			id         string
@@ -166,14 +169,22 @@ func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB
 		}
 
 		if !dryRun {
-			startTime := parseTimeFlexible(startedAt)
+			startTime, parseErr := parseTimeFlexible(startedAt)
+			if parseErr != nil {
+				errs = append(errs, fmt.Sprintf("session %s: invalid started_at %q: %v", id, startedAt, parseErr))
+				continue
+			}
 			if err := a.StartSession(ctx, id, startTime); err != nil {
 				errs = append(errs, fmt.Sprintf("inserting session %s: %v", id, err))
 				continue
 			}
 
 			if endedAt.Valid && endedAt.String != "" {
-				endTime := parseTimeFlexible(endedAt.String)
+				endTime, parseErr := parseTimeFlexible(endedAt.String)
+				if parseErr != nil {
+					errs = append(errs, fmt.Sprintf("session %s: invalid ended_at %q: %v", id, endedAt.String, parseErr))
+					continue
+				}
 				stats := analytics.SessionStats{
 					TotalToolCalls:     int(toolCalls.Int64),
 					FileEditsCount:     int(fileEdits.Int64),
@@ -217,7 +228,10 @@ func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, 
 	defer rows.Close()
 
 	count := 0
-	a := analytics.NewAnalytics(doltDB)
+	var a *analytics.Analytics
+	if !dryRun {
+		a = analytics.NewAnalytics(doltDB)
+	}
 	for rows.Next() {
 		var (
 			sessionID string
@@ -235,10 +249,15 @@ func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, 
 		}
 
 		if !dryRun {
+			ts, parseErr := parseTimeFlexible(timestamp)
+			if parseErr != nil {
+				errs = append(errs, fmt.Sprintf("event for session %s: invalid timestamp %q: %v", sessionID, timestamp, parseErr))
+				continue
+			}
 			event := analytics.EventRecord{
 				EventType:         eventType,
 				ToolName:          toolName.String,
-				Timestamp:         parseTimeFlexible(timestamp),
+				Timestamp:         ts,
 				FilePath:          filePath.String,
 				LinesAdded:        int(linesAdd.Int64),
 				LinesRemoved:      int(linesRem.Int64),
@@ -278,7 +297,10 @@ func migrateAuthorship(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.
 	defer rows.Close()
 
 	count := 0
-	a := analytics.NewAnalytics(doltDB)
+	var a *analytics.Analytics
+	if !dryRun {
+		a = analytics.NewAnalytics(doltDB)
+	}
 	for rows.Next() {
 		var (
 			sessionID    string
@@ -294,13 +316,18 @@ func migrateAuthorship(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.
 		}
 
 		if !dryRun {
+			ts, parseErr := parseTimeFlexible(timestamp)
+			if parseErr != nil {
+				errs = append(errs, fmt.Sprintf("authorship for session %s: invalid timestamp %q: %v", sessionID, timestamp, parseErr))
+				continue
+			}
 			entry := analytics.AuthorshipEntry{
 				SessionID:    sessionID,
 				FilePath:     filePath,
 				ToolName:     toolName,
 				LinesChanged: linesChanged,
 				AIScore:      aiScore,
-				Timestamp:    parseTimeFlexible(timestamp),
+				Timestamp:    ts,
 			}
 			if err := a.RecordAuthorship(ctx, entry); err != nil {
 				errs = append(errs, fmt.Sprintf("inserting authorship for session %s: %v", sessionID, err))
@@ -539,11 +566,8 @@ func Run(opts MigrationOpts) MigrationResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// parseTimeFlexible delegates to core.ParseTimeFlex, falling back to time.Now().
-func parseTimeFlexible(s string) time.Time {
-	t, err := core.ParseTimeFlex(s)
-	if err != nil {
-		return time.Now()
-	}
-	return t
+// parseTimeFlexible delegates to core.ParseTimeFlex. Returns an error if
+// the timestamp cannot be parsed, rather than silently using time.Now().
+func parseTimeFlexible(s string) (time.Time, error) {
+	return core.ParseTimeFlex(s)
 }

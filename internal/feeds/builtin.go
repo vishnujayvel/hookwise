@@ -21,7 +21,8 @@ func (p *PulseProducer) Produce(_ context.Context) (interface{}, error) {
 		"data": map[string]interface{}{
 			"session_count":   0,
 			"active_sessions": 0,
-			"recent_activity": "No recent activity",
+			"recent_activity": "No recent activity (placeholder)",
+			"source":          "placeholder",
 		},
 	}, nil
 }
@@ -35,10 +36,11 @@ func (p *ProjectProducer) Produce(_ context.Context) (interface{}, error) {
 		"type":      "project",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
-			"name":        "unknown",
+			"name":        "unknown (placeholder)",
 			"branch":      "main",
 			"last_commit": "n/a",
 			"dirty":       false,
+			"source":      "placeholder",
 		},
 	}, nil
 }
@@ -75,6 +77,7 @@ func (p *CalendarProducer) Produce(_ context.Context) (interface{}, error) {
 		"data": map[string]interface{}{
 			"events":     []interface{}{},
 			"next_event": nil,
+			"source":     "placeholder",
 		},
 	}, nil
 }
@@ -88,11 +91,12 @@ func (p *WeatherProducer) Produce(_ context.Context) (interface{}, error) {
 		"type":      "weather",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
-			"temperature":  0,
-			"unit":         "F",
-			"condition":    "unknown",
-			"humidity":     0,
-			"wind_speed":   0,
+			"temperature": 0,
+			"unit":        "F",
+			"condition":   "unknown (placeholder)",
+			"humidity":    0,
+			"wind_speed":  0,
+			"source":      "placeholder",
 		},
 	}, nil
 }
@@ -110,6 +114,7 @@ func (p *PracticeProducer) Produce(_ context.Context) (interface{}, error) {
 			"streak_days":      0,
 			"last_practice_at": nil,
 			"focus_area":       "none",
+			"source":           "placeholder",
 		},
 	}, nil
 }
@@ -125,6 +130,7 @@ func (p *MemoriesProducer) Produce(_ context.Context) (interface{}, error) {
 		"data": map[string]interface{}{
 			"recent_memories": []interface{}{},
 			"total_count":     0,
+			"source":          "placeholder",
 		},
 	}, nil
 }
@@ -141,6 +147,7 @@ func (p *InsightsProducer) Produce(_ context.Context) (interface{}, error) {
 			"productivity_score": 0,
 			"suggestions":       []interface{}{},
 			"staleness_days":    0,
+			"source":            "placeholder",
 		},
 	}, nil
 }

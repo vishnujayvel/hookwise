@@ -33,6 +33,9 @@ func NewRegistry() *Registry {
 func (r *Registry) Register(p Producer) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.producers == nil {
+		r.producers = make(map[string]Producer)
+	}
 	r.producers[p.Name()] = p
 }
 

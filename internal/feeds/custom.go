@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"syscall"
 	"time"
 )
 
@@ -42,6 +43,11 @@ func (p *CustomProducer) Produce(ctx context.Context) (interface{}, error) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", p.command)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		// Kill the entire process group so child processes are cleaned up.
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

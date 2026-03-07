@@ -16,80 +16,80 @@ This document defines what hookwise controls and what it does not. It exists for
 
 | Component | Source Files | Description |
 |-----------|-------------|-------------|
-| `hookwise.yaml` config | `src/core/config.ts` | Project-level and global YAML configuration with deep merge, env var interpolation, snake_case/camelCase conversion |
-| Config validation | `src/core/config.ts` (`validateConfig`) | Structural validation of all 14 top-level sections with path-based error reporting |
-| Config write-back | `src/core/config.ts` (`saveConfig`) | Atomic YAML serialization (temp file + rename) |
-| Recipe system | `src/core/recipes.ts` | Load, validate, and merge recipes from `recipes/` directories (12 built-in across 6 categories: safety, quality, productivity, behavioral, compliance, gamification) |
-| Include resolution | `src/core/config.ts` (`resolveIncludes`) | Merge included YAML files and recipe directories into the base config |
-| Config migration | `src/core/config.ts` (`applyV010Compat`) | v0.1.0 backward compatibility transforms (Python-era `.py` script references) |
+| `hookwise.yaml` config | `internal/core/config.go` | Project-level and global YAML configuration (gopkg.in/yaml.v3) with deep merge, env var interpolation, snake_case/camelCase conversion |
+| Config validation | `internal/core/config.go` (`ValidateConfig`) | Structural validation of all 14 top-level sections with path-based error reporting |
+| Config write-back | `internal/core/config.go` (`SaveConfig`) | Atomic YAML serialization (temp file + rename) |
+| Recipe system | `internal/core/recipes.go` | Load, validate, and merge recipes from `recipes/` directories (12 built-in across 6 categories: safety, quality, productivity, behavioral, compliance, gamification) |
+| Include resolution | `internal/core/config.go` (`ResolveIncludes`) | Merge included YAML files and recipe directories into the base config |
+| Config migration | `internal/core/config.go` (`ApplyV010Compat`) | v0.1.0 backward compatibility transforms (Python-era `.py` script references) |
 
 ### Execution Layer
 
 | Component | Source Files | Description |
 |-----------|-------------|-------------|
-| Three-phase dispatcher | `src/core/dispatcher.ts` | Entry point for all 13 Claude Code hook events: Guards -> Context Injection -> Side Effects |
-| Guard evaluation | `src/core/guards.ts` | First-match-wins firewall rules with glob matching (picomatch), 6 condition operators (`contains`, `starts_with`, `ends_with`, `==`, `equals`, `matches`), `when`/`unless` clauses |
-| Handler execution | `src/core/dispatcher.ts` | Executes builtin, script (child_process.spawnSync), and inline handler types with timeout enforcement |
-| Context injection | `src/core/dispatcher.ts` (`executeContextPhase`) | Merges `additionalContext` strings from context-phase handlers into hook output |
-| Greeting | `src/core/greeting.ts` | Weighted random quote selection from configured categories or custom quotes file |
-| Metacognition prompts | `src/core/coaching/metacognition.ts` | Time-based and behavioral-trigger reminders (rapid acceptance detection, builder's trap alerts) |
-| Communication coaching | `src/core/coaching/communication.ts` | Grammar analysis and communication style nudges |
-| Builder's trap detection | `src/core/coaching/builder-trap.ts` | Mode classification (tooling vs. practice), time accumulation, alert level computation |
+| Three-phase dispatcher | `internal/core/dispatcher.go` | Entry point for all 13 Claude Code hook events: Guards -> Context Injection -> Side Effects |
+| Guard evaluation | `internal/core/guards.go` | First-match-wins firewall rules with glob matching (gobwas/glob), 6 condition operators (`contains`, `starts_with`, `ends_with`, `==`, `equals`, `matches`), `when`/`unless` clauses |
+| Handler execution | `internal/core/dispatcher.go` | Executes builtin, script (os/exec), and inline handler types with timeout enforcement |
+| Context injection | `internal/core/dispatcher.go` (`executeContextPhase`) | Merges `additionalContext` strings from context-phase handlers into hook output |
+| Greeting | `internal/core/greeting.go` | Weighted random quote selection from configured categories or custom quotes file |
+| Metacognition prompts | `internal/core/metacognition.go` | Time-based and behavioral-trigger reminders (rapid acceptance detection, builder's trap alerts) |
+| Communication coaching | `internal/core/communication.go` | Grammar analysis and communication style nudges |
+| Builder's trap detection | `internal/core/builder_trap.go` | Mode classification (tooling vs. practice), time accumulation, alert level computation |
 
 ### Data Layer
 
 | Component | Source Files | Description |
 |-----------|-------------|-------------|
-| Analytics SQLite DB | `src/core/analytics/db.ts` | Session tracking, tool call logging, authorship ledger (`~/.hookwise/analytics.db`) |
-| Analytics engine | `src/core/analytics/session.ts` | Session start/end lifecycle, event recording |
-| Stats queries | `src/core/analytics/stats.ts` | Daily summaries, tool breakdowns, authorship summaries |
-| Coaching state | `src/core/coaching/` | JSON-based session state for metacognition intervals and builder's trap mode tracking |
-| Cache bus | `src/core/feeds/cache-bus.ts` | Filesystem-based inter-process communication via atomic JSON reads/writes with per-key TTL |
-| Transcript backup | `src/core/transcript.ts` | Timestamped JSON files of hook payloads with max directory size enforcement |
-| Cost state | `src/core/cost.ts` | Per-session and daily cost accumulation with budget enforcement |
-| Agent spans | `src/core/agents.ts` | Multi-agent lifecycle tracking in SQLite, file conflict detection, Mermaid diagram generation |
+| Analytics Dolt DB | `internal/analytics/db.go` | Session tracking, tool call logging, authorship ledger (`~/.hookwise/dolt/`) |
+| Analytics engine | `internal/analytics/session.go` | Session start/end lifecycle, event recording |
+| Stats queries | `internal/analytics/stats.go` | Daily summaries, tool breakdowns, authorship summaries |
+| Coaching state | `internal/core/` | JSON-based session state for metacognition intervals and builder's trap mode tracking |
+| Cache bus | `internal/feeds/cache_bus.go` | Filesystem-based inter-process communication via atomic JSON reads/writes with per-key TTL |
+| Transcript backup | `internal/core/transcript.go` | Timestamped JSON files of hook payloads with max directory size enforcement |
+| Cost state | `internal/core/cost.go` | Per-session and daily cost accumulation with budget enforcement |
+| Agent spans | `internal/core/agents.go` | Multi-agent lifecycle tracking in Dolt, file conflict detection, Mermaid diagram generation |
 
 ### Display Layer
 
 | Component | Source Files | Description |
 |-----------|-------------|-------------|
-| Status line segments | `src/core/status-line/segments.ts` | 20 built-in segment renderers, each a pure function `(cache, config) => string` |
-| Two-tier renderer | `src/core/status-line/two-tier.ts` | Line 1 (fixed: context_bar, mode_badge, cost, duration) + Line 2 (rotating: 9 contextual feeds) |
-| ANSI color system | `src/core/status-line/ansi.ts` | Conditional ANSI colorization for segment output |
+| Status line segments | `internal/core/segments.go` | 20 built-in segment renderers, each a pure function `(cache, config) => string` |
+| Two-tier renderer | `internal/core/two_tier.go` | Line 1 (fixed: context_bar, mode_badge, cost, duration) + Line 2 (rotating: 9 contextual feeds) |
+| ANSI color system | `internal/core/ansi.go` | Conditional ANSI colorization for segment output |
 | TUI application | `tui/hookwise_tui/` | 8-tab Python Textual app (Dashboard, Guards, Coaching, Analytics, Status, Feeds, Insights, Recipes) with custom widgets (FeatureCard, FeedHealth, Sparkline) |
-| TUI launcher | `src/core/tui-launcher.ts` | Detached process spawning with PID-based duplicate prevention, macOS Terminal.app integration |
+| TUI launcher | `internal/core/tui_launcher.go` | Detached process spawning (os/exec with SysProcAttr) with PID-based duplicate prevention, macOS Terminal.app integration |
 
 ### Feed Platform
 
 | Component | Source Files | Description |
 |-----------|-------------|-------------|
-| Feed registry | `src/core/feeds/registry.ts` | Map-backed registration and lookup for feed definitions with duplicate rejection |
-| Daemon process | `src/core/feeds/daemon-process.ts` | Background Node.js process that polls producers on staggered intervals |
-| Daemon manager | `src/core/feeds/daemon-manager.ts` | Start/stop/status lifecycle management with PID file (signal 0 liveness checks) |
-| 8 built-in producers | `src/core/feeds/producers/` | pulse (30s), project (60s), calendar (5m), news (30m), insights (2m), practice (2m), weather (10m), memories (1h) |
-| Custom feed producer | `src/core/feeds/registry.ts` (`createCommandProducer`) | Wraps user-authored shell commands as feed producers |
+| Feed registry | `internal/feeds/registry.go` | Map-backed registration and lookup for feed definitions with duplicate rejection |
+| Daemon process | `internal/feeds/daemon_process.go` | Background Go process that polls producers on staggered intervals |
+| Daemon manager | `internal/feeds/daemon_manager.go` | Start/stop/status lifecycle management with PID file (signal 0 liveness checks) |
+| 8 built-in producers | `internal/feeds/producers/` | pulse (30s), project (60s), calendar (5m), news (30m), insights (2m), practice (2m), weather (10m), memories (1h) |
+| Custom feed producer | `internal/feeds/registry.go` (`CreateCommandProducer`) | Wraps user-authored shell commands as feed producers |
 
 ### CLI Layer
 
 | Component | Source Files | Description |
 |-----------|-------------|-------------|
-| `hookwise init` | CLI commands | Initialize hookwise.yaml and register hooks in settings.json |
-| `hookwise doctor` | CLI commands | Validate config, check dependencies, verify hook registration |
-| `hookwise status` | CLI commands | Show current status line output |
-| `hookwise stats` | CLI commands | Query and display analytics data |
-| `hookwise test` | CLI commands | Run guard rules against test scenarios |
-| `hookwise daemon` | `src/cli/commands/daemon.ts` | Start/stop/status for the feed daemon |
-| `hookwise setup` | `src/cli/commands/setup.ts` | Configure external integrations (Google Calendar OAuth) |
-| `hookwise tui` | CLI commands | Launch the TUI application |
-| `hookwise migrate` | CLI commands | Migrate config between versions |
+| `hookwise init` | `cmd/hookwise/main.go` | Initialize hookwise.yaml and register hooks in settings.json |
+| `hookwise doctor` | `cmd/hookwise/main.go` | Validate config, check dependencies, verify hook registration |
+| `hookwise status` | `cmd/hookwise/main.go` | Show current status line output |
+| `hookwise stats` | `cmd/hookwise/main.go` | Query and display analytics data |
+| `hookwise test` | `cmd/hookwise/main.go` | Run guard rules against test scenarios |
+| `hookwise daemon` | `cmd/hookwise/main.go` | Start/stop/status for the feed daemon |
+| `hookwise setup` | `cmd/hookwise/main.go` | Configure external integrations (Google Calendar OAuth) |
+| `hookwise tui` | `cmd/hookwise/main.go` | Launch the TUI application |
+| `hookwise migrate` | `cmd/hookwise/main.go` | Migrate config between versions |
 
 ### Testing Utilities
 
 | Component | Source Files | Description |
 |-----------|-------------|-------------|
-| HookRunner | `src/testing/hook-runner.ts` | Programmatic hook dispatch for integration tests |
-| HookResult | `src/testing/hook-result.ts` | Structured assertion helpers for dispatch results |
-| GuardTester | `src/testing/guard-tester.ts` | Fluent API for testing guard rule evaluation |
+| HookRunner | `pkg/hookwise/testing/hook_runner.go` | Programmatic hook dispatch for integration tests |
+| HookResult | `pkg/hookwise/testing/hook_result.go` | Structured assertion helpers for dispatch results |
+| GuardTester | `pkg/hookwise/testing/guard_tester.go` | Fluent API for testing guard rule evaluation |
 
 ---
 
@@ -125,7 +125,7 @@ This document defines what hookwise controls and what it does not. It exists for
 | Other coding agents | The `AgentObserver` tracks sub-agent lifecycle spans for observability but does not start, stop, configure, or communicate with external agents (Gemini, Codex, Cursor agents). |
 | IDE/editor state | Hookwise has no VS Code, Cursor, or JetBrains extension. It operates entirely through Claude Code's hook system and the terminal. |
 | Terminal emulator | The TUI renders via Textual/Python in whatever terminal is available. Hookwise does not control terminal settings, font, or color scheme. |
-| Python runtime | The TUI requires Python 3.10+ with Textual installed. Hookwise bundles a venv but falls back to system `python3`. Hookwise does not install or manage system Python. |
+| Python runtime | The TUI requires Python 3.10+ with Textual installed. Hookwise bundles a venv but falls back to system `python3`. Hookwise does not install or manage system Python. The Go binary writes JSON cache that the TUI reads. |
 | Practice Tracker DB | The practice producer reads from `~/.practice-tracker/practice-tracker.db` but hookwise does not write to or manage this database. |
 
 ---
@@ -134,7 +134,7 @@ This document defines what hookwise controls and what it does not. It exists for
 
 ### Data Flow Diagram (ASCII)
 
-```
+```text
                                    HOOKWISE BOUNDARIES
   +---------------------------------------------------------------------------+
   |                                                                           |
@@ -146,7 +146,7 @@ This document defines what hookwise controls and what it does not. It exists for
   |     | emits 13 hook events (stdin JSON)                                   |
   |     v                                                                     |
   | +----------------------------+                                            |
-  | |  hookwise dispatcher       |  src/core/dispatcher.ts                    |
+  | |  hookwise dispatcher       |  internal/core/dispatcher.go               |
   | |  (entry point: dispatch()) |                                            |
   | +---+------+------+---------+                                             |
   |     |      |      |                                                       |
@@ -154,7 +154,7 @@ This document defines what hookwise controls and what it does not. It exists for
   |  Phase 1  Phase 2  Phase 3                                                |
   |  GUARDS   CONTEXT  SIDE EFFECTS                                           |
   |     |      |      |                                                       |
-  |     |      |      +---> Analytics DB  (~/.hookwise/analytics.db)          |
+  |     |      |      +---> Analytics DB  (~/.hookwise/dolt/)                 |
   |     |      |      +---> Coaching State (JSON in ~/.hookwise/)             |
   |     |      |      +---> Transcript Backup (JSON files)                    |
   |     |      |      +---> Cost Accumulation                                 |
@@ -170,8 +170,8 @@ This document defines what hookwise controls and what it does not. It exists for
   | +----------------------------+     +----------------------------+         |
   | |  Feed Daemon               |     |  External Data Sources     |         |
   | |  (background process)      |     |  (OUT OF SCOPE)            |         |
-  | |  src/core/feeds/           |     |                            |         |
-  | |  daemon-process.ts         |     |  Git repo state            |         |
+  | |  internal/feeds/           |     |                            |         |
+  | |  daemon_process.go         |     |  Git repo state            |         |
   | |                            |     |  Google Calendar API       |         |
   | |  8 producers:              |<----|  Hacker News API           |         |
   | |  pulse    (30s)            |     |  Open-Meteo Weather API    |         |
@@ -224,7 +224,7 @@ This document defines what hookwise controls and what it does not. It exists for
 |-----------|--------------|----------------|----------------------|
 | `hookwise.yaml` | Creates, validates, migrates, writes back | -- | -- |
 | `.claude/settings.json` | Writes `hooks` entries and `statusLine.instructions` | Reads to detect existing config | Schema definition (Anthropic owns) |
-| `~/.hookwise/analytics.db` | Creates, writes sessions/events/authorship | Queries for stats/TUI display | -- |
+| `~/.hookwise/dolt/` | Creates, writes sessions/events/authorship | Queries for stats/TUI display | -- |
 | `~/.hookwise/status-cache.json` | Creates, writes (cache bus atomic merges) | Reads for status line rendering | -- |
 | `~/.hookwise/daemon.pid` | Creates, writes, removes (lifecycle management) | Reads for liveness checks | -- |
 | `~/.hookwise/tui.pid` | Creates, writes, removes (lifecycle management) | Reads for duplicate prevention | -- |
@@ -287,7 +287,7 @@ The following are examples of features that would violate hookwise's boundaries.
 
 ### Features that would cross the TUI boundary
 
-- **TUI writing to hookwise.yaml.** (Identified in retro, Lesson #6.) The TUI data layer (`tui/hookwise_tui/data.py`) is explicitly read-only. Adding a write path requires careful design because the TUI is a Python process reading a TypeScript-managed YAML file with no shared type system. This is a planned v1.4 feature but is currently out of scope.
+- **TUI writing to hookwise.yaml.** (Identified in retro, Lesson #6.) The TUI data layer (`tui/hookwise_tui/data.py`) is explicitly read-only. Adding a write path requires careful design because the TUI is a Python process reading a Go-managed YAML file with no shared type system. This is a planned v1.4 feature but is currently out of scope.
 - **TUI controlling the daemon directly.** The TUI can display daemon health but should not start/stop the daemon (that is the CLI's job). Adding daemon control to the TUI would create two control planes for the same process.
 
 ### General scope creep patterns

@@ -331,17 +331,17 @@ func TestIntegration_DaemonLifecycleWithCacheBridge(t *testing.T) {
 	// Start daemon
 	require.NoError(t, daemon.Start())
 
-	// Wait for producers to write cache files (initial run happens immediately)
-	time.Sleep(500 * time.Millisecond)
+	// Wait for producers to write cache files with polling instead of sleep.
+	pulseFile := filepath.Join(cacheDir, "pulse.json")
+	weatherFile := filepath.Join(cacheDir, "weather.json")
+	require.Eventually(t, func() bool {
+		_, e1 := os.Stat(pulseFile)
+		_, e2 := os.Stat(weatherFile)
+		return e1 == nil && e2 == nil
+	}, 5*time.Second, 50*time.Millisecond, "cache files should be written")
 
 	// Stop daemon
 	require.NoError(t, daemon.Stop())
-
-	// Verify cache files were written
-	pulseFile := filepath.Join(cacheDir, "pulse.json")
-	weatherFile := filepath.Join(cacheDir, "weather.json")
-	assert.FileExists(t, pulseFile, "pulse cache file should exist")
-	assert.FileExists(t, weatherFile, "weather cache file should exist")
 
 	// Collect via bridge
 	collected, err := bridge.CollectFeedCache(cacheDir)
@@ -697,12 +697,15 @@ func TestIntegration_DaemonWritesCacheNotDolt(t *testing.T) {
 	daemon.SetStaggerOffset(0)
 
 	require.NoError(t, daemon.Start())
-	time.Sleep(300 * time.Millisecond)
-	require.NoError(t, daemon.Stop())
 
-	// Cache file should exist (JSON)
+	// Wait for cache file with polling instead of sleep.
 	cacheFile := filepath.Join(cacheDir, "pulse.json")
-	assert.FileExists(t, cacheFile)
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(cacheFile)
+		return err == nil
+	}, 5*time.Second, 50*time.Millisecond, "cache file should be written")
+
+	require.NoError(t, daemon.Stop())
 
 	data, err := os.ReadFile(cacheFile)
 	require.NoError(t, err)

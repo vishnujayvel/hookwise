@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -69,7 +70,9 @@ const (
 func homeDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return os.TempDir()
+		tmp := os.TempDir()
+		fmt.Fprintf(os.Stderr, "hookwise: UserHomeDir unavailable, falling back to %s: %v\n", tmp, err)
+		return tmp
 	}
 	return home
 }

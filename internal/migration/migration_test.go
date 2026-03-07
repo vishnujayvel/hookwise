@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,7 +134,7 @@ func seedSQLiteData(t *testing.T, db *sql.DB, sessionCount, eventCount, authorsh
 }
 
 func fmtID(prefix string, i int) string {
-	return prefix + "-" + string(rune('A'+i))
+	return fmt.Sprintf("%s-%03d", prefix, i)
 }
 
 // createCostStateJSON writes a cost-state.json file at the given path.
@@ -667,7 +668,8 @@ func TestParseTimeFlexible(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			result := parseTimeFlexible(tc.input)
+			result, err := parseTimeFlexible(tc.input)
+			require.NoError(t, err)
 			assert.Contains(t, result.Format("2006-01-02"), tc.expected)
 		})
 	}

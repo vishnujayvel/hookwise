@@ -356,8 +356,9 @@ func extractOperator(expr string, operators map[string]bool) {
 		return
 	}
 	for op := range operators {
-		// Check if the expression contains the operator as a word boundary
-		if strings.Contains(expr, " "+op+" ") {
+		// Check with spaces (normal format: "field contains value")
+		// and without spaces (compact format: "field==value").
+		if strings.Contains(expr, " "+op+" ") || strings.Contains(expr, op) {
 			operators[op] = true
 		}
 	}

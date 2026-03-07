@@ -90,13 +90,17 @@ func (d *DB) ReadCoachingState(ctx context.Context) (*CoachingState, error) {
 	}
 	if promptHistJSON.Valid && promptHistJSON.String != "" {
 		var hist []string
-		if err := json.Unmarshal([]byte(promptHistJSON.String), &hist); err == nil {
+		if err := json.Unmarshal([]byte(promptHistJSON.String), &hist); err != nil {
+			core.Logger().Warn("coaching state: invalid prompt_history JSON", "error", err)
+		} else {
 			state.PromptHistory = hist
 		}
 	}
 	if lastLargeJSON.Valid && lastLargeJSON.String != "" {
 		var lc map[string]interface{}
-		if err := json.Unmarshal([]byte(lastLargeJSON.String), &lc); err == nil {
+		if err := json.Unmarshal([]byte(lastLargeJSON.String), &lc); err != nil {
+			core.Logger().Warn("coaching state: invalid last_large_change JSON", "error", err)
+		} else {
 			state.LastLargeChange = lc
 		}
 	}
@@ -193,13 +197,17 @@ func (d *DB) ReadCostState(ctx context.Context) (*CostState, error) {
 	}
 
 	if dailyCostsJSON.Valid && dailyCostsJSON.String != "" {
-		_ = json.Unmarshal([]byte(dailyCostsJSON.String), &state.DailyCosts)
+		if err := json.Unmarshal([]byte(dailyCostsJSON.String), &state.DailyCosts); err != nil {
+			core.Logger().Warn("cost state: invalid daily_costs JSON", "error", err)
+		}
 		if state.DailyCosts == nil {
 			state.DailyCosts = make(map[string]float64)
 		}
 	}
 	if sessionCostsJSON.Valid && sessionCostsJSON.String != "" {
-		_ = json.Unmarshal([]byte(sessionCostsJSON.String), &state.SessionCosts)
+		if err := json.Unmarshal([]byte(sessionCostsJSON.String), &state.SessionCosts); err != nil {
+			core.Logger().Warn("cost state: invalid session_costs JSON", "error", err)
+		}
 		if state.SessionCosts == nil {
 			state.SessionCosts = make(map[string]float64)
 		}
@@ -275,6 +283,7 @@ func (d *DB) ReadFeedCache(ctx context.Context, key string) (*FeedCacheEntry, er
 
 	parsedTime, err := parseTimeFlex(updatedAt)
 	if err != nil {
+		core.Logger().Warn("feed cache: invalid updated_at, using current time", "key", key, "value", updatedAt, "error", err)
 		parsedTime = time.Now()
 	}
 
@@ -322,21 +331,33 @@ func (d *DB) WriteFeedCache(ctx context.Context, entry FeedCacheEntry) error {
 	return nil
 }
 
-// ReadAllFeedCache reads all feed cache entries and returns them as a map
-// keyed by cache_key, with the data payload as values.
+// ReadAllFeedCache reads all non-expired feed cache entries and returns them
+// as a map keyed by cache_key, with the data payload as values.
 func (d *DB) ReadAllFeedCache(ctx context.Context) (map[string]interface{}, error) {
 	rows, err := d.Query(ctx,
-		`SELECT cache_key, data FROM feed_cache`)
+		`SELECT cache_key, data, updated_at, ttl_seconds FROM feed_cache`)
 	if err != nil {
 		return nil, fmt.Errorf("analytics: read all feed_cache: %w", err)
 	}
 	defer rows.Close()
 
+	now := time.Now()
 	result := make(map[string]interface{})
 	for rows.Next() {
-		var cacheKey, dataJSON string
-		if err := rows.Scan(&cacheKey, &dataJSON); err != nil {
+		var (
+			cacheKey, dataJSON, updatedAt string
+			ttlSeconds                    int
+		)
+		if err := rows.Scan(&cacheKey, &dataJSON, &updatedAt, &ttlSeconds); err != nil {
 			return nil, fmt.Errorf("analytics: scan feed_cache: %w", err)
+		}
+		// Check TTL freshness (consistent with ReadFeedCache).
+		if ttlSeconds > 0 {
+			if parsedTime, err := parseTimeFlex(updatedAt); err == nil {
+				if now.After(parsedTime.Add(time.Duration(ttlSeconds) * time.Second)) {
+					continue // expired
+				}
+			}
 		}
 		var data interface{}
 		if err := json.Unmarshal([]byte(dataJSON), &data); err != nil {

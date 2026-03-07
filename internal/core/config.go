@@ -352,7 +352,10 @@ func LoadConfig(projectDir string) (HooksConfig, error) {
 
 	// Step 4: Interpolate environment variables
 	interpolated := InterpolateEnvVars(merged)
-	merged, _ = interpolated.(map[string]interface{})
+	merged, ok := interpolated.(map[string]interface{})
+	if !ok {
+		return HooksConfig{}, fmt.Errorf("env var interpolation returned unexpected type %T", interpolated)
+	}
 
 	// Step 5: Marshal back to YAML and unmarshal into struct.
 	// This leverages Go's yaml tags for snake_case -> struct field mapping.

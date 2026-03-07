@@ -3,6 +3,7 @@ package notifications
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/vishnujayvel/hookwise/internal/analytics"
@@ -228,14 +229,22 @@ func hasNotificationToday(ctx context.Context, ns *NotificationService, producer
 // hasNotificationTodayWithContent checks if a notification with the given
 // producer, type, and content substring was already created today.
 func hasNotificationTodayWithContent(ctx context.Context, ns *NotificationService, producer, notifType, today, contentSubstr string) (bool, error) {
+	escaped := escapeLIKE(contentSubstr)
 	row := ns.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM notifications
 		 WHERE producer = ? AND notification_type = ? AND created_at LIKE ? AND content LIKE ?`,
-		producer, notifType, today+"%", "%"+contentSubstr+"%",
+		producer, notifType, today+"%", "%"+escaped+"%",
 	)
 	var count int
 	if err := row.Scan(&count); err != nil {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// escapeLIKE escapes SQL LIKE wildcard characters (% and _) in a string.
+func escapeLIKE(s string) string {
+	s = strings.ReplaceAll(s, "%", "\\%")
+	s = strings.ReplaceAll(s, "_", "\\_")
+	return s
 }

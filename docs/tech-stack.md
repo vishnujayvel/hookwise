@@ -6,29 +6,29 @@ A complete reference of every framework, library, and tool used in hookwise, org
 
 Hookwise is a **polyglot project** with two runtimes:
 
-- **TypeScript core engine** -- the npm package (config, dispatcher, feeds, analytics, CLI, status line)
+- **Go core engine** -- a single compiled binary (config, dispatcher, feeds, analytics, CLI, status line)
 - **Python TUI** -- a separate Textual app launched as a detached subprocess
 
 They communicate via a **shared filesystem cache** (JSON file), not HTTP or IPC.
 
-## Layer 1: TypeScript Core (Runtime)
+## Layer 1: Go Core (Runtime)
 
 | Tool | Version | What It Does | Why This Choice |
 |------|---------|-------------|-----------------|
-| **Node.js** | >=20.0.0 | Runtime for the core engine | Native ESM support, stable LTS |
-| **TypeScript** | ^5.9.3 | Type safety for the entire TS codebase | Strict mode enabled, `ES2022` target |
-| **js-yaml** | ^4.1.1 | Parses `hookwise.yaml` config files | Industry standard YAML parser |
-| **picomatch** | ^4.0.3 | Glob pattern matching for guard file filters | Lightweight, zero-dep glob matcher |
-| **better-sqlite3** | ^12.6.2 | Analytics database (session events, friction tracking) | Synchronous SQLite -- no async overhead for writes |
-| **React** | ^19.2.4 | JSX rendering for the CLI (used with Ink) | Required by Ink for component model |
-| **Ink** | ^6.8.0 | Terminal UI framework for CLI commands | React-based terminal rendering -- declarative CLI output |
+| **Go** | 1.25 | Runtime and compiler for the core engine | Single binary, fast startup, static typing built-in |
+| **gopkg.in/yaml.v3** | v3 | Parses `hookwise.yaml` config files | Standard Go YAML parser |
+| **gobwas/glob** | -- | Glob pattern matching for guard file filters | Lightweight glob matcher for Go |
+| **dolthub/driver** | -- | Embedded Dolt database (version-controlled SQL data layer) | Git-like versioning for analytics and event data |
+| **modernc.org/sqlite** | -- | Pure-Go SQLite reader for migration from v1 | Reads legacy SQLite analytics DB during upgrade |
+| **github.com/spf13/cobra** | -- | CLI framework for all hookwise commands | Industry standard Go CLI framework |
+| **github.com/stretchr/testify** | -- | Test assertions and requirements | Expressive assertions (`assert`, `require`) for Go tests |
 
 **Key patterns:**
 
-- ESM-only (`"type": "module"` in package.json)
-- `NodeNext` module resolution (`.js` extensions in imports)
-- `jsx: "react-jsx"` for Ink components
-- Path alias: `@/*` maps to `./src/*`
+- Single compiled binary -- no runtime dependencies, no npm
+- Internal packages (`internal/`) enforce encapsulation at the compiler level
+- `-ldflags` version injection at build time
+- `SetMaxOpenConns(1)` for serialized Dolt writes (ARCH-2)
 
 ## Layer 2: Python TUI (Runtime)
 
@@ -48,56 +48,52 @@ They communicate via a **shared filesystem cache** (JSON file), not HTTP or IPC.
 
 ## Layer 3: Build and Bundling
 
-| Tool | Version | What It Does | Config File |
-|------|---------|-------------|-------------|
-| **tsup** | ^8.5.1 | Bundles TypeScript to ESM JavaScript for npm distribution | `tsup.config.ts` |
-| **tsx** | ^4.21.0 | Runs TypeScript files directly (daemon process: `node --import tsx`) | -- |
-| **tsc** | ^5.9.3 | Type checking only (`tsc --noEmit`), not used for compilation | `tsconfig.json` |
-| **hatchling** | -- | Python build backend for TUI package | `tui/pyproject.toml` |
-
-tsup has two entry bundles:
-
-1. **Core dispatcher** -- externals: react, ink; bundles: js-yaml, picomatch
-2. **CLI + daemon + API** -- CLI app, daemon process, public API, testing utilities
+| Tool | What It Does | Config File |
+|------|-------------|-------------|
+| **go build** | Compiles the Go binary (`cmd/hookwise/main.go`) | `go.mod` |
+| **-ldflags** | Injects version, commit hash, and build date at compile time | -- |
+| **hatchling** | Python build backend for TUI package | `tui/pyproject.toml` |
 
 ## Layer 4: Testing
 
-69 test files across multiple testing tiers.
+Multiple testing tiers across Go packages and Python TUI.
 
-### TypeScript Testing Stack
+### Go Testing Stack
 
-| Tool | Version | What It Does | Config |
-|------|---------|-------------|--------|
-| **Vitest** | ^4.0.18 | Unit + integration test runner | `vitest.config.ts` |
-| **V8 Coverage** | built-in | Code coverage provider | `coverage.provider: "v8"` |
-| **ink-testing-library** | ^4.0.0 | Renders Ink/React CLI components in memory for assertions | -- |
-| **vi.mock() / vi.fn()** | built-in | Vitest's built-in mocking (no separate library needed) | -- |
+| Tool | What It Does | Config |
+|------|-------------|--------|
+| **go test** | Built-in test runner for all Go packages | `go.mod` |
+| **go test -cover** | Built-in code coverage | `go test -coverprofile=coverage.out` |
+| **testify/assert** | Expressive test assertions | -- |
+| **testify/require** | Fatal assertions that stop test on failure | -- |
+| **Test interfaces + DI** | Dependency injection for testability (no runtime mocking) | -- |
 
 **Test directory structure:**
 
-```
-tests/
-  core/           # Unit tests
-    feeds/        # Feed producers + segments
-    coaching/     # Coaching engine
-    analytics/    # Analytics engine
-    status-line/  # Segment renderers + two-tier layout
-  config/         # Config parsing + validation
-  cli/            # CLI command rendering (Ink)
-  integration/    # End-to-end dispatcher + pipeline wiring
-  recipes/        # Recipe loading
-  testing/        # Test utility exports
-  performance/    # Performance benchmarks
-  fixtures/       # Test data (usage-data, facets, session-meta)
+```text
+cmd/hookwise/           # CLI tests (main_test.go)
+internal/core/          # Unit tests
+internal/feeds/         # Feed producer tests
+internal/analytics/     # Analytics engine tests
+internal/contract/      # Contract tests (33 JSON fixtures)
+internal/migration/     # Migration tests
+internal/bridge/        # TUI cache bridge tests
+internal/notifications/ # Notification tests
+internal/arch/          # Architecture linting (go/packages)
+internal/proptest/      # Property-based testing (pgregory.net/rapid)
+internal/chaos/         # Chaos/failure mode tests (integration build tag)
+internal/mutation/      # Mutation testing (mutation build tag)
+pkg/hookwise/testing/   # Test utility exports (hwtesting)
 ```
 
 **Testing patterns used:**
 
-- **Fake timers** (`vi.useFakeTimers()`) -- for time-dependent segments (clock, duration, practice)
-- **Filesystem mocking** (`vi.mock("node:fs")`) -- daemon tests mock PID files without touching real FS
-- **Process mocking** (`process.kill = vi.fn()`) -- daemon health checks without killing real processes
-- **Real filesystem integration** (`mkdtempSync`) -- pipeline-wiring tests use real temp dirs + cache files
+- **Test interfaces** -- dependencies injected via interfaces, swapped with test doubles in tests
+- **Build tags** -- `//go:build integration` and `//go:build mutation` separate test tiers
+- **Contract fixtures** -- 33 JSON fixtures in `testdata/contracts/` validate byte-identical output parity
+- **Real filesystem integration** (`os.MkdirTemp`) -- pipeline-wiring tests use real temp dirs + cache files
 - **TTL freshness testing** -- feed segments tested with fresh vs stale cache entries
+- **Race detector** -- `go test -race` clean across all packages
 
 ### Python Testing Stack
 
@@ -108,13 +104,15 @@ tests/
 
 3 test files: `test_weather.py`, `test_data.py`, `test_app.py`
 
-### Planned Testing Tools (v1.4)
+### Advanced Testing Tiers (v2)
 
 | Tool | Type | Prevents |
 |------|------|----------|
 | **pytest-textual-snapshot** | TUI visual regression (SVG snapshots) | Layout bugs |
-| **dependency-cruiser** | TypeScript architectural linting (import graph rules) | Orphaned segments, wiring gaps |
-| **fast-check** | Property-based testing (random input generation) | Scoring invariant violations |
+| **go/packages** (internal/arch) | Architecture linting (import graph rules) | Package dependency violations |
+| **pgregory.net/rapid** (internal/proptest) | Property-based testing (random input generation) | Scoring invariant violations |
+| **internal/mutation** | Mutation testing (3 operators, 93.3% kill rate) | Weak test assertions |
+| **internal/chaos** | Chaos/failure mode testing (12+ scenarios) | Unhandled failure paths |
 
 ## Layer 5: Documentation
 
@@ -130,12 +128,11 @@ Docs auto-deploy on push to `main` when `docs/**` changes.
 | Tool | What It Does | Config |
 |------|-------------|--------|
 | **GitHub Actions** | CI/CD platform | `.github/workflows/` |
-| **npm publish** | Package distribution (with provenance) | `publish.yml` -- triggered on GitHub Release |
-| **Trusted Publishing** | OIDC-based npm auth (no tokens stored) | `id-token: write` permission |
+| **goreleaser** / `go build` | Binary distribution (cross-compiled binaries) | `publish.yml` -- triggered on GitHub Release |
 
 **Two workflows:**
 
-1. `publish.yml` -- On release: `npm ci` then `build` then `test` then `publish --provenance`
+1. `publish.yml` -- On release: `go build` (or goreleaser) then `test` then publish binaries
 2. `docs.yml` -- On push to main (docs/ changes): build VitePress then deploy to GitHub Pages
 
 ## Layer 7: Dev Process (SDLC)
@@ -155,7 +152,7 @@ Tools used to build hookwise (not in package dependencies):
 |-----------|-----------------|
 | **Filesystem JSON cache** (`~/.hookwise/cache.json`) | Daemon, Status Line, TUI |
 | **YAML config** (`hookwise.yaml`) | User config to all components |
-| **SQLite DB** (`~/.hookwise/analytics.db`) | Dispatcher to Analytics to Stats CLI |
+| **Dolt DB** (`~/.hookwise/dolt/`) | Dispatcher to Analytics to Stats CLI (version-controlled SQL) |
 | **PID files** (`~/.hookwise/daemon.pid`, `tui.pid`) | Process lifecycle management |
-| **Detached subprocess** (`spawn` with `detached: true`) | Core to TUI launcher, Core to Daemon |
+| **os/exec with SysProcAttr** | Core to TUI launcher, Core to Daemon (detached subprocess) |
 | **stdin pipe** | Claude Code to `hookwise status-line` (context_window, cost data) |
