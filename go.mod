@@ -9,8 +9,10 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/tools v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.46.1
+	pgregory.net/rapid v1.2.0
 )
 
 require (
@@ -117,7 +119,6 @@ require (
 	golang.org/x/term v0.36.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	golang.org/x/tools v0.38.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/api v0.164.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect

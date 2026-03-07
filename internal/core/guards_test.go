@@ -292,6 +292,16 @@ func TestEvaluateCondition_EndsWithNoMatch(t *testing.T) {
 	assert.False(t, *result)
 }
 
+func TestEvaluateCondition_EndsWithMidstringNoMatch(t *testing.T) {
+	// Distinguishes ends_with from contains: ".env" appears in the middle but not at the end
+	data := map[string]interface{}{
+		"file": "config.env.bak",
+	}
+	result := EvaluateCondition(`file ends_with ".env"`, data)
+	require.NotNil(t, result)
+	assert.False(t, *result, "ends_with must not match when substring appears in the middle")
+}
+
 func TestEvaluateCondition_DoubleEquals(t *testing.T) {
 	data := map[string]interface{}{
 		"mode": "production",
