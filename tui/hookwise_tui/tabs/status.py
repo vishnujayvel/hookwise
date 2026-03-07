@@ -327,8 +327,9 @@ class StatusTab(Widget):
             )
         rotating_active = [s for s in ROTATING_SEGMENTS if s in active_set]
         if rotating_active:
+            arrow = " \u2192 "
             summary_lines.append(
-                f"[bold]Line 5 (rotating):[/bold] {' \u2192 '.join(rotating_active)}"
+                f"[bold]Line 5 (rotating):[/bold] {arrow.join(rotating_active)}"
             )
         if not summary_lines:
             summary_lines.append("[dim]No segments active[/dim]")
