@@ -73,6 +73,8 @@ func newDispatchCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			eventType := args[0]
 
+			var tuiLaunchMethod string // set inside SafeDispatch, used after
+
 			result := core.SafeDispatch(func() core.DispatchResult {
 				// Read payload from stdin
 				payload := core.ReadStdinPayload()
@@ -98,9 +100,9 @@ func newDispatchCmd() *cobra.Command {
 				// Run the three-phase dispatch engine
 				dispatchResult := core.Dispatch(eventType, payload, config)
 
-				// Auto-launch TUI on SessionStart if configured and not already running
+				// Signal TUI launch intent (executed synchronously after SafeDispatch)
 				if eventType == core.EventSessionStart && config.TUI.AutoLaunch {
-					go launchTUIIfNeeded(config.TUI.LaunchMethod)
+					tuiLaunchMethod = config.TUI.LaunchMethod
 				}
 
 				return dispatchResult
@@ -109,6 +111,14 @@ func newDispatchCmd() *cobra.Command {
 			if result.Stdout != nil {
 				fmt.Print(*result.Stdout)
 			}
+
+			// Launch TUI synchronously — cmd.Start() returns immediately after
+			// fork, so this doesn't block. Running it outside SafeDispatch
+			// ensures the launch completes before os.Exit().
+			if tuiLaunchMethod != "" {
+				launchTUIIfNeeded(tuiLaunchMethod)
+			}
+
 			// Brief grace period for side-effect goroutines (analytics, coaching)
 			// to finish before the process exits.
 			time.Sleep(50 * time.Millisecond)
@@ -832,8 +842,23 @@ func isTUIRunning() bool {
 	return err == nil
 }
 
+// acquireTUILaunchLock atomically creates a lock file to prevent concurrent
+// TUI launches (TOCTOU race between isTUIRunning check and TUI PID write).
+// Returns a cleanup function and true on success, or nil and false if another
+// dispatch already holds the lock.
+func acquireTUILaunchLock() (unlock func(), ok bool) {
+	lockPath := filepath.Join(core.DefaultStateDir, "tui.launch.lock")
+	_ = os.MkdirAll(filepath.Dir(lockPath), core.DefaultDirMode)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, false
+	}
+	f.Close()
+	return func() { os.Remove(lockPath) }, true
+}
+
 // launchTUIIfNeeded launches the TUI if it's not already running.
-// Called as a goroutine from dispatch on SessionStart events.
+// Called synchronously from dispatch on SessionStart events.
 func launchTUIIfNeeded(launchMethod string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -843,6 +868,21 @@ func launchTUIIfNeeded(launchMethod string) {
 
 	if isTUIRunning() {
 		core.Logger().Debug("TUI already running, skipping launch")
+		return
+	}
+
+	// Atomic lock prevents TOCTOU race: two concurrent SessionStart dispatches
+	// could both pass isTUIRunning() before either TUI writes its PID file.
+	unlock, ok := acquireTUILaunchLock()
+	if !ok {
+		core.Logger().Debug("another dispatch is launching TUI, skipping")
+		return
+	}
+	defer unlock()
+
+	// Re-check after acquiring lock (double-check pattern)
+	if isTUIRunning() {
+		core.Logger().Debug("TUI started between check and lock, skipping")
 		return
 	}
 
