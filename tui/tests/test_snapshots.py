@@ -68,6 +68,7 @@ async def _stabilise_status(pilot) -> None:
     """
     os.environ["TZ"] = "UTC"
     time.tzset()
+    # Pin the preview box to static content
     from textual.containers import Container
     try:
         preview = pilot.app.query_one("#preview-box", Container)

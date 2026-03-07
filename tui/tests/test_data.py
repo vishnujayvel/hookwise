@@ -279,7 +279,7 @@ class TestReadFeedHealth:
         }
 
         feeds = read_feed_health(config, cache)
-        assert len(feeds) == 5
+        assert len(feeds) == 8  # 8 builtin feeds: pulse, project, calendar, news, insights, practice, weather, memories
 
         pulse = next(f for f in feeds if f.name == "pulse")
         assert pulse.enabled is True

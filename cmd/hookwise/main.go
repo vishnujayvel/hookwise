@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -69,6 +73,8 @@ func newDispatchCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			eventType := args[0]
 
+			var tuiLaunchMethod string // set inside SafeDispatch, used after
+
 			result := core.SafeDispatch(func() core.DispatchResult {
 				// Read payload from stdin
 				payload := core.ReadStdinPayload()
@@ -92,12 +98,27 @@ func newDispatchCmd() *cobra.Command {
 				}
 
 				// Run the three-phase dispatch engine
-				return core.Dispatch(eventType, payload, config)
+				dispatchResult := core.Dispatch(eventType, payload, config)
+
+				// Signal TUI launch intent (executed synchronously after SafeDispatch)
+				if eventType == core.EventSessionStart && config.TUI.AutoLaunch {
+					tuiLaunchMethod = config.TUI.LaunchMethod
+				}
+
+				return dispatchResult
 			})
 
 			if result.Stdout != nil {
 				fmt.Print(*result.Stdout)
 			}
+
+			// Launch TUI synchronously — cmd.Start() returns immediately after
+			// fork, so this doesn't block. Running it outside SafeDispatch
+			// ensures the launch completes before os.Exit().
+			if tuiLaunchMethod != "" {
+				launchTUIIfNeeded(tuiLaunchMethod)
+			}
+
 			// Brief grace period for side-effect goroutines (analytics, coaching)
 			// to finish before the process exits.
 			time.Sleep(50 * time.Millisecond)
@@ -340,6 +361,12 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 
 	line := strings.Join(segments, ansiGray+delimiter+ansiReset)
 	fmt.Fprintln(cmd.OutOrStdout(), line)
+
+	// Write ANSI-stripped output to cache file for TUI preview (Bug #20)
+	if err := writeStatusLineCache(line); err != nil {
+		core.Logger().Warn("failed to write status-line cache", "error", err)
+	}
+
 	return nil
 }
 
@@ -784,6 +811,140 @@ Original files are never modified (non-destructive).`,
 	cmd.Flags().StringVar(&projectDir, "project-dir", "", "Project directory for config validation (defaults to cwd)")
 
 	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// TUI launcher (Bug #14 — duplicate terminal tabs)
+// ---------------------------------------------------------------------------
+
+// tuiPIDPath returns the path to the TUI PID file.
+func tuiPIDPath() string {
+	return filepath.Join(core.DefaultStateDir, "tui.pid")
+}
+
+// isTUIRunning checks if a TUI process is already running by reading the PID file,
+// checking if the process exists, and verifying it's actually hookwise-tui
+// (not a stale PID reused by an unrelated process).
+func isTUIRunning() bool {
+	data, err := os.ReadFile(tuiPIDPath())
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	// Check if process exists (signal 0 = existence check)
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	if err := process.Signal(syscall.Signal(0)); err != nil {
+		return false
+	}
+	// Verify the PID belongs to hookwise-tui, not a stale PID reused by
+	// an unrelated process. Uses `ps` which works on macOS and Linux.
+	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
+	if err != nil {
+		return false
+	}
+	comm := strings.TrimSpace(string(out))
+	return strings.Contains(comm, "hookwise-tui") || strings.Contains(comm, "python") || strings.Contains(comm, "Python")
+}
+
+// acquireTUILaunchLock atomically creates a lock file to prevent concurrent
+// TUI launches (TOCTOU race between isTUIRunning check and TUI PID write).
+// Returns a cleanup function and true on success, or nil and false if another
+// dispatch already holds the lock.
+func acquireTUILaunchLock() (unlock func(), ok bool) {
+	lockPath := filepath.Join(core.DefaultStateDir, "tui.launch.lock")
+	_ = os.MkdirAll(filepath.Dir(lockPath), core.DefaultDirMode)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, false
+	}
+	f.Close()
+	return func() { os.Remove(lockPath) }, true
+}
+
+// launchTUIIfNeeded launches the TUI if it's not already running.
+// Called synchronously from dispatch on SessionStart events.
+func launchTUIIfNeeded(launchMethod string) {
+	defer func() {
+		if r := recover(); r != nil {
+			core.Logger().Error("panic in TUI launcher", "recovered", fmt.Sprintf("%v", r))
+		}
+	}()
+
+	if isTUIRunning() {
+		core.Logger().Debug("TUI already running, skipping launch")
+		return
+	}
+
+	// Atomic lock prevents TOCTOU race: two concurrent SessionStart dispatches
+	// could both pass isTUIRunning() before either TUI writes its PID file.
+	unlock, ok := acquireTUILaunchLock()
+	if !ok {
+		core.Logger().Debug("another dispatch is launching TUI, skipping")
+		return
+	}
+	defer unlock()
+
+	// Re-check after acquiring lock (double-check pattern)
+	if isTUIRunning() {
+		core.Logger().Debug("TUI started between check and lock, skipping")
+		return
+	}
+
+	// Find hookwise-tui executable
+	tuiCmd, err := exec.LookPath("hookwise-tui")
+	if err != nil {
+		core.Logger().Debug("hookwise-tui not found in PATH, skipping auto-launch")
+		return
+	}
+
+	var cmd *exec.Cmd
+	switch launchMethod {
+	case "newWindow":
+		// macOS: open in a new Terminal window
+		cmd = exec.Command("open", "-a", "Terminal", tuiCmd)
+	default:
+		// background: launch directly as a background process
+		cmd = exec.Command(tuiCmd)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
+
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+
+	if err := cmd.Start(); err != nil {
+		core.Logger().Warn("failed to launch TUI", "method", launchMethod, "error", err)
+		return
+	}
+
+	core.Logger().Info("TUI launched", "method", launchMethod, "pid", cmd.Process.Pid)
+}
+
+// ---------------------------------------------------------------------------
+// Status line cache writer (Bug #20 — TUI preview out of sync)
+// ---------------------------------------------------------------------------
+
+// ansiRegex matches ANSI escape sequences for stripping.
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// writeStatusLineCache writes the ANSI-stripped status line output to the cache file
+// so the TUI can display a live preview.
+func writeStatusLineCache(line string) error {
+	cachePath := core.LastStatusOutputPath
+	cacheDir := filepath.Dir(cachePath)
+
+	if err := os.MkdirAll(cacheDir, core.DefaultDirMode); err != nil {
+		return fmt.Errorf("mkdir %s: %w", cacheDir, err)
+	}
+
+	stripped := ansiRegex.ReplaceAllString(line, "")
+	return os.WriteFile(cachePath, []byte(stripped+"\n"), 0o644)
 }
 
 // ---------------------------------------------------------------------------
