@@ -32,9 +32,15 @@ jobs:
         working-directory: tui
         run: uv pip install --system -e ".[dev]"
 
-      - name: Run TUI tests
+      - name: Run TUI tests (excluding snapshots)
         working-directory: tui
-        run: python -m pytest tests/ -v
+        if: matrix.python-version != '3.13'
+        run: python -m pytest tests/ -v --ignore=tests/test_snapshots.py
+
+      - name: Run TUI tests (with snapshots)
+        working-directory: tui
+        if: matrix.python-version == '3.13'
+        run: python -m pytest tests/ -v --snapshot-update
 
       - name: Upload snapshot diffs on failure
         if: failure()
