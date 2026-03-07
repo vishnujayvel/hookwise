@@ -22,6 +22,11 @@ func loadPackages(t *testing.T, patterns ...string) []*packages.Package {
 	if err != nil {
 		t.Fatalf("failed to load packages %v: %v", patterns, err)
 	}
+	for _, pkg := range pkgs {
+		if len(pkg.Errors) > 0 {
+			t.Fatalf("failed to fully load %s: %v", pkg.PkgPath, pkg.Errors)
+		}
+	}
 	return pkgs
 }
 

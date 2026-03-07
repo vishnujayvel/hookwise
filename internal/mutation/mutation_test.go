@@ -329,7 +329,7 @@ func runTestsAgainstMutant(tmpDir string, timeout time.Duration) MutationResult 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "go", "test", "-count=1", "-timeout=10s", "./internal/core/...")
+	cmd := exec.CommandContext(ctx, "go", "test", "-count=1", "./internal/core/...")
 	cmd.Dir = tmpDir
 
 	var stdout, stderr bytes.Buffer
@@ -774,9 +774,11 @@ func TestGuardMutationVerification(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func buildReport(target string, results []MutationResult) MutationReport {
-	r := MutationReport{Target: target, Total: len(results)}
+	r := MutationReport{Target: target}
 	for _, res := range results {
 		switch {
+		case res.Error != "":
+			continue // framework errors are not counted
 		case res.Timeout:
 			r.Timeouts++
 		case res.Killed:
@@ -786,6 +788,7 @@ func buildReport(target string, results []MutationResult) MutationReport {
 			r.Survivors = append(r.Survivors, res)
 		}
 	}
+	r.Total = r.Killed + r.Survived + r.Timeouts
 	if r.Total > 0 {
 		r.Score = float64(r.Killed) / float64(r.Total) * 100
 	}

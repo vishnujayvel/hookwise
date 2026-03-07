@@ -245,7 +245,10 @@ func TestChaos_ProducerPanicRecovery(t *testing.T) {
 	daemon.SetStaggerOffset(0)
 
 	require.NoError(t, daemon.Start())
-	time.Sleep(500 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(filepath.Join(cacheDir, "survivor.json"))
+		return err == nil
+	}, 5*time.Second, 50*time.Millisecond, "survivor.json was not written before timeout")
 	require.NoError(t, daemon.Stop())
 
 	// The good producer's cache file should exist

@@ -196,14 +196,18 @@ func TestProperty_Evaluate_Reflexive(t *testing.T) {
 func TestProperty_LoadConfig_StructuralInvariant(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		version := rapid.IntRange(1, 10).Draw(t, "version")
-		numGuards := rapid.IntRange(1, 5).Draw(t, "numGuards")
+		numGuards := rapid.IntRange(0, 5).Draw(t, "numGuards")
 
-		// Build valid YAML with at least one guard entry
-		yamlContent := fmt.Sprintf("version: %d\nguards:\n", version)
-		for i := 0; i < numGuards; i++ {
-			yamlContent += fmt.Sprintf("  - match: \"Tool%c\"\n", rune('A'+i))
-			yamlContent += "    action: warn\n"
-			yamlContent += "    reason: \"test\"\n"
+		yamlContent := fmt.Sprintf("version: %d\n", version)
+		if numGuards == 0 {
+			yamlContent += "guards: []\n"
+		} else {
+			yamlContent += "guards:\n"
+			for i := 0; i < numGuards; i++ {
+				yamlContent += fmt.Sprintf("  - match: \"Tool%c\"\n", rune('A'+i))
+				yamlContent += "    action: warn\n"
+				yamlContent += "    reason: \"test\"\n"
+			}
 		}
 
 		dir, err := os.MkdirTemp("", "proptest-config-*")
@@ -235,13 +239,13 @@ func TestProperty_LoadConfig_StructuralInvariant(t *testing.T) {
 
 		config, err := core.LoadConfig(dir)
 		if err != nil {
-			return // parse error is acceptable; we test the invariant on success
+			t.Fatalf("LoadConfig(%q) returned error for generated valid config: %v", dir, err)
 		}
 
 		if config.Version < 1 {
 			t.Fatalf("config.Version should be >= 1, got %d", config.Version)
 		}
-		if config.Guards == nil {
+		if numGuards > 0 && config.Guards == nil {
 			t.Fatal("config.Guards should not be nil when guards are specified")
 		}
 		if len(config.Guards) != numGuards {
