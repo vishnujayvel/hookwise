@@ -588,7 +588,7 @@ def read_insights_summary(
 def generate_insights_summary(
     insights: InsightsData,
     summary_path: Path | None = None,
-) -> InsightsSummary:
+) -> InsightsSummary | None:
     """Generate a daily LLM summary of usage insights using Claude API (haiku).
 
     Caches the result to disk. Returns cached version if already generated today.
