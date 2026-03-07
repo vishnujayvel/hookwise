@@ -2,6 +2,7 @@ package feeds
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -41,7 +42,15 @@ func (d *Daemon) pollFeed(ctx context.Context, p Producer, interval time.Duratio
 }
 
 // runProducer executes a single producer and writes the result to the JSON cache.
+// Panics in Produce() are recovered so that a failing producer cannot crash
+// the daemon goroutine (ARCH-1 fail-open guarantee).
 func (d *Daemon) runProducer(ctx context.Context, p Producer) {
+	defer func() {
+		if r := recover(); r != nil {
+			core.Logger().Error("feeds: producer panic recovered", "producer", p.Name(), "recovered", fmt.Sprintf("%v", r))
+		}
+	}()
+
 	data, err := p.Produce(ctx)
 	if err != nil {
 		core.Logger().Error("feeds: producer error", "producer", p.Name(), "error", err)
