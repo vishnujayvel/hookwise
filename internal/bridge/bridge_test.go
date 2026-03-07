@@ -60,9 +60,11 @@ func TestCollectFeedCache_MultipleFeeds(t *testing.T) {
 		"active_sessions": float64(1),
 	})
 	weather := makeFeedEntry("weather", map[string]interface{}{
-		"temperature": float64(72),
-		"unit":        "F",
-		"condition":   "sunny",
+		"temperature":     float64(72),
+		"temperatureUnit": "fahrenheit",
+		"emoji":           "\U0001f324\ufe0f",
+		"condition":       "sunny",
+		"windSpeed":       float64(5),
 	})
 	calendar := makeFeedEntry("calendar", map[string]interface{}{
 		"events":     []interface{}{},
@@ -88,7 +90,7 @@ func TestCollectFeedCache_MultipleFeeds(t *testing.T) {
 	weatherData, ok := weatherEntry["data"].(map[string]interface{})
 	require.True(t, ok, "weather data should be a map")
 	assert.Equal(t, float64(72), weatherData["temperature"])
-	assert.Equal(t, "F", weatherData["unit"])
+	assert.Equal(t, "fahrenheit", weatherData["temperatureUnit"])
 }
 
 // ---------------------------------------------------------------------------
@@ -394,8 +396,10 @@ func TestFlattenForTUI_EnvelopeToFlat(t *testing.T) {
 			"type":      "weather",
 			"timestamp": ts,
 			"data": map[string]interface{}{
-				"temperature": float64(72),
-				"unit":        "F",
+				"temperature":     float64(72),
+				"temperatureUnit": "fahrenheit",
+				"emoji":           "\U0001f324\ufe0f",
+				"windSpeed":       float64(5),
 			},
 		},
 	}
@@ -419,7 +423,9 @@ func TestFlattenForTUI_EnvelopeToFlat(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, ts, weatherEntry["updated_at"])
 	assert.Equal(t, float64(72), weatherEntry["temperature"])
-	assert.Equal(t, "F", weatherEntry["unit"])
+	assert.Equal(t, "fahrenheit", weatherEntry["temperatureUnit"])
+	assert.Equal(t, "\U0001f324\ufe0f", weatherEntry["emoji"])
+	assert.Equal(t, float64(5), weatherEntry["windSpeed"])
 }
 
 // ---------------------------------------------------------------------------
@@ -484,7 +490,7 @@ func TestFullRoundtrip_CollectFlattenValidateWrite(t *testing.T) {
 		{"project", map[string]interface{}{"name": "hookwise", "branch": "main"}},
 		{"news", map[string]interface{}{"stories": []interface{}{}, "source": "hn"}},
 		{"calendar", map[string]interface{}{"events": []interface{}{}}},
-		{"weather", map[string]interface{}{"temperature": float64(68)}},
+		{"weather", map[string]interface{}{"temperature": float64(68), "temperatureUnit": "fahrenheit", "emoji": "\U0001f324\ufe0f", "windSpeed": float64(0)}},
 		{"practice", map[string]interface{}{"total_sessions": float64(10)}},
 		{"memories", map[string]interface{}{"recent_memories": []interface{}{}}},
 		{"insights", map[string]interface{}{"productivity_score": float64(85)}},

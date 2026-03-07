@@ -91,12 +91,13 @@ func (p *WeatherProducer) Produce(_ context.Context) (interface{}, error) {
 		"type":      "weather",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
-			"temperature": 0,
-			"unit":        "F",
-			"condition":   "unknown (placeholder)",
-			"humidity":    0,
-			"wind_speed":  0,
-			"source":      "placeholder",
+			"temperature":     0,
+			"temperatureUnit": "fahrenheit",
+			"emoji":           "\U0001f324\ufe0f",
+			"condition":       "unknown (placeholder)",
+			"humidity":        0,
+			"windSpeed":       0,
+			"source":          "placeholder",
 		},
 	}, nil
 }
