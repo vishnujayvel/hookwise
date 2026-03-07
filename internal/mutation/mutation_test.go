@@ -343,6 +343,12 @@ func runTestsAgainstMutant(tmpDir string, timeout time.Duration) MutationResult 
 	}
 
 	if err != nil {
+		// Check if go test reported its own internal timeout
+		stderrStr := stderr.String()
+		if strings.Contains(stderrStr, "test timed out") ||
+			strings.Contains(stderrStr, "panic: test timed out") {
+			return MutationResult{Timeout: true}
+		}
 		// Test failed (or compile failed) = mutation was killed.
 		return MutationResult{Killed: true}
 	}

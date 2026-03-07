@@ -242,11 +242,11 @@ func TestProperty_LoadConfig_StructuralInvariant(t *testing.T) {
 			t.Fatalf("LoadConfig(%q) returned error for generated valid config: %v", dir, err)
 		}
 
-		if config.Version < 1 {
-			t.Fatalf("config.Version should be >= 1, got %d", config.Version)
+		if config.Version != version {
+			t.Fatalf("config.Version should be %d, got %d", version, config.Version)
 		}
-		if numGuards > 0 && config.Guards == nil {
-			t.Fatal("config.Guards should not be nil when guards are specified")
+		if config.Guards == nil {
+			t.Fatal("config.Guards should not be nil (expected empty slice or populated)")
 		}
 		if len(config.Guards) != numGuards {
 			t.Fatalf("expected %d guards, got %d", numGuards, len(config.Guards))

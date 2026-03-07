@@ -279,6 +279,8 @@ func TestChaos_ConcurrentDispatchStress(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var failures []string
 	const goroutines = 100
 
 	for i := 0; i < goroutines; i++ {
@@ -301,11 +303,16 @@ func TestChaos_ConcurrentDispatchStress(t *testing.T) {
 				},
 			}, config)
 
-			assert.Equal(t, 0, result.ExitCode)
+			if result.ExitCode != 0 {
+				mu.Lock()
+				failures = append(failures, fmt.Sprintf("goroutine %d: exit %d", idx, result.ExitCode))
+				mu.Unlock()
+			}
 		}(i)
 	}
 
 	wg.Wait()
+	assert.Empty(t, failures, "concurrent dispatch failures")
 }
 
 // TestChaos_ConcurrentSafeDispatchWithPanics verifies SafeDispatch is safe

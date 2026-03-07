@@ -22,6 +22,9 @@ func loadPackages(t *testing.T, patterns ...string) []*packages.Package {
 	if err != nil {
 		t.Fatalf("failed to load packages %v: %v", patterns, err)
 	}
+	if len(pkgs) == 0 {
+		t.Fatalf("no packages matched patterns %v", patterns)
+	}
 	for _, pkg := range pkgs {
 		if len(pkg.Errors) > 0 {
 			t.Fatalf("failed to fully load %s: %v", pkg.PkgPath, pkg.Errors)
@@ -64,7 +67,7 @@ func hasImport(pkg *packages.Package, target string) bool {
 func collectImports(pkg *packages.Package, prefix string) []string {
 	var matches []string
 	for imp := range pkg.Imports {
-		if strings.HasPrefix(imp, prefix) {
+		if imp == prefix || strings.HasPrefix(imp, prefix+"/") {
 			matches = append(matches, imp)
 		}
 	}
