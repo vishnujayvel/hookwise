@@ -103,7 +103,7 @@ function runInit(preset: string, dir: string): Step[] {
     try {
       let yamlContent: string;
       if (effectivePreset === "minimal") {
-        yamlContent = `# hookwise configuration\n# Preset: minimal\n# Docs: https://github.com/vishnujayvel/hookwise\n\nversion: 1\nguards: []\n`;
+        yamlContent = `# hookwise configuration\n# Preset: minimal\n# Docs: https://github.com/vishnujayvel/hookwise\n\nversion: 1\nguards: []\ntui:\n  auto_launch: true\n`;
       } else {
         const config = applyPreset(getDefaultConfig(), effectivePreset);
         const snakeCased = deepCamelToSnake(config);

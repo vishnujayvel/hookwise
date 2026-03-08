@@ -200,5 +200,3 @@ Key design choices: parameterized SQL everywhere, safe YAML parsing only, no `ev
 `git clone`, `npm install`, `npm test` (1,440 tests), `npm run build`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [MIT](LICENSE) -- Built by [Vishnu](https://github.com/vishnujayvel). *Born from the gap between how fast AI makes you feel — and how fast you actually are.*
-</content>
-</invoke>

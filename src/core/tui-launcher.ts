@@ -221,9 +221,11 @@ export function launchTui(config: TuiConfig, pidPath?: string): boolean {
         // pgrep returns exit code 1 when no process found — that's fine, proceed
       }
       const pythonCmd = resolveTuiPython();
+      // Shell-quote the path with single quotes, escaping any embedded single quotes
+      const shellQuoted = "'" + pythonCmd.replace(/'/g, "'\\''") + "'";
       const child = spawn(
         "osascript",
-        ["-e", `tell application "Terminal" to do script "${pythonCmd} -m hookwise_tui"`],
+        ["-e", `tell application "Terminal" to do script "${shellQuoted} -m hookwise_tui"`],
         {
           detached: true,
           stdio: "ignore",
