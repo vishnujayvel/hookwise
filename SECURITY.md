@@ -4,8 +4,9 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.3.x   | Yes       |
-| < 1.3   | No        |
+| 2.x (Go) | Yes     |
+| 1.x (TypeScript, deprecated) | No |
+| 0.1.x (Python) | No |
 
 ## Reporting a Vulnerability
 
@@ -35,7 +36,7 @@ hookwise operates under the following trust boundaries:
 | `hookwise.yaml` | **Trusted** | User-authored local config, equivalent to a Makefile or package.json scripts |
 | CLI arguments | **Trusted** | Provided by the local user |
 | Environment variables | **Trusted** | Set by the local user or system |
-| Claude Code hook payloads | **Semi-trusted** | JSON from Claude Code's hook system; parsed with `JSON.parse()` (no code execution) |
+| Claude Code hook payloads | **Semi-trusted** | JSON from Claude Code's hook system; parsed with Go's `encoding/json` (no code execution) |
 | External APIs (Open-Meteo, HN, RSS) | **Untrusted** | Consumed defensively with fail-open error handling and type checking |
 
 ## Security Practices
@@ -44,13 +45,12 @@ The codebase enforces the following security practices by design:
 
 ### Input Handling
 - **Parameterized SQL everywhere** -- All SQLite queries use `?` or `@param` placeholders. No string concatenation in query construction.
-- **Safe YAML parsing** -- Python uses `yaml.safe_load()`; TypeScript uses js-yaml v4.x which defaults to `DEFAULT_SAFE_SCHEMA` (no `!!js/function` or code execution tags).
-- **JSON-only deserialization** -- All external data is parsed with `JSON.parse()`, which cannot execute code.
+- **Safe YAML parsing** -- Go uses `gopkg.in/yaml.v3` (safe by default, no code execution tags); Python TUI uses `yaml.safe_load()`.
+- **JSON-only deserialization** -- All external data is parsed with Go's `encoding/json`, which cannot execute code.
 
 ### Process Execution
-- **No `eval()` or `Function()`** -- Explicitly avoided throughout the codebase and documented in source comments.
-- **`execFileSync` for untrusted paths** -- Used where arguments could contain special characters (e.g., calendar credentials path).
-- **`spawnSync` without shell** -- The dispatcher passes handler arguments as array elements, preventing shell injection.
+- **No `eval()` or dynamic code execution** -- Go's type system prevents this by design.
+- **`exec.Command` without shell** -- The dispatcher passes handler arguments as array elements, preventing shell injection.
 
 ### File System
 - **Restrictive permissions** -- Database files use `0o600`; directories use `0o700` (owner-only).
@@ -66,7 +66,7 @@ The codebase enforces the following security practices by design:
 
 hookwise maintains a minimal dependency footprint:
 
-- **Runtime** (TypeScript): `better-sqlite3`, `ink`, `react`, `js-yaml`, `picomatch`
+- **Runtime** (Go): `dolt`, `cobra`, `yaml.v3`, `testify` — compiled into a single static binary
 - **Runtime** (Python TUI): `textual`, `pyyaml`, `rich`, `anthropic`
-- **No native HTTP server dependencies** -- External data is fetched via Node.js built-in `fetch` or Python `urllib`
-- **npm publish with provenance** -- Packages are published with `--provenance` for supply chain verification via [npm provenance attestations](https://docs.npmjs.com/generating-provenance-statements)
+- **No native HTTP server dependencies** -- External data is fetched via Go's `net/http` or Python `urllib`
+- **Binary releases** -- Go binaries are published via GitHub Releases with Dagger-based CI builds

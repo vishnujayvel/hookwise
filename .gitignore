@@ -2,11 +2,6 @@
 hookwise
 hookwise-go
 
-# Node.js (legacy — safe to remove node_modules/)
-node_modules/
-dist/
-coverage/
-
 # IDE
 .idea/
 .vscode/
@@ -20,19 +15,19 @@ Thumbs.db
 # Hookwise state (user-specific)
 ~/.hookwise/
 
-# Claude Code (PDLC specs, product context — secret sauce)
+# Claude Code (PDLC specs, product context)
 .claude/
 
-# VitePress
-docs/.vitepress/cache/
-docs/.vitepress/dist/
-
-# Python (legacy v0.1.0)
+# Python TUI
 __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
 .coverage
+
+# Test artifacts
+snapshot_report.html
+tui/snapshot_report.html
 
 # Demo scripts and VHS tapes (internal tooling, not shipped)
 demos/
@@ -52,3 +47,7 @@ excalidraw.log
 
 # Dagger
 .dagger/
+
+# Playwright MCP logs
+.playwright-mcp/
+node_modules

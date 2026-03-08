@@ -10,7 +10,6 @@
 
 **Awareness framework for AI-augmented development.**
 
-[![npm version](https://img.shields.io/npm/v/hookwise.svg)](https://www.npmjs.com/package/hookwise)
 [![CI](https://img.shields.io/github/actions/workflow/status/vishnujayvel/hookwise/ci.yml?branch=main)](https://github.com/vishnujayvel/hookwise/actions)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -87,7 +86,9 @@ One file. Claude Code reads it, understands it, and can even help you write new 
 ## Quick Start
 
 ```bash
-npm install -g hookwise
+# Download the latest binary from GitHub Releases
+# https://github.com/vishnujayvel/hookwise/releases
+
 hookwise init --preset minimal
 hookwise doctor
 ```
@@ -161,13 +162,16 @@ Global config at `~/.hookwise/config.yaml` applies everywhere. Project-level `ho
 
 ## Testing
 
-```typescript
-import { GuardTester } from "hookwise/testing";
-const tester = new GuardTester({ configPath: "hookwise.yaml" });
-expect(tester.testToolCall("Bash", { command: "rm -rf /" }).action).toBe("block");
+```go
+import hwtesting "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
+
+tester, err := hwtesting.NewGuardTester("hookwise.yaml")
+// handle err
+result := tester.Evaluate("Bash", map[string]any{"command": "rm -rf /"})
+assert.Equal(t, "block", result.Action)
 ```
 
-Also exports `HookRunner` and `HookResult`. [Details &rarr;](docs/cli.md)
+Go test helpers in `pkg/hookwise/testing`. [Details &rarr;](docs/cli.md)
 
 ## Recipes
 
@@ -181,7 +185,7 @@ hookwise runs inside your Claude Code session -- security is non-negotiable. The
 - **False-positive filtering** with strict exploitability criteria (confidence >= 8/10)
 - **Zero confirmed vulnerabilities** in the latest full-package audit (v1.3.0)
 
-Key design choices: parameterized SQL everywhere, safe YAML parsing only, no `eval()` or `Function()`, restrictive file permissions (0o600/0o700), fail-open architecture, and npm publish with [provenance attestations](https://docs.npmjs.com/generating-provenance-statements).
+Key design choices: parameterized SQL everywhere, safe YAML parsing only, restrictive file permissions (0o600/0o700), fail-open architecture, and Go binary releases via [GitHub Releases](https://github.com/vishnujayvel/hookwise/releases).
 
 [Full security policy, trust model, and reporting instructions &rarr;](SECURITY.md)
 
@@ -197,7 +201,7 @@ Key design choices: parameterized SQL everywhere, safe YAML parsing only, no `ev
 
 ## Contributing
 
-`git clone`, `npm install`, `npm test` (1,440 tests), `npm run build`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+`git clone`, `go test -race ./...`, `task pr`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [MIT](LICENSE) -- Built by [Vishnu](https://github.com/vishnujayvel). *Born from the gap between how fast AI makes you feel — and how fast you actually are.*
 </content>

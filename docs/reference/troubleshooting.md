@@ -187,39 +187,24 @@ The `when` and `unless` fields support 6 operators:
 
 Use the TUI Guards tab (key `2`) to test specific tool calls against your rules, or use the testing API:
 
-```typescript
-import { GuardTester } from "hookwise/testing";
-
-const tester = new GuardTester("hookwise.yaml");
-const result = tester.evaluate("Bash", { command: "rm -rf /" });
-console.log(result); // { action: "block", reason: "..." }
+```go
+tester, err := hwtesting.NewGuardTester("hookwise.yaml")
+// handle err
+result := tester.Evaluate("Bash", map[string]any{"command": "rm -rf /"})
+// result.Action == "block", result.Reason == "..."
 ```
 
 ## "Command Not Found: hookwise"
 
-Ensure the npm global bin is in your PATH:
+Ensure the hookwise binary is on your PATH:
 
 ```bash
-export PATH="$(npm config get prefix)/bin:$PATH"
+which hookwise
 ```
 
-Add this line to your `~/.zshrc` or `~/.bashrc` to make it permanent.
+If not found, check where you placed the binary and add that directory to your PATH. If you installed via `task install` or `make install`, the binary is at the location shown by `brew --prefix`/bin/hookwise.
 
-Or use npx:
-
-```bash
-npx hookwise doctor
-```
-
-## "Cannot Find Module" Errors
-
-hookwise requires Node.js 20+. Check your version:
-
-```bash
-node --version
-```
-
-If you are running an older version, upgrade Node.js.
+Add the directory to your `~/.zshrc` or `~/.bashrc` to make it permanent.
 
 ## Config Validation Warnings
 

@@ -4,7 +4,7 @@
 
 **After changing Go code, run `make install` before testing.**
 
-Hookwise is invoked by Claude Code hooks via the binary at `/opt/homebrew/bin/hookwise`.
+Hookwise is invoked by Claude Code hooks via the `hookwise` binary on your PATH (verify with `which hookwise`).
 Source code changes have NO effect until the binary is rebuilt. This has caused real
 incidents where everything "looked fine" in source but the installed binary was stale.
 
@@ -66,7 +66,7 @@ When to use what:
 - **ARCH-1**: Fail-open — dispatch always exits 0 on error
 - **ARCH-2**: Serialized Dolt writes via SetMaxOpenConns(1)
 - **ARCH-5**: First-match-wins guards
-- **ARCH-6**: Contract parity (byte-identical stdout per JSON fixtures)
+- **ARCH-6**: Contract parity (byte-identical stdout per JSON fixtures in testdata/contracts/)
 - **ARCH-7**: Side effects non-blocking with per-goroutine recover()
 
 ## Testing

@@ -7,43 +7,48 @@ Thanks for your interest in contributing to hookwise! Here's how to get started.
 ```bash
 git clone https://github.com/vishnujayvel/hookwise.git
 cd hookwise
-npm install
-npm test          # 1440 tests via vitest
-npm run build     # tsup build
-npm run typecheck # tsc --noEmit
+go test -race ./...    # Run all Go tests
+task check             # Fast pre-commit checks
+task test              # Full test suite
 ```
+
+Requires: Go 1.25+, Python 3.11+ (for TUI), Docker (for Dagger pipeline).
 
 ## Project Structure
 
-```
-src/
-  core/           # Dispatcher, config, guards, analytics, coaching
-    analytics/    # SQLite analytics engine
-    coaching/     # Metacognition, builder's trap, communication
-    feeds/        # Feed platform: producers, cache bus, registry
-    status-line/  # Composable status segments
-  cli/            # CLI commands (init, doctor, status, stats, test, migrate)
-  testing/        # HookRunner, HookResult, GuardTester
-
-tests/            # 1440+ tests
+```text
+cmd/hookwise/     # CLI entry point (Cobra commands)
+internal/
+  core/           # Dispatch engine, guards, config, types
+  analytics/      # Dolt-based analytics
+  feeds/          # Feed producers and daemon
+  bridge/         # Go→JSON→Python TUI bridge
+  contract/       # Contract parity tests (33 JSON fixtures)
+  arch/           # Architecture dependency lint
+  proptest/       # Property-based tests
+tui/              # Python Textual TUI (separate venv at tui/.venv/)
 recipes/          # 12 built-in recipes
 examples/         # Example configs
+dagger/           # Dagger CI/CD pipeline module
 ```
 
 ## Making Changes
 
 1. **Fork and branch:** Create a feature branch from `main`
-2. **Write tests first:** All new features need tests. Use vitest.
+2. **Write tests first:** All new features need tests. Use `testify/assert`.
 3. **Follow existing patterns:** Look at similar code for conventions
 4. **Keep it simple:** hookwise values clarity over cleverness
-5. **Test your guards:** Use `GuardTester` for guard rule testing
+5. **Rebuild after changes:** Run `task install` to rebuild the binary
 
 ## Testing
 
 ```bash
-npm test              # Run all tests
-npm run test:watch    # Watch mode
-npm run typecheck     # Type checking
+go test -race ./...                           # All unit tests
+go test -race -tags integration ./...         # + integration/chaos tests
+go test -race -tags mutation ./...            # + mutation tests
+cd tui && .venv/bin/python -m pytest tests/   # TUI tests
+task pr                                       # Full PR readiness pipeline
+dagger call test --src=.                      # Containerized (same as CI)
 ```
 
 ## Creating a Recipe
@@ -59,7 +64,7 @@ See [Creating a Recipe](docs/guide/creating-a-recipe.md) for details.
 - Keep PRs focused — one feature or fix per PR
 - Update tests for any behavior changes
 - Update README if adding user-facing features
-- Run the full test suite before submitting
+- Run `task pr` or `dagger call test --src=.` before submitting
 
 ## Code of Conduct
 
