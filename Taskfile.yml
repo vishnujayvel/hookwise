@@ -263,6 +263,11 @@ tasks:
     cmds:
       - dagger call tui-test-matrix --src=.
 
+  dagger:publish:
+    desc: "Dagger publish — build release binary (linux/amd64)"
+    cmds:
+      - dagger call publish --src=. --version={{.VERSION}} --commit={{.COMMIT}} export --path=./hookwise-linux-amd64
+
   default:
     desc: "Show available tasks"
     cmds:
