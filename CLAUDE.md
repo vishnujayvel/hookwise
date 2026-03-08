@@ -42,6 +42,7 @@ dagger call test --src=.            # Tier 1: unit + contract + arch + PBT + TUI
 dagger call validate --src=.        # Tier 2: integration + mutation + snapshots
 dagger call build --src=.           # Build binary only
 dagger call tui-test-matrix --src=. # TUI tests on Python 3.11/3.12/3.13
+dagger call publish --src=. --version=v1.4.0 --commit=$(git rev-parse HEAD) # Build release binary
 ```
 
 When to use what:
@@ -57,7 +58,7 @@ When to use what:
 - `internal/feeds/` — Feed producers and daemon
 - `internal/bridge/` — Go→JSON→Python TUI bridge
 - `internal/notifications/` — Notification platform
-- `internal/migration/` — TypeScript→Go data migration
+- `internal/migration/` — Data migration utilities
 - `tui/` — Python Textual TUI (separate venv at `tui/.venv/`)
 
 ## Architecture Constraints
@@ -65,7 +66,7 @@ When to use what:
 - **ARCH-1**: Fail-open — dispatch always exits 0 on error
 - **ARCH-2**: Serialized Dolt writes via SetMaxOpenConns(1)
 - **ARCH-5**: First-match-wins guards
-- **ARCH-6**: Contract parity (byte-identical stdout with TypeScript)
+- **ARCH-6**: Contract parity (byte-identical stdout per JSON fixtures)
 - **ARCH-7**: Side effects non-blocking with per-goroutine recover()
 
 ## Testing
