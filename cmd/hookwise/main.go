@@ -349,6 +349,18 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	cacheDir := filepath.Join(core.GetStateDir(), "state")
 	feedCache, _ := bridge.CollectFeedCache(cacheDir)
 
+	// Load today's daily summary from Dolt for session/cost segments.
+	// Fail-open: nil summary → segments fall back to "--".
+	var dailySummary *analytics.DailySummaryResult
+	if db, err := analytics.Open(""); err == nil {
+		defer db.Close()
+		today := time.Now().Format("2006-01-02")
+		a := analytics.NewAnalytics(db)
+		if s, err := a.DailySummary(context.Background(), today); err == nil {
+			dailySummary = s
+		}
+	}
+
 	delimiter := config.StatusLine.Delimiter
 	if delimiter == "" {
 		delimiter = core.DefaultStatusDelimiter
@@ -357,7 +369,7 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	var segments []string
 
 	for _, seg := range config.StatusLine.Segments {
-		rendered := renderSegment(seg, feedCache)
+		rendered := renderSegment(seg, feedCache, dailySummary)
 		if rendered != "" {
 			segments = append(segments, rendered)
 		}
@@ -433,9 +445,9 @@ func pluralS(count int) string {
 }
 
 // renderSegment renders a single status-line segment with ANSI colors.
-func renderSegment(seg core.SegmentConfig, feedCache map[string]interface{}) string {
+func renderSegment(seg core.SegmentConfig, feedCache map[string]interface{}, summary *analytics.DailySummaryResult) string {
 	if seg.Builtin != "" {
-		return renderBuiltinSegment(seg.Builtin, feedCache)
+		return renderBuiltinSegment(seg.Builtin, feedCache, summary)
 	}
 	if seg.Custom != nil && seg.Custom.Command != "" {
 		label := seg.Custom.Label
@@ -448,12 +460,18 @@ func renderSegment(seg core.SegmentConfig, feedCache map[string]interface{}) str
 }
 
 // renderBuiltinSegment renders a known builtin segment by name, reading
-// real data from the feed cache when available.
-func renderBuiltinSegment(name string, feedCache map[string]interface{}) string {
+// real data from the feed cache and Dolt daily summary when available.
+func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary *analytics.DailySummaryResult) string {
 	switch name {
 	case "session":
-		return ansiBold + ansiGreen + "session" + ansiReset
+		if summary != nil && summary.TotalSessions > 0 {
+			return ansiBold + ansiGreen + fmt.Sprintf("session: %d", summary.TotalSessions) + ansiReset
+		}
+		return ansiBold + ansiGreen + "session: --" + ansiReset
 	case "cost":
+		if summary != nil && summary.EstimatedCostUSD > 0 {
+			return ansiYellow + fmt.Sprintf("cost: $%.2f", summary.EstimatedCostUSD) + ansiReset
+		}
 		return ansiYellow + "cost: --" + ansiReset
 	case "project":
 		return renderProjectSegment(feedCache)

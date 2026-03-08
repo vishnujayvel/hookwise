@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
 
@@ -422,7 +423,7 @@ func TestRenderBuiltinSegments(t *testing.T) {
 	emptyCache := map[string]interface{}{}
 	names := []string{"session", "cost", "project", "calendar", "pulse", "weather"}
 	for _, name := range names {
-		result := renderBuiltinSegment(name, emptyCache)
+		result := renderBuiltinSegment(name, emptyCache, nil)
 		if result == "" {
 			t.Errorf("builtin segment %q rendered empty", name)
 		}
@@ -434,7 +435,7 @@ func TestRenderBuiltinSegments(t *testing.T) {
 	}
 
 	// Unknown segment should still render something.
-	unknown := renderBuiltinSegment("unknown_segment", emptyCache)
+	unknown := renderBuiltinSegment("unknown_segment", emptyCache, nil)
 	if unknown == "" {
 		t.Error("unknown builtin segment should still render")
 	}
@@ -589,7 +590,7 @@ func TestStatusLineWeatherSegment(t *testing.T) {
 		},
 	}
 
-	result := renderBuiltinSegment("weather", feedCache)
+	result := renderBuiltinSegment("weather", feedCache, nil)
 	stripped := stripANSI(result)
 
 	if !strings.Contains(stripped, "55") {
@@ -621,7 +622,7 @@ func TestStatusLineWeatherZeroTemp(t *testing.T) {
 		},
 	}
 
-	result := renderBuiltinSegment("weather", feedCache)
+	result := renderBuiltinSegment("weather", feedCache, nil)
 	stripped := stripANSI(result)
 
 	// 0°F is a real temperature — must render "0", not "--"
@@ -654,7 +655,7 @@ func TestStatusLineWeatherCelsius(t *testing.T) {
 		},
 	}
 
-	result := renderBuiltinSegment("weather", feedCache)
+	result := renderBuiltinSegment("weather", feedCache, nil)
 	stripped := stripANSI(result)
 
 	if !strings.Contains(stripped, "22") {
@@ -684,7 +685,7 @@ func TestStatusLineProjectSegment(t *testing.T) {
 		},
 	}
 
-	result := renderBuiltinSegment("project", feedCache)
+	result := renderBuiltinSegment("project", feedCache, nil)
 	stripped := stripANSI(result)
 
 	if !strings.Contains(stripped, "myapp") {
@@ -742,7 +743,7 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 	}
 
 	for _, name := range []string{"weather", "pulse", "project", "calendar"} {
-		result := renderBuiltinSegment(name, feedCache)
+		result := renderBuiltinSegment(name, feedCache, nil)
 		stripped := stripANSI(result)
 
 		expected := name + ": --"
@@ -753,6 +754,49 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 		if strings.Contains(stripped, ": 0") {
 			t.Errorf("placeholder %q should not render '0' as real data, got: %s", name, stripped)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 21. Session segment with daily summary
+// ---------------------------------------------------------------------------
+
+func TestStatusLineSessionSegment(t *testing.T) {
+	summary := &analytics.DailySummaryResult{TotalSessions: 3}
+	result := renderBuiltinSegment("session", nil, summary)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "session: 3") {
+		t.Errorf("session segment should show count, got: %s", stripped)
+	}
+}
+
+func TestStatusLineSessionSegmentNoSummary(t *testing.T) {
+	result := renderBuiltinSegment("session", nil, nil)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "session: --") {
+		t.Errorf("session segment without summary should show '--', got: %s", stripped)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 22. Cost segment with daily summary
+// ---------------------------------------------------------------------------
+
+func TestStatusLineCostSegment(t *testing.T) {
+	summary := &analytics.DailySummaryResult{EstimatedCostUSD: 1.50}
+	result := renderBuiltinSegment("cost", nil, summary)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "cost: $1.50") {
+		t.Errorf("cost segment should show dollar amount, got: %s", stripped)
+	}
+}
+
+func TestStatusLineCostSegmentZero(t *testing.T) {
+	summary := &analytics.DailySummaryResult{EstimatedCostUSD: 0}
+	result := renderBuiltinSegment("cost", nil, summary)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "cost: --") {
+		t.Errorf("cost segment with zero should show '--', got: %s", stripped)
 	}
 }
 
