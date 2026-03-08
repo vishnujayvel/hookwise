@@ -12,40 +12,14 @@ on:
       - ".github/workflows/tui-tests.yml"
 
 jobs:
-  test:
+  tui-matrix:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: TUI Test Matrix
+        uses: dagger/dagger-for-github@v8
         with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies
-        working-directory: tui
-        run: uv pip install --system -e ".[dev]"
-
-      - name: Run TUI tests (excluding snapshots)
-        working-directory: tui
-        if: matrix.python-version != '3.13'
-        run: python -m pytest tests/ -v --ignore=tests/test_snapshots.py
-
-      - name: Run TUI tests (with snapshots)
-        working-directory: tui
-        if: matrix.python-version == '3.13'
-        run: python -m pytest tests/ -v --snapshot-update
-
-      - name: Upload snapshot diffs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: snapshot-diffs-py${{ matrix.python-version }}
-          path: tui/tests/**/snapshot_tests_output/
-          retention-days: 7
+          verb: call
+          args: tui-test-matrix --src=.
+          version: "0.20"
