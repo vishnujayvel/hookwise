@@ -1,20 +1,21 @@
 # Migration from Python (v0.1.0)
 
-This guide walks you through migrating from the original Python hookwise (v0.1.0) to the TypeScript rewrite (v1.0).
+This guide walks you through migrating from the original Python hookwise (v0.1.0) to the Go rewrite (v2.0).
 
 ## What Changed
 
-| Aspect | v0.1.0 (Python) | v1.0 (TypeScript) |
-|--------|-----------------|-------------------|
-| Runtime | Python 3.10+ | Node.js 20+ |
-| Install | `pip install hookwise` | `npm install -g hookwise` |
+| Aspect | v0.1.0 (Python) | v2.0 (Go) |
+|--------|-----------------|-----------|
+| Runtime | Python 3.10+ | Go binary (no runtime dependency) |
+| Install | `pip install hookwise` | Download from [GitHub Releases](https://github.com/vishnujayvel/hookwise/releases) |
 | Config format | hookwise.yaml (snake_case) | hookwise.yaml (snake_case, same file) |
-| Test framework | pytest | vitest |
-| Testing API | `GuardTester` (Python) | `GuardTester`, `HookRunner`, `HookResult` |
-| TUI | Textual | Python Textual |
-| Recipes | 7 built-in | 11 built-in |
+| Test framework | pytest | `go test` + contract fixtures |
+| Testing API | `GuardTester` (Python) | `hwtesting.GuardTester` (Go) |
+| TUI | Textual | Python Textual (unchanged) |
+| Recipes | 7 built-in | 12 built-in |
 | Event support | 7 events | All 13 Claude Code events |
-| Package format | pip/PyPI | npm |
+| Analytics | SQLite | Dolt (version-controlled SQL) |
+| Distribution | pip/PyPI | Go binary via GitHub Releases |
 
 ## What Stayed the Same
 
@@ -23,17 +24,24 @@ This guide walks you through migrating from the original Python hookwise (v0.1.0
 - **Condition operators** -- Same 6 operators: `contains`, `starts_with`, `ends_with`, `==`, `equals`, `matches`.
 - **Three-phase execution** -- Guards, context injection, side effects.
 - **Fail-open philosophy** -- Errors never accidentally block tool calls.
+- **Python TUI** -- The Textual-based TUI remains Python, reading from Go's JSON cache.
 
 ## Step-by-Step Migration
 
-### 1. Install TypeScript hookwise
+### 1. Install Go hookwise
 
 ```bash
 # Remove Python version
 pip uninstall hookwise
 
-# Install TypeScript version
-npm install -g hookwise
+# Download Go binary from GitHub Releases
+# https://github.com/vishnujayvel/hookwise/releases
+# Place it on your PATH (e.g., /usr/local/bin/hookwise)
+
+# Or build from source:
+git clone https://github.com/vishnujayvel/hookwise.git
+cd hookwise
+go build -ldflags "-X main.version=$(git describe --tags)" -o /usr/local/bin/hookwise ./cmd/hookwise/
 ```
 
 ### 2. Run the migration command
@@ -45,8 +53,8 @@ hookwise migrate
 ```
 
 This will:
-- Replace the Python hookwise entry in Claude's `settings.json` with the TypeScript version
-- Validate your existing `hookwise.yaml` against the v1.0 schema
+- Replace the Python hookwise entry in Claude's `settings.json` with the Go binary
+- Validate your existing `hookwise.yaml` against the current schema
 - Report any incompatibilities
 
 Use `--dry-run` to preview changes without applying them:
@@ -57,61 +65,20 @@ hookwise migrate --dry-run
 
 ### 3. Update handler scripts
 
-If you have custom Python handlers, you have two options:
-
-**Option A: Keep Python handlers (recommended for existing scripts)**
-
-hookwise v1.0 automatically adds the `python3` prefix to `.py` handler commands:
+If you have custom Python handlers, they continue to work — hookwise v2.0 automatically adds the `python3` prefix to `.py` handler commands:
 
 ```yaml
-# v0.1.0 config
+# v0.1.0 config — works as-is
 handlers:
   - name: my-guard
     type: script
     events: [PreToolUse]
-    command: hooks/guard.py        # <-- auto-converted to "python3 hooks/guard.py"
-```
-
-No changes needed -- the backward compatibility layer handles this.
-
-**Option B: Rewrite in TypeScript/Node**
-
-For better performance and tighter integration, rewrite handlers in TypeScript:
-
-```typescript
-// hooks/guard.ts
-import { readFileSync } from "node:fs";
-
-const input = readFileSync(0, "utf-8");
-const payload = JSON.parse(input);
-
-if (payload.tool_name === "Bash") {
-  const cmd = payload.tool_input?.command ?? "";
-  if (cmd.includes("rm -rf")) {
-    process.stdout.write(
-      JSON.stringify({ decision: "block", reason: "Dangerous command" })
-    );
-    process.exit(0);
-  }
-}
-
-// Allow by default
-process.stdout.write(JSON.stringify({}));
-```
-
-Update your config:
-
-```yaml
-handlers:
-  - name: my-guard
-    type: script
-    events: [PreToolUse]
-    command: "node hooks/guard.ts"  # or use tsx for TypeScript
+    command: hooks/guard.py        # auto-converted to "python3 hooks/guard.py"
 ```
 
 ### 4. Update Claude Code settings
 
-Replace the Python dispatch command with the Node.js one:
+The dispatch command is the same:
 
 ```json
 {
@@ -123,54 +90,18 @@ Replace the Python dispatch command with the Node.js one:
 }
 ```
 
-The CLI command is the same (`hookwise dispatch <event>`) -- only the underlying runtime changed.
-
-### 5. Update test scripts
-
-Replace pytest-based tests with vitest:
-
-**Before (Python):**
-```python
-from hookwise.testing import GuardTester
-
-def test_blocks_rm_rf():
-    tester = GuardTester("hookwise.yaml")
-    result = tester.evaluate("Bash", {"command": "rm -rf /"})
-    assert result.blocked
-```
-
-**After (TypeScript):**
-```typescript
-import { GuardTester } from "hookwise/testing";
-import { describe, it, expect } from "vitest";
-
-describe("guards", () => {
-  it("blocks rm -rf", () => {
-    const tester = new GuardTester({ configPath: "hookwise.yaml" });
-    const result = tester.testToolCall("Bash", { command: "rm -rf /" });
-    expect(result.action).toBe("block");
-  });
-});
-```
-
-### 6. Verify
+### 5. Verify
 
 ```bash
-# Check config is valid
 hookwise doctor
-
-# Run your guard tests
-npx vitest run
-
-# View stats (if analytics was enabled)
-hookwise stats
+hookwise --version
 ```
 
 ## Config Key Mapping
 
-hookwise v1.0 accepts both snake_case (YAML convention) and camelCase. The config engine automatically converts between them.
+hookwise v2.0 accepts both snake_case (YAML convention) and camelCase. The config engine automatically converts between them.
 
-| v0.1.0 (snake_case) | v1.0 (camelCase internally) |
+| v0.1.0 (snake_case) | v2.0 (camelCase internally) |
 |---------------------|-----------------------------|
 | `interval_seconds` | `intervalSeconds` |
 | `builder_trap` | `builderTrap` |
@@ -184,30 +115,18 @@ hookwise v1.0 accepts both snake_case (YAML convention) and camelCase. The confi
 
 Write your YAML in snake_case -- it is the convention and hookwise handles the conversion.
 
-## Analytics Data
-
-The v1.0 analytics uses SQLite (same as v0.1.0) but the schema has been enhanced. Your existing analytics data will continue to work, but new columns are available for:
-
-- AI Confidence Score (per-file authorship classification)
-- Cost tracking
-- Multi-agent observability
-
 ## Troubleshooting
 
 **"command not found: hookwise"**
-Make sure the npm global bin is in your PATH:
+Ensure the binary is on your PATH:
 ```bash
-export PATH="$(npm config get prefix)/bin:$PATH"
+which hookwise
 ```
 
-**"Cannot find module" errors**
-hookwise v1.0 requires Node.js 20+. Check your version:
-```bash
-node --version
-```
+If not found, check where you placed the binary and add that directory to your PATH.
 
 **Python handler still referenced**
-The v0.1.0 compatibility layer auto-adds `python3` prefix. If your Python handler needs a specific interpreter, update the command explicitly:
+The backward compatibility layer auto-adds `python3` prefix. If your Python handler needs a specific interpreter, update the command explicitly:
 ```yaml
 command: "/usr/local/bin/python3.11 hooks/guard.py"
 ```

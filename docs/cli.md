@@ -38,7 +38,7 @@ hookwise setup <target>   Set up external integrations (e.g., hookwise setup cal
 hookwise daemon <start|stop|status>
                           Manage the background feed daemon
 
-hookwise migrate          Migrate from Python hookwise (v0.1.0) to TypeScript
+hookwise migrate          Migrate from Python hookwise (v0.1.0)
 ```
 
 ## Presets
@@ -52,27 +52,28 @@ hookwise migrate          Migrate from Python hookwise (v0.1.0) to TypeScript
 
 ## Testing Utilities
 
-hookwise includes testing utilities so you can validate guards in CI:
+hookwise includes Go test helpers so you can validate guards in CI:
 
-```typescript
-import { GuardTester } from "hookwise/testing";
+```go
+import "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
 
-const tester = new GuardTester("hookwise.yaml");
+func TestGuards(t *testing.T) {
+    tester := hwtesting.NewGuardTester(t, "hookwise.yaml")
 
-// Test blocking
-const blocked = tester.evaluate("Bash", { command: "rm -rf /" });
-expect(blocked.action).toBe("block");
+    // Test blocking
+    blocked := tester.TestToolCall("Bash", map[string]any{"command": "rm -rf /"})
+    assert.Equal(t, "block", blocked.Action)
 
-// Test allowing
-const allowed = tester.evaluate("Bash", { command: "ls -la" });
-expect(allowed.action).toBe("allow");
+    // Test allowing
+    allowed := tester.TestToolCall("Bash", map[string]any{"command": "ls -la"})
+    assert.Equal(t, "allow", allowed.Action)
+}
 ```
 
-Three testing utilities are exported:
+Test helpers available in `pkg/hookwise/testing`:
 
 - **`GuardTester`** -- In-process guard rule evaluation (fast, no subprocess)
-- **`HookRunner`** -- Subprocess-based hook execution (tests the real dispatch path)
-- **`HookResult`** -- Assertion helpers (`assertBlocked()`, `assertAllowed()`, `assertWarns()`)
+- **Contract tests** -- 33 JSON fixtures in `testdata/contracts/` for byte-identical output validation
 
 ## Interactive TUI
 

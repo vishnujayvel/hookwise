@@ -9,7 +9,7 @@ recipes/
   my-category/
     my-recipe/
       hooks.yaml     # Recipe configuration (required)
-      handler.ts     # Recipe handler implementation (required)
+      handler.sh     # Recipe handler script (required)
       README.md      # Recipe documentation (required)
 ```
 
@@ -45,7 +45,7 @@ handlers:
     type: script
     events:
       - PostToolUse
-    command: "node handler.js"
+    command: "bash handler.sh"
     phase: side_effect
 ```
 
@@ -66,50 +66,34 @@ handlers:
 | `guards` | array | Guard rules (prepended to project guards) |
 | `handlers` | array | Custom handlers (appended to project handlers) |
 
-## handler.ts
+## handler.sh
 
-The handler is a TypeScript file that implements the recipe's logic. It receives the hook payload on stdin and writes results to stdout:
+The handler is a script that implements the recipe's logic. It receives the hook payload on stdin as JSON and writes results to stdout:
 
-```typescript
-/**
- * my-awesome-recipe handler
- *
- * Reads the hook payload from stdin, processes it, and writes
- * a result to stdout.
- */
+```bash
+#!/bin/bash
+# my-awesome-recipe handler
+#
+# Reads the hook payload from stdin, processes it, and writes
+# a JSON result to stdout.
 
-import { readFileSync } from "node:fs";
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // "unknown"')
 
-// Read payload from stdin
-const input = readFileSync(0, "utf-8");
-const payload = JSON.parse(input);
-
-// Your recipe logic here
-const toolName = payload.tool_name ?? "unknown";
-const sessionId = payload.session_id ?? "";
-
-// Output a result (optional)
-const result = {
-  additionalContext: `Recipe processed: ${toolName}`,
-};
-
-process.stdout.write(JSON.stringify(result));
+# Your recipe logic here
+echo "{\"additionalContext\": \"Recipe processed: $TOOL_NAME\"}"
 ```
 
 ### Handler Output Format
 
 The handler can output JSON with any of these fields:
 
-```typescript
-interface HandlerResult {
-  // For guard handlers: "block", "warn", "confirm", or null
-  decision?: "block" | "warn" | "confirm" | null;
-  // Reason for the decision
-  reason?: string;
-  // Context to inject into the AI's prompt
-  additionalContext?: string;
-  // Arbitrary output data (for side effects)
-  output?: Record<string, unknown>;
+```json
+{
+  "decision": "block | warn | confirm | null",
+  "reason": "Reason for the decision",
+  "additionalContext": "Context to inject into the AI's prompt",
+  "output": {}
 }
 ```
 
@@ -164,8 +148,8 @@ includes:
 
 hookwise searches for recipes in this order:
 
-1. `node_modules/hookwise/recipes/<name>` (npm-installed hookwise)
-2. `./recipes/<name>` (local project directory)
+1. `./recipes/<name>` (local project directory)
+2. `~/.hookwise/recipes/<name>` (user-level recipes)
 3. Absolute path (if the include path is absolute)
 
 ### Merge Semantics
@@ -194,7 +178,7 @@ Here is the `safety/block-dangerous-commands` recipe as a reference:
 ```
 recipes/safety/block-dangerous-commands/
   hooks.yaml
-  handler.ts
+  handler.sh
   README.md
 ```
 
@@ -202,30 +186,16 @@ The `hooks.yaml` defines guard rules that block `rm -rf /`, `rm -rf ~`, and forc
 
 ## Testing Recipes
 
-Use `GuardTester` from `hookwise/testing` to test recipe guards:
+Use the Go test helpers from `pkg/hookwise/testing` to test recipe guards:
 
-```typescript
-import { GuardTester } from "hookwise/testing";
+```go
+import "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
 
-// Load a config that includes your recipe
-const tester = new GuardTester({ configPath: "hookwise.yaml" });
-
-// Verify your recipe's guards work
-const result = tester.testToolCall("Bash", { command: "rm -rf /" });
-expect(result.action).toBe("block");
+func TestRecipeGuards(t *testing.T) {
+    tester := hwtesting.NewGuardTester(t, "hookwise.yaml")
+    result := tester.TestToolCall("Bash", map[string]any{"command": "rm -rf /"})
+    assert.Equal(t, "block", result.Action)
+}
 ```
 
-For script handlers, use `HookRunner` to test the full subprocess pipeline:
-
-```typescript
-import { HookRunner } from "hookwise/testing";
-
-const runner = new HookRunner("hookwise dispatch");
-const result = runner.run("PreToolUse", {
-  session_id: "test",
-  tool_name: "Bash",
-  tool_input: { command: "ls -la" },
-});
-
-result.assertAllowed();
-```
+For integration testing, use `hookwise test` which runs guard scenarios defined in your `hookwise.yaml`.

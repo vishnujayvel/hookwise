@@ -4,21 +4,19 @@ This guide walks you through installing hookwise, creating your first configurat
 
 ## Prerequisites
 
-- **Node.js 20+** (check with `node --version`)
+- **Go 1.25+** (for building from source) or download from [GitHub Releases](https://github.com/vishnujayvel/hookwise/releases)
 - **Claude Code** installed and configured
 
 ## Installation
 
-Install hookwise globally:
+Download the latest binary from [GitHub Releases](https://github.com/vishnujayvel/hookwise/releases) and place it on your PATH.
+
+Or build from source:
 
 ```bash
-npm install -g hookwise
-```
-
-Or use it directly with npx:
-
-```bash
-npx hookwise init
+git clone https://github.com/vishnujayvel/hookwise.git
+cd hookwise
+go build -o /usr/local/bin/hookwise ./cmd/hookwise/
 ```
 
 ## First Run
@@ -83,7 +81,7 @@ hookwise doctor
 ```
 
 This runs 9 checks:
-- Node.js version (20+)
+- Go binary is installed and on PATH
 - Claude directory exists (`~/.claude/`)
 - Configuration file exists and is valid YAML
 - State directory has correct permissions
