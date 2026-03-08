@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vishnujayvel/hookwise/internal/analytics"
+	"github.com/vishnujayvel/hookwise/internal/bridge"
 	"github.com/vishnujayvel/hookwise/internal/core"
 	"github.com/vishnujayvel/hookwise/internal/migration"
 	"github.com/vishnujayvel/hookwise/internal/notifications"
@@ -343,6 +344,11 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 		return nil
 	}
 
+	// Load feed cache from daemon's per-feed JSON files (ARCH-3: read JSON only).
+	// Use GetStateDir() to respect HOOKWISE_STATE_DIR env override.
+	cacheDir := filepath.Join(core.GetStateDir(), "state")
+	feedCache, _ := bridge.CollectFeedCache(cacheDir)
+
 	delimiter := config.StatusLine.Delimiter
 	if delimiter == "" {
 		delimiter = core.DefaultStatusDelimiter
@@ -351,7 +357,7 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	var segments []string
 
 	for _, seg := range config.StatusLine.Segments {
-		rendered := renderSegment(seg)
+		rendered := renderSegment(seg, feedCache)
 		if rendered != "" {
 			segments = append(segments, rendered)
 		}
@@ -427,9 +433,9 @@ func pluralS(count int) string {
 }
 
 // renderSegment renders a single status-line segment with ANSI colors.
-func renderSegment(seg core.SegmentConfig) string {
+func renderSegment(seg core.SegmentConfig, feedCache map[string]interface{}) string {
 	if seg.Builtin != "" {
-		return renderBuiltinSegment(seg.Builtin)
+		return renderBuiltinSegment(seg.Builtin, feedCache)
 	}
 	if seg.Custom != nil && seg.Custom.Command != "" {
 		label := seg.Custom.Label
@@ -441,24 +447,189 @@ func renderSegment(seg core.SegmentConfig) string {
 	return ""
 }
 
-// renderBuiltinSegment renders a known builtin segment by name.
-func renderBuiltinSegment(name string) string {
+// renderBuiltinSegment renders a known builtin segment by name, reading
+// real data from the feed cache when available.
+func renderBuiltinSegment(name string, feedCache map[string]interface{}) string {
 	switch name {
 	case "session":
 		return ansiBold + ansiGreen + "session" + ansiReset
 	case "cost":
-		return ansiYellow + "cost: $0.00" + ansiReset
+		return ansiYellow + "cost: --" + ansiReset
 	case "project":
-		return ansiCyan + "project" + ansiReset
+		return renderProjectSegment(feedCache)
 	case "calendar":
-		return ansiCyan + "calendar" + ansiReset
+		return renderCalendarSegment(feedCache)
 	case "pulse":
-		return ansiGreen + "pulse" + ansiReset
+		return renderPulseSegment(feedCache)
 	case "weather":
-		return ansiCyan + "weather" + ansiReset
+		return renderWeatherSegment(feedCache)
 	default:
 		return ansiGray + name + ansiReset
 	}
+}
+
+// feedData extracts the "data" sub-object from a feed cache envelope.
+// Returns nil if the feed is missing, malformed, or has source: "placeholder".
+func feedData(feedCache map[string]interface{}, feedName string) map[string]interface{} {
+	if feedCache == nil {
+		return nil
+	}
+	raw, ok := feedCache[feedName]
+	if !ok {
+		return nil
+	}
+	envelope, ok := raw.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	dataRaw, ok := envelope["data"]
+	if !ok {
+		return nil
+	}
+	data, ok := dataRaw.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	// Check for placeholder source.
+	if src, ok := data["source"]; ok {
+		if srcStr, ok := src.(string); ok && srcStr == "placeholder" {
+			return nil
+		}
+	}
+	return data
+}
+
+// renderWeatherSegment renders the weather segment from feed cache data.
+func renderWeatherSegment(feedCache map[string]interface{}) string {
+	data := feedData(feedCache, "weather")
+	if data == nil {
+		return ansiCyan + "weather: --" + ansiReset
+	}
+
+	// Temperature may be nil (placeholder/fallback).
+	temp := data["temperature"]
+	if temp == nil {
+		return ansiCyan + "weather: --" + ansiReset
+	}
+
+	// Format temperature as integer.
+	var tempStr string
+	switch v := temp.(type) {
+	case float64:
+		tempStr = strconv.FormatFloat(v, 'f', 0, 64)
+	case int:
+		tempStr = strconv.Itoa(v)
+	default:
+		tempStr = fmt.Sprintf("%v", v)
+	}
+
+	// Determine unit symbol.
+	unit := "F"
+	if u, ok := data["temperatureUnit"]; ok {
+		if us, ok := u.(string); ok && us == "celsius" {
+			unit = "C"
+		}
+	}
+
+	emoji := ""
+	if e, ok := data["emoji"].(string); ok {
+		emoji = e + " "
+	}
+
+	desc := ""
+	if d, ok := data["description"].(string); ok {
+		desc = " " + d
+	}
+
+	return ansiCyan + emoji + tempStr + "\u00b0" + unit + desc + ansiReset
+}
+
+// renderProjectSegment renders the project segment from feed cache data.
+func renderProjectSegment(feedCache map[string]interface{}) string {
+	data := feedData(feedCache, "project")
+	if data == nil {
+		return ansiCyan + "project: --" + ansiReset
+	}
+
+	name := "project"
+	if n, ok := data["name"].(string); ok && n != "" {
+		name = n
+	}
+
+	branch := ""
+	if b, ok := data["branch"].(string); ok && b != "" {
+		branch = " (" + b + ")"
+	}
+
+	return ansiCyan + name + branch + ansiReset
+}
+
+// renderCalendarSegment renders the calendar segment from feed cache data.
+func renderCalendarSegment(feedCache map[string]interface{}) string {
+	data := feedData(feedCache, "calendar")
+	if data == nil {
+		return ansiCyan + "calendar: --" + ansiReset
+	}
+
+	nextEvent := data["next_event"]
+	if nextEvent == nil {
+		return ansiCyan + "calendar: --" + ansiReset
+	}
+
+	// next_event can be a string or a map with name/time fields.
+	switch ev := nextEvent.(type) {
+	case string:
+		if ev == "" {
+			return ansiCyan + "calendar: --" + ansiReset
+		}
+		return ansiCyan + "\U0001f4c5 " + ev + ansiReset
+	case map[string]interface{}:
+		name, _ := ev["name"].(string)
+		eventTime, _ := ev["time"].(string)
+		if name == "" && eventTime == "" {
+			return ansiCyan + "calendar: --" + ansiReset
+		}
+		label := name
+		if eventTime != "" {
+			if label != "" {
+				label += " " + eventTime
+			} else {
+				label = eventTime
+			}
+		}
+		return ansiCyan + "\U0001f4c5 " + label + ansiReset
+	default:
+		return ansiCyan + "calendar: --" + ansiReset
+	}
+}
+
+// renderPulseSegment renders the pulse segment from feed cache data.
+func renderPulseSegment(feedCache map[string]interface{}) string {
+	data := feedData(feedCache, "pulse")
+	if data == nil {
+		return ansiGreen + "pulse: --" + ansiReset
+	}
+
+	sessionCount, ok := data["session_count"]
+	if !ok {
+		return ansiGreen + "pulse: --" + ansiReset
+	}
+
+	var count int
+	switch v := sessionCount.(type) {
+	case float64:
+		count = int(v)
+	case int:
+		count = v
+	default:
+		return ansiGreen + "pulse: --" + ansiReset
+	}
+
+	suffix := "sessions"
+	if count == 1 {
+		suffix = "session"
+	}
+	return ansiGreen + fmt.Sprintf("pulse: %d %s", count, suffix) + ansiReset
 }
 
 // ---------------------------------------------------------------------------

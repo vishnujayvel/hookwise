@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -418,13 +419,14 @@ func TestBuildTestPayload(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderBuiltinSegments(t *testing.T) {
+	emptyCache := map[string]interface{}{}
 	names := []string{"session", "cost", "project", "calendar", "pulse", "weather"}
 	for _, name := range names {
-		result := renderBuiltinSegment(name)
+		result := renderBuiltinSegment(name, emptyCache)
 		if result == "" {
 			t.Errorf("builtin segment %q rendered empty", name)
 		}
-		// After stripping ANSI codes, segment name should appear.
+		// After stripping ANSI codes, segment name should appear (all show "name: --" or "name").
 		stripped := stripANSI(result)
 		if !strings.Contains(stripped, name) && name != "cost" {
 			t.Errorf("builtin segment %q should contain its name, got: %s", name, stripped)
@@ -432,9 +434,337 @@ func TestRenderBuiltinSegments(t *testing.T) {
 	}
 
 	// Unknown segment should still render something.
-	unknown := renderBuiltinSegment("unknown_segment")
+	unknown := renderBuiltinSegment("unknown_segment", emptyCache)
 	if unknown == "" {
 		t.Error("unknown builtin segment should still render")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 14. Status-line with feed cache renders real data
+// ---------------------------------------------------------------------------
+
+func TestStatusLineWithFeedCache(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	stateDir := filepath.Join(tmpDir, ".hookwise")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+
+	// Create the feed cache directory (same as filepath.Dir(core.DefaultCachePath)).
+	cacheDir := filepath.Join(stateDir, "state")
+	os.MkdirAll(cacheDir, 0o700)
+
+	// Write weather feed cache with real data.
+	weatherEnvelope := map[string]interface{}{
+		"type":      "weather",
+		"timestamp": "2026-03-07T10:00:00Z",
+		"data": map[string]interface{}{
+			"temperature":     72.0,
+			"temperatureUnit": "fahrenheit",
+			"windSpeed":       5.3,
+			"weatherCode":     0,
+			"emoji":           "\u2600\ufe0f",
+			"description":     "Clear",
+		},
+	}
+	writeJSONFile(t, filepath.Join(cacheDir, "weather.json"), weatherEnvelope)
+
+	// Write project feed cache with real data.
+	projectEnvelope := map[string]interface{}{
+		"type":      "project",
+		"timestamp": "2026-03-07T10:00:00Z",
+		"data": map[string]interface{}{
+			"name":   "hookwise",
+			"branch": "main",
+		},
+	}
+	writeJSONFile(t, filepath.Join(cacheDir, "project.json"), projectEnvelope)
+
+	configYAML := `version: 1
+status_line:
+  enabled: true
+  segments:
+    - builtin: weather
+    - builtin: project
+`
+	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
+	os.WriteFile(configPath, []byte(configYAML), 0o644)
+
+	output, err := executeCommand("status-line")
+	if err != nil {
+		t.Fatalf("status-line failed: %v\noutput: %s", err, output)
+	}
+
+	stripped := stripANSI(output)
+
+	// Weather should show temperature and description from cache.
+	if !strings.Contains(stripped, "72") {
+		t.Errorf("weather segment should show temperature 72, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "Clear") {
+		t.Errorf("weather segment should show description 'Clear', got: %s", stripped)
+	}
+
+	// Project should show name and branch from cache.
+	if !strings.Contains(stripped, "hookwise") {
+		t.Errorf("project segment should show project name, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "(main)") {
+		t.Errorf("project segment should show branch, got: %s", stripped)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 15. Status-line with missing cache renders fallbacks
+// ---------------------------------------------------------------------------
+
+func TestStatusLineWithMissingCache(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	// Point state dir to a nonexistent path so no cache is found.
+	stateDir := filepath.Join(tmpDir, ".hookwise-no-cache")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+
+	configYAML := `version: 1
+status_line:
+  enabled: true
+  segments:
+    - builtin: weather
+    - builtin: project
+    - builtin: pulse
+    - builtin: calendar
+`
+	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
+	os.WriteFile(configPath, []byte(configYAML), 0o644)
+
+	output, err := executeCommand("status-line")
+	if err != nil {
+		t.Fatalf("status-line failed: %v\noutput: %s", err, output)
+	}
+
+	stripped := stripANSI(output)
+
+	// All segments should show fallback with "--".
+	for _, name := range []string{"weather", "project", "pulse", "calendar"} {
+		expected := name + ": --"
+		if !strings.Contains(stripped, expected) {
+			t.Errorf("segment %q should show fallback %q, got: %s", name, expected, stripped)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 16. Weather segment renders from cache
+// ---------------------------------------------------------------------------
+
+func TestStatusLineWeatherSegment(t *testing.T) {
+	feedCache := map[string]interface{}{
+		"weather": map[string]interface{}{
+			"type":      "weather",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"temperature":     55.0,
+				"temperatureUnit": "fahrenheit",
+				"emoji":           "\U0001f327\ufe0f",
+				"description":     "Rain",
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("weather", feedCache)
+	stripped := stripANSI(result)
+
+	if !strings.Contains(stripped, "55") {
+		t.Errorf("weather should show temperature 55, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "F") {
+		t.Errorf("weather should show unit F, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "Rain") {
+		t.Errorf("weather should show description Rain, got: %s", stripped)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 16b. Weather segment with real zero temperature (not placeholder)
+// ---------------------------------------------------------------------------
+
+func TestStatusLineWeatherZeroTemp(t *testing.T) {
+	feedCache := map[string]interface{}{
+		"weather": map[string]interface{}{
+			"type":      "weather",
+			"timestamp": "2026-01-15T08:00:00Z",
+			"data": map[string]interface{}{
+				"temperature":     0.0,
+				"temperatureUnit": "fahrenheit",
+				"emoji":           "\u2744\ufe0f",
+				"description":     "Snow",
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("weather", feedCache)
+	stripped := stripANSI(result)
+
+	// 0°F is a real temperature — must render "0", not "--"
+	if strings.Contains(stripped, "--") {
+		t.Errorf("real zero temperature should NOT show '--', got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "0") {
+		t.Errorf("weather should show temperature 0, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "F") {
+		t.Errorf("weather should show unit F, got: %s", stripped)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 16c. Weather segment with celsius unit
+// ---------------------------------------------------------------------------
+
+func TestStatusLineWeatherCelsius(t *testing.T) {
+	feedCache := map[string]interface{}{
+		"weather": map[string]interface{}{
+			"type":      "weather",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"temperature":     22.0,
+				"temperatureUnit": "celsius",
+				"emoji":           "\u2600\ufe0f",
+				"description":     "Clear",
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("weather", feedCache)
+	stripped := stripANSI(result)
+
+	if !strings.Contains(stripped, "22") {
+		t.Errorf("weather should show temperature 22, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "C") {
+		t.Errorf("weather should show unit C for celsius, got: %s", stripped)
+	}
+	if strings.Contains(stripped, "F") {
+		t.Errorf("celsius weather should NOT show F, got: %s", stripped)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 17. Project segment renders from cache
+// ---------------------------------------------------------------------------
+
+func TestStatusLineProjectSegment(t *testing.T) {
+	feedCache := map[string]interface{}{
+		"project": map[string]interface{}{
+			"type":      "project",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"name":   "myapp",
+				"branch": "feature/xyz",
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("project", feedCache)
+	stripped := stripANSI(result)
+
+	if !strings.Contains(stripped, "myapp") {
+		t.Errorf("project should show name myapp, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "(feature/xyz)") {
+		t.Errorf("project should show branch, got: %s", stripped)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 18. Placeholder fallback renders "--" not "0"
+// ---------------------------------------------------------------------------
+
+func TestStatusLinePlaceholderFallback(t *testing.T) {
+	// Feed with source: "placeholder" should be treated as no data.
+	feedCache := map[string]interface{}{
+		"weather": map[string]interface{}{
+			"type":      "weather",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"temperature":     0.0,
+				"temperatureUnit": "fahrenheit",
+				"emoji":           "",
+				"description":     "",
+				"source":          "placeholder",
+			},
+		},
+		"pulse": map[string]interface{}{
+			"type":      "pulse",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"session_count":   0,
+				"active_sessions": 0,
+				"source":          "placeholder",
+			},
+		},
+		"project": map[string]interface{}{
+			"type":      "project",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"name":   "unknown (placeholder)",
+				"branch": "main",
+				"source": "placeholder",
+			},
+		},
+		"calendar": map[string]interface{}{
+			"type":      "calendar",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"next_event": nil,
+				"source":     "placeholder",
+			},
+		},
+	}
+
+	for _, name := range []string{"weather", "pulse", "project", "calendar"} {
+		result := renderBuiltinSegment(name, feedCache)
+		stripped := stripANSI(result)
+
+		expected := name + ": --"
+		if !strings.Contains(stripped, expected) {
+			t.Errorf("placeholder %q should show %q, got: %s", name, expected, stripped)
+		}
+		// Must NOT show "0" as a real value.
+		if strings.Contains(stripped, ": 0") {
+			t.Errorf("placeholder %q should not render '0' as real data, got: %s", name, stripped)
+		}
+	}
+}
+
+// writeJSONFile marshals v to JSON and writes it to path.
+func writeJSONFile(t *testing.T, path string, v interface{}) {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("failed to marshal JSON: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("failed to write %s: %v", path, err)
 	}
 }
 
