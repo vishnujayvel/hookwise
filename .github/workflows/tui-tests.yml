@@ -22,4 +22,4 @@ jobs:
         with:
           verb: call
           args: tui-test-matrix --src=.
-          version: "0.20"
+          version: "v0.20.1"

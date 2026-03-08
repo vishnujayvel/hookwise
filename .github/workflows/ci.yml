@@ -18,5 +18,5 @@ jobs:
         uses: dagger/dagger-for-github@v8
         with:
           verb: call
-          args: ci --src=.
-          version: "0.20"
+          args: test --src=.
+          version: "v0.20.1"

@@ -24,7 +24,7 @@ jobs:
             --version=${{ github.ref_name }}
             --commit=${{ github.sha }}
             export --path=./hookwise-linux-amd64
-          version: "0.20"
+          version: "v0.20.1"
 
       - name: Upload binary to GitHub Release
         env:
