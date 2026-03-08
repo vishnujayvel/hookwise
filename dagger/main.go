@@ -188,7 +188,9 @@ func (m *Hookwise) Validate(ctx context.Context, src *dagger.Directory) error {
 		return err
 	})
 
-	// TUI snapshot tests (--snapshot-update: regenerate in container, same as current CI)
+	// TUI snapshot tests — uses --snapshot-update because container rendering
+	// (terminal size, fonts) differs from local macOS, so committed baselines
+	// won't match. This regenerates and verifies consistency within the container.
 	g.Go(func() error {
 		_, err := m.pythonContainer(src, "3.13").
 			WithExec([]string{
@@ -232,20 +234,22 @@ func (m *Hookwise) Build(
 
 // ----- Ci (full pipeline) -----
 
-// Ci runs the complete CI pipeline: Check → Test → Validate → Build (sequential gates).
+// Ci runs the complete CI pipeline: Check -> Test -> Validate -> Build (sequential gates).
+// Build uses placeholder metadata since this is a validation-only pipeline;
+// real releases use the Publish function with actual version/commit args.
 func (m *Hookwise) Ci(ctx context.Context, src *dagger.Directory) (string, error) {
-	// Validate already runs Check → Test internally as gates
+	// Validate already runs Check -> Test internally as gates
 	if err := m.Validate(ctx, src); err != nil {
 		return "", fmt.Errorf("validate failed: %w", err)
 	}
 
-	// Build binary
+	// Build binary (smoke test — real releases use Publish with actual metadata)
 	_, err := m.Build(ctx, src, "ci", "HEAD").Sync(ctx)
 	if err != nil {
 		return "", fmt.Errorf("build failed: %w", err)
 	}
 
-	return "Pipeline passed: check → test → validate → build", nil
+	return "Pipeline passed: check -> test -> validate -> build", nil
 }
 
 // ----- Publish -----
@@ -290,7 +294,8 @@ func (m *Hookwise) TuiTestMatrix(ctx context.Context, src *dagger.Directory) err
 		g.Go(func() error {
 			ctr := m.pythonContainer(src, v)
 			if v == "3.13" {
-				// Run all tests including snapshots
+				// Run all tests including snapshots (--snapshot-update: container
+				// rendering differs from local, so regenerate within container)
 				_, err := ctr.
 					WithExec([]string{
 						"python", "-m", "pytest", "tests/", "-v", "--snapshot-update",
