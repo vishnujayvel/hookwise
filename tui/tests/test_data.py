@@ -290,11 +290,23 @@ class TestReadFeedHealth:
         assert project.healthy is True  # Disabled = healthy
 
     def test_empty_feeds_config(self):
-        # With no feeds key, defaults apply for the 5 builtin feed names
+        # No feeds in config → no feed health entries (dynamic discovery)
         feeds = read_feed_health({}, {})
-        # Empty feeds dict → empty defaults for each feed → still 5 entries
-        # because the code iterates the 5 builtin names
-        assert isinstance(feeds, list)
+        assert feeds == []
+
+    def test_discovers_unknown_feed_dynamically(self):
+        """Any key under feeds: is discovered — no hardcoded list."""
+        config = {
+            "feeds": {
+                "brand_new_feed": {"enabled": True, "interval_seconds": 42},
+            }
+        }
+        cache = {}
+        feeds = read_feed_health(config, cache)
+        assert len(feeds) == 1
+        assert feeds[0].name == "brand_new_feed"
+        assert feeds[0].interval_seconds == 42
+        assert feeds[0].healthy is False  # Enabled but no cache entry
 
 
 # --- read_insights ---
