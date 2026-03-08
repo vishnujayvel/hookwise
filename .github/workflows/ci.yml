@@ -9,26 +9,14 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
+  pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
+      - name: Run Dagger Pipeline
+        uses: dagger/dagger-for-github@v8.4.0
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Test
-        run: go test -race ./...
-
-      - name: Build
-        run: |
-          go build -ldflags "-X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" ./cmd/hookwise/
-
-      # Cross-compilation removed: Dolt's gozstd dependency requires CGO,
-      # which needs a platform-specific C toolchain unavailable on CI runners.
+          verb: call
+          args: test --src=.
+          version: "v0.20.1"
