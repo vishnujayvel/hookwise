@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/core"
@@ -809,6 +811,62 @@ func writeJSONFile(t *testing.T, path string, v interface{}) {
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("failed to write %s: %v", path, err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 23. recordAnalytics writes session data to Dolt
+// ---------------------------------------------------------------------------
+
+func TestRecordAnalytics_SessionStart(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	payload := core.HookPayload{SessionID: "test-session-001"}
+	recordAnalytics(core.EventSessionStart, payload, tmpDir)
+
+	// Verify session was recorded.
+	db, err := analytics.Open(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to open analytics DB: %v", err)
+	}
+	defer db.Close()
+
+	a := analytics.NewAnalytics(db)
+	today := time.Now().UTC().Format("2006-01-02")
+	summary, err := a.DailySummary(context.Background(), today)
+	if err != nil {
+		t.Fatalf("daily summary failed: %v", err)
+	}
+	if summary.TotalSessions < 1 {
+		t.Errorf("expected at least 1 session after recordAnalytics, got %d", summary.TotalSessions)
+	}
+}
+
+func TestRecordAnalytics_PostToolUse(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// First create a session.
+	payload := core.HookPayload{SessionID: "test-session-002"}
+	recordAnalytics(core.EventSessionStart, payload, tmpDir)
+
+	// Record a tool use event.
+	payload.ToolName = "Bash"
+	recordAnalytics(core.EventPostToolUse, payload, tmpDir)
+
+	db, err := analytics.Open(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to open analytics DB: %v", err)
+	}
+	defer db.Close()
+
+	a := analytics.NewAnalytics(db)
+	today := time.Now().UTC().Format("2006-01-02")
+	summary, err := a.DailySummary(context.Background(), today)
+	if err != nil {
+		t.Fatalf("daily summary failed: %v", err)
+	}
+	if summary.TotalEvents < 1 {
+		t.Errorf("expected at least 1 event after PostToolUse, got %d", summary.TotalEvents)
 	}
 }
 

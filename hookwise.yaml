@@ -23,6 +23,7 @@ status_line:
   segments:
     - session
     - cost
+    - weather
     - project
     - calendar
 
