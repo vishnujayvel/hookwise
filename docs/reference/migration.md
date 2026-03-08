@@ -118,7 +118,9 @@ Write your YAML in snake_case -- it is the convention and hookwise handles the c
 ## Troubleshooting
 
 **"command not found: hookwise"**
+
 Ensure the binary is on your PATH:
+
 ```bash
 which hookwise
 ```

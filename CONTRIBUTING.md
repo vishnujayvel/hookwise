@@ -16,7 +16,7 @@ Requires: Go 1.25+, Python 3.11+ (for TUI), Docker (for Dagger pipeline).
 
 ## Project Structure
 
-```
+```text
 cmd/hookwise/     # CLI entry point (Cobra commands)
 internal/
   core/           # Dispatch engine, guards, config, types

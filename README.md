@@ -163,10 +163,11 @@ Global config at `~/.hookwise/config.yaml` applies everywhere. Project-level `ho
 ## Testing
 
 ```go
-import "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
+import hwtesting "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
 
-tester := hwtesting.NewGuardTester(t, "hookwise.yaml")
-result := tester.TestToolCall("Bash", map[string]any{"command": "rm -rf /"})
+tester, err := hwtesting.NewGuardTester("hookwise.yaml")
+// handle err
+result := tester.Evaluate("Bash", map[string]any{"command": "rm -rf /"})
 assert.Equal(t, "block", result.Action)
 ```
 

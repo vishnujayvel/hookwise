@@ -189,11 +189,12 @@ The `hooks.yaml` defines guard rules that block `rm -rf /`, `rm -rf ~`, and forc
 Use the Go test helpers from `pkg/hookwise/testing` to test recipe guards:
 
 ```go
-import "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
+import hwtesting "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
 
 func TestRecipeGuards(t *testing.T) {
-    tester := hwtesting.NewGuardTester(t, "hookwise.yaml")
-    result := tester.TestToolCall("Bash", map[string]any{"command": "rm -rf /"})
+    tester, err := hwtesting.NewGuardTester("hookwise.yaml")
+    require.NoError(t, err)
+    result := tester.Evaluate("Bash", map[string]any{"command": "rm -rf /"})
     assert.Equal(t, "block", result.Action)
 }
 ```

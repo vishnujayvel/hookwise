@@ -55,17 +55,18 @@ hookwise migrate          Migrate from Python hookwise (v0.1.0)
 hookwise includes Go test helpers so you can validate guards in CI:
 
 ```go
-import "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
+import hwtesting "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
 
 func TestGuards(t *testing.T) {
-    tester := hwtesting.NewGuardTester(t, "hookwise.yaml")
+    tester, err := hwtesting.NewGuardTester("hookwise.yaml")
+    require.NoError(t, err)
 
     // Test blocking
-    blocked := tester.TestToolCall("Bash", map[string]any{"command": "rm -rf /"})
+    blocked := tester.Evaluate("Bash", map[string]any{"command": "rm -rf /"})
     assert.Equal(t, "block", blocked.Action)
 
     // Test allowing
-    allowed := tester.TestToolCall("Bash", map[string]any{"command": "ls -la"})
+    allowed := tester.Evaluate("Bash", map[string]any{"command": "ls -la"})
     assert.Equal(t, "allow", allowed.Action)
 }
 ```

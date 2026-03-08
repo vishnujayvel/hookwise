@@ -188,8 +188,9 @@ The `when` and `unless` fields support 6 operators:
 Use the TUI Guards tab (key `2`) to test specific tool calls against your rules, or use the testing API:
 
 ```go
-tester := hwtesting.NewGuardTester(t, "hookwise.yaml")
-result := tester.TestToolCall("Bash", map[string]any{"command": "rm -rf /"})
+tester, err := hwtesting.NewGuardTester("hookwise.yaml")
+// handle err
+result := tester.Evaluate("Bash", map[string]any{"command": "rm -rf /"})
 // result.Action == "block", result.Reason == "..."
 ```
 

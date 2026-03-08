@@ -249,7 +249,7 @@ import "github.com/vishnujayvel/hookwise/internal/core"
 
 // core.EventPreToolUse, core.EventPostToolUse, core.EventSessionStart, ...
 
-if core.IsValidEventType(someString) {
+if core.IsEventType(someString) {
     // someString is a valid EventType
 }
 ```
