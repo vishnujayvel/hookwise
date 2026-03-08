@@ -244,6 +244,20 @@ type SegmentConfig struct {
 	Custom  *CustomSegmentConfig `yaml:"custom,omitempty" json:"custom,omitempty"`
 }
 
+// UnmarshalYAML allows SegmentConfig to accept both a plain string
+// (e.g., "- session") and a full struct (e.g., {builtin: "session"}).
+func (s *SegmentConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try plain string first.
+	var str string
+	if err := unmarshal(&str); err == nil {
+		s.Builtin = str
+		return nil
+	}
+	// Fall back to struct.
+	type raw SegmentConfig
+	return unmarshal((*raw)(s))
+}
+
 type CustomSegmentConfig struct {
 	Command string `yaml:"command" json:"command"`
 	Label   string `yaml:"label,omitempty" json:"label,omitempty"`
