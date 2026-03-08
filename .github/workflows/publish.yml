@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build binary via Dagger
-        uses: dagger/dagger-for-github@v8
+        uses: dagger/dagger-for-github@v8.4.0
         with:
           verb: call
           args: >-
