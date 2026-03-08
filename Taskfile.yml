@@ -18,8 +18,9 @@ vars:
   DATE:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
   LDFLAGS: -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildDate={{.DATE}}
-  INSTALL_PATH: /opt/homebrew/bin/hookwise
-  TUI_VENV: tui/.venv/bin
+  INSTALL_PATH:
+    sh: echo "${HOOKWISE_INSTALL_PATH:-$(brew --prefix 2>/dev/null || echo /usr/local)/bin/hookwise}"
+  TUI_VENV: .venv/bin
 
 # ═══════════════════════════════════════════════
 # TIER 0: Pre-commit checks (<5s)
@@ -181,13 +182,12 @@ tasks:
         echo '{}' | hookwise dispatch PreToolUse 2>/dev/null; echo "exit: $?"
 
   ci-parity:
-    desc: "Verify local tests match CI configuration"
+    desc: "Verify local tests match CI configuration (runs Dagger test pipeline)"
     deps: [doctor]
     cmds:
       - |
-        echo "CI parity: running same commands as ci.yml..."
-        go vet ./...
-        go test -race ./...
+        echo "CI parity: running same Dagger pipeline as ci.yml..."
+        dagger call test --src=.
         echo "CI parity: OK"
 
   pr:
