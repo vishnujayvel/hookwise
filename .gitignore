@@ -1,8 +1,10 @@
-# Node.js / TypeScript
+# Go
+hookwise
+hookwise-go
+
+# Node.js (legacy — safe to remove node_modules/)
 node_modules/
 dist/
-*.tsbuildinfo
-.turbo/
 coverage/
 
 # IDE

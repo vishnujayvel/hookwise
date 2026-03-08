@@ -8,6 +8,7 @@
 //	dagger call validate --src=.        # Tier 2: integration + mutation + snapshots
 //	dagger call build --src=.           # Build binary only
 //	dagger call tui-test-matrix --src=. # TUI tests on Python 3.11/3.12/3.13
+//	dagger call publish --src=. --version=v1.4.0 --commit=abc1234 # Build + export binary
 package main
 
 import (
@@ -245,6 +246,36 @@ func (m *Hookwise) Ci(ctx context.Context, src *dagger.Directory) (string, error
 	}
 
 	return "Pipeline passed: check → test → validate → build", nil
+}
+
+// ----- Publish -----
+
+// Publish builds an optimized hookwise binary and returns it as a File.
+// Builds for the container's native platform (linux/amd64 on CI, linux/arm64 locally).
+// Used by the release workflow to produce the binary artifact for GitHub Releases.
+func (m *Hookwise) Publish(
+	ctx context.Context,
+	src *dagger.Directory,
+	// Semantic version tag (e.g. "v1.4.0")
+	version string,
+	// Git commit SHA
+	// +optional
+	// +default="HEAD"
+	commit string,
+) *dagger.File {
+	ldflags := fmt.Sprintf(
+		"-s -w -X main.version=%s -X main.commit=%s",
+		version, commit,
+	)
+
+	return m.goContainer(src).
+		WithExec([]string{
+			"go", "build",
+			"-ldflags", ldflags,
+			"-o", "/out/hookwise",
+			"./cmd/hookwise/",
+		}).
+		File("/out/hookwise")
 }
 
 // ----- TUI Test Matrix -----

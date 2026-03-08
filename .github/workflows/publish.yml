@@ -1,21 +1,32 @@
-name: Publish to npm
+name: Publish Release
+
 on:
   release:
     types: [published]
+
 permissions:
-  contents: read
-  id-token: write
+  contents: write
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Build binary via Dagger
+        uses: dagger/dagger-for-github@v8
         with:
-          node-version: 20
-          cache: npm
-          registry-url: https://registry.npmjs.org
-      - run: npm ci
-      - run: npm run build
-      - run: npm test
-      - run: npm publish --provenance --access public
+          verb: call
+          args: >-
+            publish
+            --src=.
+            --version=${{ github.ref_name }}
+            --commit=${{ github.sha }}
+            export --path=./hookwise-linux-amd64
+          version: "0.20"
+
+      - name: Upload binary to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" ./hookwise-linux-amd64
