@@ -1260,6 +1260,274 @@ func TestFormatLargeNumber(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// 27. Doctor feed health: placeholder feeds
+// ---------------------------------------------------------------------------
+
+func TestDoctorFeedHealthPlaceholder(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	stateDir := filepath.Join(tmpDir, ".hookwise")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+	cacheDir := filepath.Join(stateDir, "state")
+	os.MkdirAll(cacheDir, 0o700)
+
+	// Create a valid config.
+	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
+	os.WriteFile(configPath, []byte("version: 1\nguards: []\n"), 0o644)
+
+	// Write a placeholder feed.
+	writeJSONFile(t, filepath.Join(cacheDir, "practice.json"), map[string]interface{}{
+		"type":      "practice",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"data": map[string]interface{}{
+			"source":         "placeholder",
+			"total_sessions": 0,
+		},
+	})
+
+	// Write a healthy feed.
+	writeJSONFile(t, filepath.Join(cacheDir, "weather.json"), map[string]interface{}{
+		"type":      "weather",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"data": map[string]interface{}{
+			"temperature": 72.0,
+			"emoji":       "☀️",
+		},
+	})
+
+	output, err := executeCommand("doctor")
+	if err != nil {
+		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
+	}
+
+	if !strings.Contains(output, "WARN  feed:practice: placeholder") {
+		t.Errorf("doctor should warn about placeholder practice feed, got:\n%s", output)
+	}
+	if !strings.Contains(output, "INFO  feed:weather: OK") {
+		t.Errorf("doctor should show OK for weather feed, got:\n%s", output)
+	}
+	if !strings.Contains(output, "warning(s)") {
+		t.Errorf("doctor should show warning count in summary, got:\n%s", output)
+	}
+	// Placeholders are non-blocking — should still pass.
+	if !strings.Contains(output, "All critical checks passed") {
+		t.Errorf("doctor should still pass with placeholder warnings, got:\n%s", output)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 28. Doctor feed health: stale feeds
+// ---------------------------------------------------------------------------
+
+func TestDoctorFeedHealthStale(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	stateDir := filepath.Join(tmpDir, ".hookwise")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+	cacheDir := filepath.Join(stateDir, "state")
+	os.MkdirAll(cacheDir, 0o700)
+
+	// Config with weather interval = 60 seconds.
+	configYAML := `version: 1
+feeds:
+  weather:
+    enabled: true
+    interval_seconds: 60
+`
+	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
+	os.WriteFile(configPath, []byte(configYAML), 0o644)
+
+	// Write a stale weather feed (timestamp 5 minutes ago, interval is 60s, threshold is 120s).
+	staleTime := time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339)
+	writeJSONFile(t, filepath.Join(cacheDir, "weather.json"), map[string]interface{}{
+		"type":      "weather",
+		"timestamp": staleTime,
+		"data": map[string]interface{}{
+			"temperature": 72.0,
+			"emoji":       "☀️",
+		},
+	})
+
+	output, err := executeCommand("doctor")
+	if err != nil {
+		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
+	}
+
+	if !strings.Contains(output, "WARN  feed:weather: stale data") {
+		t.Errorf("doctor should warn about stale weather feed, got:\n%s", output)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 29. Doctor feed health: segment coverage
+// ---------------------------------------------------------------------------
+
+func TestDoctorFeedHealthSegmentCoverage(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	stateDir := filepath.Join(tmpDir, ".hookwise")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+	cacheDir := filepath.Join(stateDir, "state")
+	os.MkdirAll(cacheDir, 0o700)
+
+	// Config with 3 feed-backed segments, only 1 has real data.
+	configYAML := `version: 1
+status_line:
+  enabled: true
+  segments:
+    - session
+    - weather
+    - project
+    - calendar
+`
+	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
+	os.WriteFile(configPath, []byte(configYAML), 0o644)
+
+	// Only weather has real data.
+	writeJSONFile(t, filepath.Join(cacheDir, "weather.json"), map[string]interface{}{
+		"type":      "weather",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"data":      map[string]interface{}{"temperature": 72.0},
+	})
+	// Project has placeholder.
+	writeJSONFile(t, filepath.Join(cacheDir, "project.json"), map[string]interface{}{
+		"type":      "project",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"data":      map[string]interface{}{"source": "placeholder", "name": "unknown"},
+	})
+	// Calendar missing entirely.
+
+	output, err := executeCommand("doctor")
+	if err != nil {
+		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
+	}
+
+	if !strings.Contains(output, "WARN  status-line: 1/3 feed-backed segments have real data") {
+		t.Errorf("doctor should report segment coverage, got:\n%s", output)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 30. Doctor feed health: no state files (graceful)
+// ---------------------------------------------------------------------------
+
+func TestDoctorFeedHealthNoStateFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	stateDir := filepath.Join(tmpDir, ".hookwise")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+	os.MkdirAll(stateDir, 0o700)
+	// state/ subdir does NOT exist — no feed files.
+
+	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
+	os.WriteFile(configPath, []byte("version: 1\nguards: []\n"), 0o644)
+
+	output, err := executeCommand("doctor")
+	if err != nil {
+		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
+	}
+
+	// Should not crash, should not show feed warnings.
+	if strings.Contains(output, "feed:") {
+		t.Errorf("doctor with no state files should not show feed checks, got:\n%s", output)
+	}
+	if !strings.Contains(output, "All critical checks passed.") {
+		t.Errorf("doctor should pass cleanly with no state files, got:\n%s", output)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 31. Doctor feed health: all segments healthy
+// ---------------------------------------------------------------------------
+
+func TestDoctorFeedHealthAllHealthy(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	stateDir := filepath.Join(tmpDir, ".hookwise")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+	cacheDir := filepath.Join(stateDir, "state")
+	os.MkdirAll(cacheDir, 0o700)
+
+	configYAML := `version: 1
+status_line:
+  enabled: true
+  segments:
+    - weather
+    - project
+`
+	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
+	os.WriteFile(configPath, []byte(configYAML), 0o644)
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	writeJSONFile(t, filepath.Join(cacheDir, "weather.json"), map[string]interface{}{
+		"type": "weather", "timestamp": now,
+		"data": map[string]interface{}{"temperature": 72.0},
+	})
+	writeJSONFile(t, filepath.Join(cacheDir, "project.json"), map[string]interface{}{
+		"type": "project", "timestamp": now,
+		"data": map[string]interface{}{"name": "myapp", "branch": "main"},
+	})
+
+	output, err := executeCommand("doctor")
+	if err != nil {
+		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
+	}
+
+	if !strings.Contains(output, "INFO  status-line: all 2 feed-backed segments have real data") {
+		t.Errorf("doctor should report all segments healthy, got:\n%s", output)
+	}
+	// No warnings — summary should NOT have "warning(s)".
+	if strings.Contains(output, "warning(s)") {
+		t.Errorf("doctor with all healthy feeds should not show warnings, got:\n%s", output)
+	}
+}
+
 // stripANSI removes ANSI escape sequences from a string.
 func stripANSI(s string) string {
 	result := strings.Builder{}
