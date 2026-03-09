@@ -996,7 +996,8 @@ func TestCalendarProducer_ParsesEvents(t *testing.T) {
 
 	nextEvent := data["next_event"].(map[string]interface{})
 	assert.Equal(t, "Team Standup", nextEvent["name"])
-	assert.Contains(t, nextEvent["time"], "in ")
+	// next_event now stores absolute start time (relative computed at render time).
+	assert.NotEmpty(t, nextEvent["start"], "next_event should have absolute start time")
 }
 
 func TestCalendarProducer_FindsNextEvent(t *testing.T) {
@@ -1047,7 +1048,7 @@ func TestCalendarProducer_FindsNextEvent(t *testing.T) {
 	// next_event should be the second (first non-current) event.
 	nextEvent := data["next_event"].(map[string]interface{})
 	assert.Equal(t, "Next Meeting", nextEvent["name"])
-	assert.Contains(t, nextEvent["time"], "in 4")
+	assert.NotEmpty(t, nextEvent["start"], "next_event should have absolute start time")
 }
 
 func TestCalendarProducer_AllDayEvents(t *testing.T) {
@@ -1168,4 +1169,120 @@ func TestCalendarProducer_FallbackOnAPIError(t *testing.T) {
 	require.NoError(t, err)
 	data2 := result2.(map[string]interface{})["data"].(map[string]interface{})
 	require.Len(t, data2["events"].([]interface{}), 1, "fallback should return cached events")
+}
+
+// ---------------------------------------------------------------------------
+// ProjectProducer Tests
+// ---------------------------------------------------------------------------
+
+// TestProjectProducer_ImplementsConfigAware is a compile-time check.
+var _ ConfigAware = (*ProjectProducer)(nil)
+
+func TestProjectProducer_ReturnsGitData(t *testing.T) {
+	p := &ProjectProducer{}
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err, "ARCH-1: must not return error")
+
+	envelope, ok := result.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "project", envelope["type"])
+	assert.NotEmpty(t, envelope["timestamp"])
+
+	data, ok := envelope["data"].(map[string]interface{})
+	require.True(t, ok)
+
+	// We're running in the hookwise repo, so these should be non-empty.
+	name, ok := data["name"].(string)
+	require.True(t, ok)
+	assert.NotEmpty(t, name, "name should be non-empty in a git repo")
+
+	branch, ok := data["branch"].(string)
+	require.True(t, ok)
+	assert.NotEmpty(t, branch, "branch should be non-empty in a git repo")
+
+	commit, ok := data["last_commit"].(string)
+	require.True(t, ok)
+	assert.NotEmpty(t, commit, "last_commit should be non-empty in a git repo")
+
+	_, ok = data["dirty"].(bool)
+	assert.True(t, ok, "dirty should be a bool")
+
+	// Must NOT have "source": "placeholder".
+	_, hasSource := data["source"]
+	assert.False(t, hasSource, "real git data should NOT have 'source' field")
+}
+
+func TestProjectProducer_NonGitDirectory(t *testing.T) {
+	// Create a temp directory that is NOT a git repo.
+	tmpDir := t.TempDir()
+
+	// Save and restore the working directory.
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	p := &ProjectProducer{}
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err, "ARCH-1: must not return error even outside a git repo")
+
+	envelope, ok := result.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "project", envelope["type"])
+	assert.NotEmpty(t, envelope["timestamp"])
+
+	data, ok := envelope["data"].(map[string]interface{})
+	require.True(t, ok)
+
+	// Fields may be empty but must exist and have correct types.
+	_, ok = data["name"].(string)
+	assert.True(t, ok, "name should be a string")
+	_, ok = data["branch"].(string)
+	assert.True(t, ok, "branch should be a string")
+	_, ok = data["last_commit"].(string)
+	assert.True(t, ok, "last_commit should be a string")
+	_, ok = data["dirty"].(bool)
+	assert.True(t, ok, "dirty should be a bool")
+
+	// Must NOT have "source": "placeholder".
+	_, hasSource := data["source"]
+	assert.False(t, hasSource, "fallback should NOT have 'source' field")
+}
+
+func TestProjectTestFixture_FieldConsistency(t *testing.T) {
+	fixture := ProjectTestFixture()
+
+	// The fixture must have the same top-level and data-level field names
+	// as a real Produce() call to prevent cross-boundary Bug #29 pattern.
+	p := &ProjectProducer{}
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	realEnvelope := result.(map[string]interface{})
+	fixtureEnvelope := fixture
+
+	// Top-level keys must match.
+	for key := range realEnvelope {
+		_, ok := fixtureEnvelope[key]
+		assert.True(t, ok, "fixture missing top-level key %q", key)
+	}
+	for key := range fixtureEnvelope {
+		_, ok := realEnvelope[key]
+		assert.True(t, ok, "fixture has extra top-level key %q", key)
+	}
+
+	// Data-level keys must match.
+	realData := realEnvelope["data"].(map[string]interface{})
+	fixtureData := fixtureEnvelope["data"].(map[string]interface{})
+
+	for key := range realData {
+		_, ok := fixtureData[key]
+		assert.True(t, ok, "fixture data missing key %q", key)
+	}
+	for key := range fixtureData {
+		_, ok := realData[key]
+		assert.True(t, ok, "fixture data has extra key %q", key)
+	}
 }

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -441,8 +444,18 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	line := strings.Join(segments, ansiGray+delimiter+ansiReset)
 	fmt.Fprintln(cmd.OutOrStdout(), line)
 
-	// Write ANSI-stripped output to cache file for TUI preview (Bug #20)
-	if err := writeStatusLineCache(line); err != nil {
+	// Render insights summary lines (lines 2-4 of the rich status line).
+	// These are additional lines below the main segment bar, only shown
+	// when insights feed cache has real data.
+	var insightsBuf bytes.Buffer
+	renderInsightsSummaryLines(io.MultiWriter(cmd.OutOrStdout(), &insightsBuf), feedCache)
+
+	// Write ANSI-stripped full output to cache file for TUI preview (Bug #20).
+	fullOutput := line
+	if insightsBuf.Len() > 0 {
+		fullOutput += "\n" + strings.TrimRight(insightsBuf.String(), "\n")
+	}
+	if err := writeStatusLineCache(fullOutput); err != nil {
 		core.Logger().Warn("failed to write status-line cache", "error", err)
 	}
 
@@ -520,12 +533,12 @@ func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary
 		if summary != nil && summary.TotalSessions > 0 {
 			return ansiBold + ansiGreen + fmt.Sprintf("session: %d", summary.TotalSessions) + ansiReset
 		}
-		return ansiBold + ansiGreen + "session: --" + ansiReset
+		return "" // No data — omit segment instead of showing "--"
 	case "cost":
 		if summary != nil && summary.EstimatedCostUSD > 0 {
 			return ansiYellow + fmt.Sprintf("cost: $%.2f", summary.EstimatedCostUSD) + ansiReset
 		}
-		return ansiYellow + "cost: --" + ansiReset
+		return "" // No data — omit segment instead of showing "--"
 	case "project":
 		return renderProjectSegment(feedCache)
 	case "calendar":
@@ -534,6 +547,14 @@ func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary
 		return renderPulseSegment(feedCache)
 	case "weather":
 		return renderWeatherSegment(feedCache)
+	case "insights":
+		return renderInsightsSegment(feedCache)
+	case "insights_friction":
+		return renderInsightsFrictionSegment(feedCache)
+	case "insights_pace":
+		return renderInsightsPaceSegment(feedCache)
+	case "insights_trend":
+		return renderInsightsTrendSegment(feedCache)
 	default:
 		return ansiGray + name + ansiReset
 	}
@@ -574,13 +595,13 @@ func feedData(feedCache map[string]interface{}, feedName string) map[string]inte
 func renderWeatherSegment(feedCache map[string]interface{}) string {
 	data := feedData(feedCache, "weather")
 	if data == nil {
-		return ansiCyan + "weather: --" + ansiReset
+		return ""
 	}
 
 	// Temperature may be nil (placeholder/fallback).
 	temp := data["temperature"]
 	if temp == nil {
-		return ansiCyan + "weather: --" + ansiReset
+		return ""
 	}
 
 	// Format temperature as integer.
@@ -619,7 +640,7 @@ func renderWeatherSegment(feedCache map[string]interface{}) string {
 func renderProjectSegment(feedCache map[string]interface{}) string {
 	data := feedData(feedCache, "project")
 	if data == nil {
-		return ansiCyan + "project: --" + ansiReset
+		return ""
 	}
 
 	name := "project"
@@ -636,54 +657,101 @@ func renderProjectSegment(feedCache map[string]interface{}) string {
 }
 
 // renderCalendarSegment renders the calendar segment from feed cache data.
+// Relative time ("in 15m") is computed at render time from the absolute start
+// time, so the display stays accurate regardless of cache age.
 func renderCalendarSegment(feedCache map[string]interface{}) string {
 	data := feedData(feedCache, "calendar")
 	if data == nil {
-		return ansiCyan + "calendar: --" + ansiReset
+		return ""
 	}
 
 	nextEvent := data["next_event"]
 	if nextEvent == nil {
-		return ansiCyan + "calendar: --" + ansiReset
+		return ""
 	}
 
-	// next_event can be a string or a map with name/time fields.
+	// next_event can be a string or a map with name/start/time fields.
 	switch ev := nextEvent.(type) {
 	case string:
 		if ev == "" {
-			return ansiCyan + "calendar: --" + ansiReset
+			return ""
 		}
 		return ansiCyan + "\U0001f4c5 " + ev + ansiReset
 	case map[string]interface{}:
 		name, _ := ev["name"].(string)
-		eventTime, _ := ev["time"].(string)
-		if name == "" && eventTime == "" {
-			return ansiCyan + "calendar: --" + ansiReset
+
+		// Prefer absolute "start" (compute relative time dynamically).
+		// Fall back to static "time" for backward compatibility.
+		var timeLabel string
+		if startStr, ok := ev["start"].(string); ok && startStr != "" {
+			if eventStart, err := time.Parse(time.RFC3339, startStr); err == nil {
+				timeLabel = calendarRelativeTime(time.Now(), eventStart)
+			}
+		}
+		if timeLabel == "" {
+			timeLabel, _ = ev["time"].(string)
+		}
+
+		if name == "" && timeLabel == "" {
+			return ""
 		}
 		label := name
-		if eventTime != "" {
+		if timeLabel != "" {
 			if label != "" {
-				label += " " + eventTime
+				label += " " + timeLabel
 			} else {
-				label = eventTime
+				label = timeLabel
 			}
 		}
 		return ansiCyan + "\U0001f4c5 " + label + ansiReset
 	default:
-		return ansiCyan + "calendar: --" + ansiReset
+		return ""
 	}
+}
+
+// calendarRelativeTime returns a human-friendly relative time for calendar events.
+func calendarRelativeTime(now, eventStart time.Time) string {
+	diff := eventStart.Sub(now)
+	if diff <= 0 || diff < time.Minute {
+		return "now"
+	}
+
+	totalMinutes := int(diff.Minutes())
+	if totalMinutes < 60 {
+		return fmt.Sprintf("in %dm", totalMinutes)
+	}
+
+	// Check calendar-day boundary before raw hours.
+	nowDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	eventDate := time.Date(eventStart.Year(), eventStart.Month(), eventStart.Day(), 0, 0, 0, 0, eventStart.Location())
+	dayDiff := int(eventDate.Sub(nowDate).Hours() / 24)
+
+	if dayDiff == 0 {
+		hours := totalMinutes / 60
+		minutes := totalMinutes % 60
+		if minutes < 5 {
+			return fmt.Sprintf("in %dh", hours)
+		}
+		return fmt.Sprintf("in %dh %dm", hours, minutes)
+	}
+
+	timeLabel := strings.ToLower(eventStart.Format("3:04pm"))
+	if dayDiff == 1 {
+		return "tomorrow " + timeLabel
+	}
+	return eventStart.Format("Mon") + " " + timeLabel
 }
 
 // renderPulseSegment renders the pulse segment from feed cache data.
 func renderPulseSegment(feedCache map[string]interface{}) string {
 	data := feedData(feedCache, "pulse")
 	if data == nil {
-		return ansiGreen + "pulse: --" + ansiReset
+		return ""
 	}
 
 	sessionCount, ok := data["session_count"]
 	if !ok {
-		return ansiGreen + "pulse: --" + ansiReset
+		return ""
 	}
 
 	var count int
@@ -693,7 +761,7 @@ func renderPulseSegment(feedCache map[string]interface{}) string {
 	case int:
 		count = v
 	default:
-		return ansiGreen + "pulse: --" + ansiReset
+		return ""
 	}
 
 	suffix := "sessions"
@@ -701,6 +769,274 @@ func renderPulseSegment(feedCache map[string]interface{}) string {
 		suffix = "session"
 	}
 	return ansiGreen + fmt.Sprintf("pulse: %d %s", count, suffix) + ansiReset
+}
+
+// renderInsightsSegment renders a compact one-line insights summary.
+func renderInsightsSegment(feedCache map[string]interface{}) string {
+	data := feedData(feedCache, "insights")
+	if data == nil {
+		return ""
+	}
+	sessions := toInt(data["total_sessions"])
+	if sessions == 0 {
+		return ""
+	}
+	lines := toInt(data["total_lines_added"])
+	days := toInt(data["days_active"])
+	return ansiCyan + fmt.Sprintf("%d sessions / %dd | %s lines", sessions, days, formatLargeNumber(lines)) + ansiReset
+}
+
+// renderInsightsFrictionSegment renders friction status from insights feed cache.
+func renderInsightsFrictionSegment(feedCache map[string]interface{}) string {
+	data := feedData(feedCache, "insights")
+	if data == nil {
+		return ""
+	}
+
+	// Check recent session friction
+	recentFriction := 0
+	if rs, ok := data["recent_session"].(map[string]interface{}); ok {
+		recentFriction = toInt(rs["friction_count"])
+	}
+
+	frictionTotal := toInt(data["friction_total"])
+	frictionCounts, _ := data["friction_counts"].(map[string]interface{})
+
+	if recentFriction > 0 {
+		tip := topFrictionTip(frictionCounts)
+		if tip != "" {
+			return ansiYellow + fmt.Sprintf("\u26a0\ufe0f %d friction this session \u00b7 %s", recentFriction, tip) + ansiReset
+		}
+		return ansiYellow + fmt.Sprintf("\u26a0\ufe0f %d friction this session", recentFriction) + ansiReset
+	}
+	if frictionTotal > 0 {
+		return ansiGreen + fmt.Sprintf("\u2705 Clean session \u00b7 %d in 30d", frictionTotal) + ansiReset
+	}
+	return ansiGreen + "\u2705 No friction detected" + ansiReset
+}
+
+// renderInsightsPaceSegment renders productivity pace from insights feed cache.
+func renderInsightsPaceSegment(feedCache map[string]interface{}) string {
+	data := feedData(feedCache, "insights")
+	if data == nil {
+		return ""
+	}
+	totalMessages := toInt(data["total_messages"])
+	daysActive := toInt(data["days_active"])
+	if daysActive == 0 {
+		daysActive = 1
+	}
+	linesAdded := toInt(data["total_lines_added"])
+	sessions := toInt(data["total_sessions"])
+
+	msgsPerDay := totalMessages / daysActive
+	formattedLines := formatLargeNumber(linesAdded)
+
+	return ansiCyan + fmt.Sprintf("\U0001f4ca %d msgs/day | %s+ lines | %d sessions", msgsPerDay, formattedLines, sessions) + ansiReset
+}
+
+// renderInsightsTrendSegment renders tool trends and peak hour from insights feed cache.
+func renderInsightsTrendSegment(feedCache map[string]interface{}) string {
+	data := feedData(feedCache, "insights")
+	if data == nil {
+		return ""
+	}
+	topToolsRaw, ok := data["top_tools"].([]interface{})
+	if !ok || len(topToolsRaw) == 0 {
+		return ""
+	}
+
+	// Extract tool names (top 2)
+	var toolNames []string
+	for i, t := range topToolsRaw {
+		if i >= 2 {
+			break
+		}
+		if tm, ok := t.(map[string]interface{}); ok {
+			if name, ok := tm["name"].(string); ok {
+				toolNames = append(toolNames, name)
+			}
+		}
+	}
+
+	peakHour := toInt(data["peak_hour"])
+	peakLabel := hourToLabel(peakHour)
+
+	if len(toolNames) == 0 {
+		return ""
+	}
+
+	return ansiCyan + fmt.Sprintf("\U0001f527 Top: %s | Peak: %s", strings.Join(toolNames, ", "), peakLabel) + ansiReset
+}
+
+// renderInsightsSummaryLines outputs 2-3 additional status lines with aggregated
+// insights data. Each line is independent — if data is missing, that line is omitted.
+func renderInsightsSummaryLines(w io.Writer, feedCache map[string]interface{}) {
+	data := feedData(feedCache, "insights")
+	if data == nil {
+		return
+	}
+
+	sessions := toInt(data["total_sessions"])
+	if sessions == 0 {
+		return
+	}
+
+	// Line 2: Session overview — green for sessions, cyan for lines, gray for avg
+	days := toInt(data["days_active"])
+	lines := toInt(data["total_lines_added"])
+	avgDur := 0.0
+	if v, ok := data["avg_duration_minutes"].(float64); ok {
+		avgDur = v
+	}
+	fmt.Fprintf(w, "%s%d sessions%s %s/ %dd active%s %s|%s %s%s lines%s %s|%s %savg %.0fm/session%s\n",
+		ansiGreen, sessions, ansiReset,
+		ansiGray, days, ansiReset,
+		ansiGray, ansiReset,
+		ansiCyan, formatLargeNumber(lines), ansiReset,
+		ansiGray, ansiReset,
+		ansiGray, avgDur, ansiReset)
+
+	// Line 3: Top tools + peak hour — cyan for tools, yellow for peak
+	if topToolsRaw, ok := data["top_tools"].([]interface{}); ok && len(topToolsRaw) > 0 {
+		var parts []string
+		for i, t := range topToolsRaw {
+			if i >= 5 {
+				break
+			}
+			if tm, ok := t.(map[string]interface{}); ok {
+				name, _ := tm["name"].(string)
+				count := toInt(tm["count"])
+				if name != "" {
+					parts = append(parts, fmt.Sprintf("%s%s%s%s(%d)%s",
+						ansiCyan, name, ansiReset, ansiGray, count, ansiReset))
+				}
+			}
+		}
+		peakHour := toInt(data["peak_hour"])
+		if len(parts) > 0 {
+			fmt.Fprintf(w, "%stop:%s %s %s|%s %speak: %s%s%s%s\n",
+				ansiGray, ansiReset,
+				strings.Join(parts, " "),
+				ansiGray, ansiReset,
+				ansiGray, ansiReset,
+				ansiYellow, hourToLabel(peakHour), ansiReset)
+		}
+	}
+
+	// Line 4: Friction summary — yellow for total, gray for categories
+	frictionTotal := toInt(data["friction_total"])
+	if frictionTotal > 0 {
+		frictionParts := ""
+		if fc, ok := data["friction_counts"].(map[string]interface{}); ok && len(fc) > 0 {
+			type catCount struct {
+				name  string
+				count int
+			}
+			var sorted []catCount
+			for cat, v := range fc {
+				count := toInt(v)
+				if count > 0 {
+					sorted = append(sorted, catCount{
+						name:  strings.ReplaceAll(cat, "_", " "),
+						count: count,
+					})
+				}
+			}
+			sort.Slice(sorted, func(i, j int) bool {
+				return sorted[i].count > sorted[j].count
+			})
+			if len(sorted) > 5 {
+				sorted = sorted[:5]
+			}
+			var cats []string
+			for _, c := range sorted {
+				cats = append(cats, fmt.Sprintf("%s:%d", c.name, c.count))
+			}
+			if len(cats) > 0 {
+				frictionParts = " " + ansiGray + "(" + strings.Join(cats, " ") + ")" + ansiReset
+			}
+		}
+		fmt.Fprintf(w, "%sfriction:%s %s%d total%s%s\n",
+			ansiYellow, ansiReset,
+			ansiYellow, frictionTotal, ansiReset, frictionParts)
+	}
+}
+
+// toInt extracts an integer from an interface{} value.
+// Handles float64 (from JSON), int, and nil.
+func toInt(v interface{}) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case nil:
+		return 0
+	default:
+		return 0
+	}
+}
+
+// formatLargeNumber formats a number with k suffix for thousands.
+func formatLargeNumber(n int) string {
+	if n >= 1000 {
+		k := float64(n) / 1000
+		if k == float64(int(k)) {
+			return fmt.Sprintf("%dk", int(k))
+		}
+		return fmt.Sprintf("%.1fk", k)
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+// hourToLabel maps an hour (0-23) to a time-of-day label.
+func hourToLabel(hour int) string {
+	switch {
+	case hour >= 6 && hour < 12:
+		return "morning"
+	case hour >= 12 && hour < 18:
+		return "afternoon"
+	case hour >= 18 && hour < 24:
+		return "evening"
+	default:
+		return "night"
+	}
+}
+
+// topFrictionTip returns an actionable tip for the most common friction category.
+func topFrictionTip(frictionCounts map[string]interface{}) string {
+	if len(frictionCounts) == 0 {
+		return ""
+	}
+
+	frictionTips := map[string]string{
+		"wrong_approach":       "break tasks into steps",
+		"misunderstood_request": "be more specific",
+		"stale_context":        "try a fresh session",
+		"tool_error":           "check tool setup",
+		"scope_creep":          "define done upfront",
+		"repeated_errors":      "read error output first",
+	}
+
+	var topCat string
+	var topCount int
+	for cat, v := range frictionCounts {
+		count := toInt(v)
+		if count > topCount {
+			topCat = cat
+			topCount = count
+		}
+	}
+	if topCat == "" {
+		return ""
+	}
+
+	humanName := strings.ReplaceAll(topCat, "_", " ")
+	if tip, ok := frictionTips[topCat]; ok {
+		return humanName + " \u2192 " + tip
+	}
+	return humanName
 }
 
 // ---------------------------------------------------------------------------

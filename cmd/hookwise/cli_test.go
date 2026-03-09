@@ -698,6 +698,8 @@ func TestStatusLineProjectSegment(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestStatusLineCalendarSegment(t *testing.T) {
+	// Use absolute start time — renderer computes relative time dynamically.
+	eventStart := time.Now().Add(30 * time.Minute).UTC().Format(time.RFC3339)
 	feedCache := map[string]interface{}{
 		"calendar": map[string]interface{}{
 			"type":      "calendar",
@@ -706,15 +708,15 @@ func TestStatusLineCalendarSegment(t *testing.T) {
 				"events": []interface{}{
 					map[string]interface{}{
 						"name":       "Standup",
-						"start":      "2026-03-07T10:30:00Z",
+						"start":      eventStart,
 						"end":        "2026-03-07T11:00:00Z",
 						"all_day":    false,
 						"is_current": false,
 					},
 				},
 				"next_event": map[string]interface{}{
-					"name": "Standup",
-					"time": "in 30m",
+					"name":  "Standup",
+					"start": eventStart,
 				},
 			},
 		},
@@ -729,8 +731,8 @@ func TestStatusLineCalendarSegment(t *testing.T) {
 	if !strings.Contains(stripped, "Standup") {
 		t.Errorf("calendar should show event name 'Standup', got: %s", stripped)
 	}
-	if !strings.Contains(stripped, "in 30m") {
-		t.Errorf("calendar should show relative time 'in 30m', got: %s", stripped)
+	if !strings.Contains(stripped, "in ") {
+		t.Errorf("calendar should show dynamic relative time, got: %s", stripped)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -41,22 +42,103 @@ func (p *PulseProducer) Produce(_ context.Context) (interface{}, error) {
 	}, nil
 }
 
-// ProjectProducer returns project directory info.
-type ProjectProducer struct{}
+// ProjectProducer returns project directory info by running git commands.
+// It implements ConfigAware to receive feed configuration.
+type ProjectProducer struct {
+	mu       sync.Mutex
+	feedsCfg core.FeedsConfig
+}
 
 func (p *ProjectProducer) Name() string { return "project" }
-func (p *ProjectProducer) Produce(_ context.Context) (interface{}, error) {
+
+// SetFeedsConfig receives the feed configuration (ConfigAware interface).
+func (p *ProjectProducer) SetFeedsConfig(cfg core.FeedsConfig) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.feedsCfg = cfg
+}
+
+func (p *ProjectProducer) Produce(ctx context.Context) (interface{}, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return p.fallbackResult()
+	}
+
+	// Detect git repo root.
+	repoRoot, err := p.runGit(ctx, cwd, "rev-parse", "--show-toplevel")
+	if err != nil {
+		// Not a git repo or git not installed — fail-open (ARCH-1).
+		return p.fallbackResult()
+	}
+
+	repoName := filepath.Base(repoRoot)
+
+	// Get current branch.
+	branchName, err := p.runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		branchName = ""
+	}
+
+	// Get short commit hash.
+	commitHash, err := p.runGit(ctx, cwd, "rev-parse", "--short", "HEAD")
+	if err != nil {
+		commitHash = ""
+	}
+
+	// Detect dirty state.
+	porcelain, err := p.runGit(ctx, cwd, "status", "--porcelain")
+	isDirty := err == nil && porcelain != ""
+
 	return map[string]interface{}{
 		"type":      "project",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
-			"name":        "unknown (placeholder)",
-			"branch":      "main",
-			"last_commit": "n/a",
-			"dirty":       false,
-			"source":      "placeholder",
+			"name":        repoName,
+			"branch":      branchName,
+			"last_commit": commitHash,
+			"dirty":       isDirty,
 		},
 	}, nil
+}
+
+// runGit executes a git command in the given directory and returns trimmed stdout.
+func (p *ProjectProducer) runGit(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// fallbackResult returns a valid envelope with empty fields when git is unavailable (ARCH-1: fail-open).
+func (p *ProjectProducer) fallbackResult() (map[string]interface{}, error) {
+	return map[string]interface{}{
+		"type":      "project",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"data": map[string]interface{}{
+			"name":        "",
+			"branch":      "",
+			"last_commit": "",
+			"dirty":       false,
+		},
+	}, nil
+}
+
+// ProjectTestFixture returns a deterministic project envelope for use in
+// cross-package tests. Shared fixture so tests bind to actual field names.
+func ProjectTestFixture() map[string]interface{} {
+	return map[string]interface{}{
+		"type":      "project",
+		"timestamp": "2026-03-07T10:00:00Z",
+		"data": map[string]interface{}{
+			"name":        "hookwise",
+			"branch":      "main",
+			"last_commit": "abc1234",
+			"dirty":       false,
+		},
+	}
 }
 
 // NewsProducer returns placeholder news items.
@@ -301,10 +383,12 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 		eventList = append(eventList, ev)
 
 		// First upcoming non-current event becomes next_event.
+		// Store absolute start time — relative time is computed at render time
+		// so the display stays accurate regardless of cache age.
 		if nextEvent == nil && !isCurrent && !start.IsZero() && start.After(now) {
 			nextEvent = map[string]interface{}{
-				"name": item.Summary,
-				"time": relativeTimeString(now, start),
+				"name":  item.Summary,
+				"start": formatEventTime(start, allDay),
 			}
 		}
 	}
@@ -436,8 +520,8 @@ func CalendarTestFixture() map[string]interface{} {
 				},
 			},
 			"next_event": map[string]interface{}{
-				"name": "Standup",
-				"time": "in 30m",
+				"name":  "Standup",
+				"start": "2026-03-07T10:30:00Z",
 			},
 		},
 	}
