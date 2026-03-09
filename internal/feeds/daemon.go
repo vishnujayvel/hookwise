@@ -35,6 +35,7 @@ type Daemon struct {
 	staggerOffset time.Duration
 	stopCh        chan struct{}
 	wg            sync.WaitGroup
+	shutdownOnce  sync.Once // ensures stopCh is closed exactly once
 
 	// Idle timeout fields (IDLE-1).
 	idleTimer       *time.Timer
@@ -84,6 +85,14 @@ func (d *Daemon) SetIdleTimeout(timeout time.Duration) {
 	d.idleTimeoutOverride = timeout
 }
 
+// triggerShutdown closes stopCh exactly once to initiate graceful shutdown.
+// All shutdown paths route through this method via shutdownOnce.
+func (d *Daemon) triggerShutdown() {
+	d.shutdownOnce.Do(func() {
+		close(d.stopCh)
+	})
+}
+
 // Start binds the unix socket (single-instance authority per SOCKET-1),
 // writes a PID file for debugging visibility, installs signal handlers,
 // and launches feed goroutines.
@@ -93,26 +102,21 @@ func (d *Daemon) Start() error {
 
 	d.startedAt = time.Now()
 
+	// Initialize stopCh before creating the socket server so the shutdown
+	// callback never references a nil channel. Only create if not already
+	// set (a failed second Start() must not clobber the running daemon's channel).
+	if d.stopCh == nil {
+		d.stopCh = make(chan struct{})
+	}
+
 	// Create SocketServer — socket bind IS the single-instance check (SOCKET-1).
-	// The shutdownFn closure reads d.stopCh at invocation time (not capture time),
-	// so stopCh can be set after NewSocketServer but before Start.
 	d.server = NewSocketServer(d.socketPath, func() {
-		// shutdownFn: close stopCh to trigger graceful shutdown.
-		select {
-		case <-d.stopCh:
-			// Already closed.
-		default:
-			close(d.stopCh)
-		}
+		d.triggerShutdown()
 	}, d.startedAt)
 
 	if err := d.server.Start(); err != nil {
 		return fmt.Errorf("feeds: daemon already running: %w", err)
 	}
-
-	// Only initialize stopCh after successful socket bind so a failed second
-	// Start() call doesn't clobber the running daemon's channel.
-	d.stopCh = make(chan struct{})
 
 	// Write PID file for debugging visibility only (not for liveness).
 	if err := d.writePIDFile(); err != nil {
@@ -135,14 +139,9 @@ func (d *Daemon) Start() error {
 // Stop gracefully shuts down the daemon: stops the socket server, signals
 // feed goroutines to stop, waits for completion, and cleans up the PID file.
 func (d *Daemon) Stop() error {
-	// Close stopCh to signal all goroutines to exit.
+	// Signal all goroutines to exit via centralized shutdown.
 	if d.stopCh != nil {
-		select {
-		case <-d.stopCh:
-			// Already closed (e.g., by signal handler or /shutdown endpoint).
-		default:
-			close(d.stopCh)
-		}
+		d.triggerShutdown()
 	}
 
 	// Stop the idle timer if running.
@@ -270,13 +269,7 @@ func (d *Daemon) startIdleMonitor() {
 		case <-d.idleTimer.C:
 			core.Logger().Info("feeds: idle timeout reached, shutting down",
 				"timeout_minutes", d.config.InactivityTimeoutMinutes)
-			// Trigger graceful shutdown.
-			select {
-			case <-d.stopCh:
-				// Already closed.
-			default:
-				close(d.stopCh)
-			}
+			d.triggerShutdown()
 		case <-d.stopCh:
 			// Daemon is shutting down for another reason.
 		}
@@ -358,14 +351,7 @@ func (d *Daemon) installSignalHandler() {
 		select {
 		case <-sigCh:
 			// Received signal — trigger shutdown.
-			if d.stopCh != nil {
-				select {
-				case <-d.stopCh:
-					// Already closed.
-				default:
-					close(d.stopCh)
-				}
-			}
+			d.triggerShutdown()
 		case <-d.stopCh:
 			// Daemon is stopping normally.
 		}

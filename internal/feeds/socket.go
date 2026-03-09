@@ -89,8 +89,13 @@ func (s *SocketServer) Start() error {
 		WriteTimeout: 500 * time.Millisecond,
 	}
 
-	// Serve in a background goroutine.
+	// Serve in a background goroutine (ARCH-7: panic recovery).
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				core.Logger().Error("feeds: socket serve goroutine panic recovered", "recovered", fmt.Sprintf("%v", r))
+			}
+		}()
 		// Serve returns http.ErrServerClosed on graceful shutdown — that's expected.
 		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			fmt.Fprintf(os.Stderr, "hookwise: socket server error: %v\n", err)
@@ -161,7 +166,14 @@ func (s *SocketServer) handleShutdown(w http.ResponseWriter, r *http.Request) {
 	// sync.Once ensures idempotency if multiple /shutdown requests arrive.
 	if s.shutdownFn != nil {
 		s.shutdownOnce.Do(func() {
-			go s.shutdownFn()
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						core.Logger().Error("feeds: shutdown goroutine panic recovered", "recovered", fmt.Sprintf("%v", r))
+					}
+				}()
+				s.shutdownFn()
+			}()
 		})
 	}
 }

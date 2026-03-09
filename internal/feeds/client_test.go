@@ -64,8 +64,12 @@ func TestDaemonClient_Shutdown(t *testing.T) {
 	socketPath := filepath.Join(socketTempDir(t), "d.sock")
 
 	shutdownCh := make(chan struct{}, 1)
-	srv := NewSocketServer(socketPath, func() {
+	var srv *SocketServer
+	srv = NewSocketServer(socketPath, func() {
 		shutdownCh <- struct{}{}
+		// Actually shut down the server so the socket disappears,
+		// allowing the client's post-shutdown poll to succeed.
+		_ = srv.Shutdown(context.Background())
 	}, time.Now())
 	require.NoError(t, srv.Start())
 	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
@@ -79,7 +83,7 @@ func TestDaemonClient_Shutdown(t *testing.T) {
 	case <-shutdownCh:
 		// OK
 	case <-time.After(2 * time.Second):
-		t.Fatal("shutdown function was not called within timeout")
+		require.FailNow(t, "shutdown function was not called within timeout")
 	}
 }
 

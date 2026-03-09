@@ -103,6 +103,9 @@ func (c *DaemonClient) spawnDaemon(configPath string) error {
 	if configPath != "" {
 		args = append(args, "--config", configPath)
 	}
+	if c.socketPath != core.DefaultSocketPath {
+		args = append(args, "--socket", c.socketPath)
+	}
 
 	cmd := exec.Command(self, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // SPAWN-2
@@ -138,6 +141,11 @@ func (c *DaemonClient) Shutdown() error {
 	}
 	resp.Body.Close()
 
+	// Surface unexpected HTTP status codes.
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("feeds: shutdown returned HTTP %d", resp.StatusCode)
+	}
+
 	// Poll for socket disappearance up to 5 seconds.
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -147,7 +155,7 @@ func (c *DaemonClient) Shutdown() error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	return nil
+	return fmt.Errorf("feeds: daemon still running after 5s shutdown wait")
 }
 
 // IsRunning checks whether the daemon is reachable by dialing the socket.

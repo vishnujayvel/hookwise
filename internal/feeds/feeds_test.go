@@ -713,7 +713,7 @@ func TestDaemon_IdleTimeout(t *testing.T) {
 	case <-done:
 		// Idle timeout triggered shutdown — success.
 	case <-time.After(5 * time.Second):
-		t.Fatal("daemon did not shut down within timeout after idle timeout")
+		require.FailNow(t, "daemon did not shut down within timeout after idle timeout")
 	}
 
 	// Clean up socket server.
@@ -1507,7 +1507,12 @@ func TestDaemon_ConcurrentStartOnlyOneWins(t *testing.T) {
 	sockPath := filepath.Join(sockDir, "race.sock")
 
 	const N = 5
-	results := make(chan error, N)
+
+	type startResult struct {
+		daemon *Daemon
+		err    error
+	}
+	results := make(chan startResult, N)
 
 	for i := 0; i < N; i++ {
 		go func() {
@@ -1519,21 +1524,26 @@ func TestDaemon_ConcurrentStartOnlyOneWins(t *testing.T) {
 			d.SetCacheDir(filepath.Join(tmpDir, "cache"))
 			d.SetSocketPath(sockPath)
 			d.SetStaggerOffset(0)
-			results <- d.Start()
+			results <- startResult{daemon: d, err: d.Start()}
 		}()
 	}
 
 	var successes, failures int
-	var winningDaemon *Daemon
-	_ = winningDaemon // suppress unused warning — we just need the counts
+	var winner *Daemon
 
 	for i := 0; i < N; i++ {
-		err := <-results
-		if err == nil {
+		res := <-results
+		if res.err == nil {
 			successes++
+			winner = res.daemon
 		} else {
 			failures++
 		}
+	}
+
+	// Stop the winning daemon so resources are cleaned up.
+	if winner != nil {
+		t.Cleanup(func() { winner.Stop() })
 	}
 
 	// Exactly one goroutine should have won the socket bind.

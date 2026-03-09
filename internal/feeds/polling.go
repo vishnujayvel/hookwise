@@ -51,6 +51,9 @@ func (d *Daemon) pollFeed(ctx context.Context, p Producer, interval time.Duratio
 // Panics in Produce() are recovered so that a failing producer cannot crash
 // the daemon goroutine (ARCH-1 fail-open guarantee).
 func (d *Daemon) runProducer(ctx context.Context, p Producer) {
+	// IDLE-1: Reset idle timer on producer poll completion, including
+	// error/panic paths — any activity counts.
+	defer d.resetIdleTimer()
 	defer func() {
 		if r := recover(); r != nil {
 			core.Logger().Error("feeds: producer panic recovered", "producer", p.Name(), "recovered", fmt.Sprintf("%v", r))
@@ -68,9 +71,6 @@ func (d *Daemon) runProducer(ctx context.Context, p Producer) {
 	if err := core.AtomicWriteJSON(cachePath, data); err != nil {
 		core.Logger().Error("feeds: cache write error", "producer", p.Name(), "error", err)
 	}
-
-	// IDLE-1: Reset idle timer on producer poll completion.
-	d.resetIdleTimer()
 }
 
 // runAllFeeds launches goroutines for all registered producers with

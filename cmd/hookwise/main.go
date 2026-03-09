@@ -1812,7 +1812,8 @@ func newDaemonStartCmd() *cobra.Command {
 		Short: "Start the feed daemon (connect-or-start)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			w := cmd.OutOrStdout()
-			client := feeds.NewDaemonClient(core.DefaultSocketPath)
+			socketPath := filepath.Join(core.GetStateDir(), "daemon.sock")
+			client := feeds.NewDaemonClient(socketPath)
 
 			cwd, _ := os.Getwd()
 			configPath := filepath.Join(cwd, core.ProjectConfigFile)
@@ -1842,7 +1843,8 @@ func newDaemonStopCmd() *cobra.Command {
 		Short: "Stop the feed daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			w := cmd.OutOrStdout()
-			client := feeds.NewDaemonClient(core.DefaultSocketPath)
+			socketPath := filepath.Join(core.GetStateDir(), "daemon.sock")
+			client := feeds.NewDaemonClient(socketPath)
 
 			if !client.IsRunning() {
 				fmt.Fprintln(w, "daemon: not running")
@@ -1862,6 +1864,7 @@ func newDaemonStopCmd() *cobra.Command {
 
 func newDaemonRunCmd() *cobra.Command {
 	var configPath string
+	var socketPath string
 
 	cmd := &cobra.Command{
 		Use:    "run",
@@ -1883,6 +1886,9 @@ func newDaemonRunCmd() *cobra.Command {
 			feeds.RegisterBuiltins(registry)
 
 			daemon := feeds.NewDaemon(config.Daemon, config.Feeds, registry)
+			if socketPath != "" {
+				daemon.SetSocketPath(socketPath)
+			}
 			if err := daemon.Start(); err != nil {
 				return fmt.Errorf("daemon: %w", err)
 			}
@@ -1895,6 +1901,7 @@ func newDaemonRunCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", "", "Config file path")
+	cmd.Flags().StringVar(&socketPath, "socket", "", "Socket file path")
 	return cmd
 }
 
@@ -1902,30 +1909,36 @@ func newDaemonRunCmd() *cobra.Command {
 // Auto-start helper for status-line (Task 6.1)
 // ---------------------------------------------------------------------------
 
-// daemonAliveMarkerPath is the marker file used to cache daemon liveness
-// checks for 60 seconds, avoiding socket dial overhead on every hook invocation.
-var daemonAliveMarkerPath = filepath.Join(core.DefaultStateDir, "daemon-alive.marker")
-
 // ensureDaemonWithCache calls EnsureDaemon only if the alive marker is stale
 // or missing. The marker file is touched on success, caching the result for 60s.
 // Returns silently on any error (ARCH-1 fail-open).
 func ensureDaemonWithCache(configPath string) {
+	stateDir := core.GetStateDir()
+	socketPath := filepath.Join(stateDir, "daemon.sock")
+	markerPath := filepath.Join(stateDir, "daemon-alive.marker")
+
 	// Check marker file freshness.
-	if info, err := os.Stat(daemonAliveMarkerPath); err == nil {
+	if info, err := os.Stat(markerPath); err == nil {
 		if time.Since(info.ModTime()) < 60*time.Second {
-			return // Recent check — skip socket dial.
+			// Marker is fresh — verify the socket is still reachable to
+			// handle daemon crash during marker validity window.
+			client := feeds.NewDaemonClient(socketPath)
+			if client.IsRunning() {
+				return // Recent check and daemon still reachable — skip.
+			}
+			// Daemon crashed — fall through to re-start.
 		}
 	}
 
-	client := feeds.NewDaemonClient(core.DefaultSocketPath)
+	client := feeds.NewDaemonClient(socketPath)
 	if err := client.EnsureDaemon(configPath); err != nil {
 		core.Logger().Debug("feeds: auto-start failed (fail-open)", "error", err)
 		return
 	}
 
 	// Touch the marker file.
-	if err := core.EnsureDir(filepath.Dir(daemonAliveMarkerPath), core.DefaultDirMode); err != nil {
+	if err := core.EnsureDir(filepath.Dir(markerPath), core.DefaultDirMode); err != nil {
 		return
 	}
-	os.WriteFile(daemonAliveMarkerPath, []byte("ok"), 0o600)
+	os.WriteFile(markerPath, []byte("ok"), 0o600)
 }

@@ -1501,27 +1501,30 @@ func TestDaemonRunIsHidden(t *testing.T) {
 	rootCmd := newRootCmd()
 	daemonCmd, _, _ := rootCmd.Find([]string{"daemon"})
 
+	var found bool
 	for _, c := range daemonCmd.Commands() {
 		if c.Use == "run" {
+			found = true
 			assert.True(t, c.Hidden, "daemon run should be hidden")
-			return
+			break
 		}
 	}
-	t.Error("daemon run subcommand not found")
+	assert.True(t, found, "daemon run subcommand not found")
 }
 
 func TestDaemonRunHasConfigFlag(t *testing.T) {
 	rootCmd := newRootCmd()
 	daemonCmd, _, _ := rootCmd.Find([]string{"daemon"})
 
+	var found bool
 	for _, c := range daemonCmd.Commands() {
 		if c.Use == "run" {
-			flag := c.Flags().Lookup("config")
-			assert.NotNil(t, flag, "daemon run should have --config flag")
-			return
+			found = true
+			assert.NotNil(t, c.Flags().Lookup("config"), "daemon run should have --config flag")
+			break
 		}
 	}
-	t.Error("daemon run subcommand not found")
+	assert.True(t, found, "daemon run subcommand not found")
 }
 
 func TestDaemonStopNotRunning(t *testing.T) {
@@ -1555,7 +1558,7 @@ func TestDoctorDaemonNotRunning(t *testing.T) {
 	os.WriteFile(configPath, []byte("version: 1\nguards: []\n"), 0o644)
 
 	output, err := executeCommand("doctor")
-	require.NoError(t, err, "doctor failed\noutput: %s", output)
+	require.NoError(t, err, "doctor failed: output: %s", output)
 
 	// Should report daemon not running (socket-based check).
 	assert.Contains(t, output, "daemon: not running", "doctor should report daemon not running")
@@ -1569,22 +1572,23 @@ func TestDoctorDaemonNotRunning(t *testing.T) {
 func TestEnsureDaemonWithCache_MarkerFileCaching(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Override the marker path for testing.
-	origMarker := daemonAliveMarkerPath
-	daemonAliveMarkerPath = filepath.Join(tmpDir, "daemon-alive.marker")
-	defer func() { daemonAliveMarkerPath = origMarker }()
+	// Override the state dir so marker and socket paths resolve under tmpDir.
+	t.Setenv("HOOKWISE_STATE_DIR", tmpDir)
+
+	markerPath := filepath.Join(tmpDir, "daemon-alive.marker")
 
 	// Write a fresh marker file (less than 60s old).
-	os.WriteFile(daemonAliveMarkerPath, []byte("ok"), 0o600)
+	require.NoError(t, os.WriteFile(markerPath, []byte("ok"), 0o600))
 
-	// ensureDaemonWithCache should return immediately without dialing.
-	// (We can't fully test the socket dial here without a running daemon,
-	// but we verify the marker file fast-path works.)
+	// ensureDaemonWithCache should see the fresh marker, verify the socket
+	// is not reachable (no daemon running in tmpDir), and attempt to start
+	// one. Since no binary is running, the marker file fast-path is tested
+	// through the stale-socket fallthrough path.
 	ensureDaemonWithCache("/nonexistent/config.yaml")
 
-	// Marker should still exist (was not overwritten since it was fresh).
-	_, err := os.Stat(daemonAliveMarkerPath)
-	assert.NoError(t, err, "marker file should still exist after cache hit")
+	// Marker should still exist.
+	_, err := os.Stat(markerPath)
+	assert.NoError(t, err, "marker file should still exist after cache check")
 }
 
 // stripANSI removes ANSI escape sequences from a string.
