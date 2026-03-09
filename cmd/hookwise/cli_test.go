@@ -271,12 +271,9 @@ status_line:
 		t.Fatalf("status-line failed: %v\noutput: %s", err, output)
 	}
 
-	// Should contain rendered segments.
-	if !strings.Contains(output, "session") {
-		t.Errorf("status-line should contain 'session' segment, got: %s", output)
-	}
-	if !strings.Contains(output, "cost") {
-		t.Errorf("status-line should contain 'cost' segment, got: %s", output)
+	// Should produce output (either segment data or fallback "hookwise" label).
+	if strings.TrimSpace(output) == "" {
+		t.Errorf("status-line should produce output, got empty")
 	}
 }
 
@@ -423,20 +420,17 @@ func TestBuildTestPayload(t *testing.T) {
 
 func TestRenderBuiltinSegments(t *testing.T) {
 	emptyCache := map[string]interface{}{}
-	names := []string{"session", "cost", "project", "calendar", "pulse", "weather"}
-	for _, name := range names {
+
+	// Segments with no data should return empty (omitted from output).
+	noDataSegments := []string{"session", "cost", "project", "calendar", "pulse", "weather"}
+	for _, name := range noDataSegments {
 		result := renderBuiltinSegment(name, emptyCache, nil)
-		if result == "" {
-			t.Errorf("builtin segment %q rendered empty", name)
-		}
-		// After stripping ANSI codes, segment name should appear (all show "name: --" or "name").
-		stripped := stripANSI(result)
-		if !strings.Contains(stripped, name) && name != "cost" {
-			t.Errorf("builtin segment %q should contain its name, got: %s", name, stripped)
+		if result != "" {
+			t.Errorf("builtin segment %q with no data should return empty, got: %s", name, stripANSI(result))
 		}
 	}
 
-	// Unknown segment should still render something.
+	// Unknown segment should still render something (fallback).
 	unknown := renderBuiltinSegment("unknown_segment", emptyCache, nil)
 	if unknown == "" {
 		t.Error("unknown builtin segment should still render")
@@ -565,12 +559,13 @@ status_line:
 
 	stripped := stripANSI(output)
 
-	// All segments should show fallback with "--".
-	for _, name := range []string{"weather", "project", "pulse", "calendar"} {
-		expected := name + ": --"
-		if !strings.Contains(stripped, expected) {
-			t.Errorf("segment %q should show fallback %q, got: %s", name, expected, stripped)
-		}
+	// With no cache, all segments return empty and the fallback "hookwise" label shows.
+	if !strings.Contains(stripped, "hookwise") {
+		t.Errorf("status-line with no cache should show fallback 'hookwise', got: %s", stripped)
+	}
+	// No segment should show "--" anymore — they should be omitted entirely.
+	if strings.Contains(stripped, ": --") {
+		t.Errorf("status-line should not contain '--' placeholders, got: %s", stripped)
 	}
 }
 
@@ -699,6 +694,85 @@ func TestStatusLineProjectSegment(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// 17b. Calendar segment renders from cache
+// ---------------------------------------------------------------------------
+
+func TestStatusLineCalendarSegment(t *testing.T) {
+	feedCache := map[string]interface{}{
+		"calendar": map[string]interface{}{
+			"type":      "calendar",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"events": []interface{}{
+					map[string]interface{}{
+						"name":       "Standup",
+						"start":      "2026-03-07T10:30:00Z",
+						"end":        "2026-03-07T11:00:00Z",
+						"all_day":    false,
+						"is_current": false,
+					},
+				},
+				"next_event": map[string]interface{}{
+					"name": "Standup",
+					"time": "in 30m",
+				},
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("calendar", feedCache, nil)
+	stripped := stripANSI(result)
+
+	if !strings.Contains(stripped, "\U0001f4c5") {
+		t.Errorf("calendar should show 📅 emoji, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "Standup") {
+		t.Errorf("calendar should show event name 'Standup', got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "in 30m") {
+		t.Errorf("calendar should show relative time 'in 30m', got: %s", stripped)
+	}
+}
+
+func TestStatusLineCalendarSegmentEmpty(t *testing.T) {
+	// Calendar with no next_event should return empty.
+	feedCache := map[string]interface{}{
+		"calendar": map[string]interface{}{
+			"type":      "calendar",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"events":     []interface{}{},
+				"next_event": nil,
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("calendar", feedCache, nil)
+	if result != "" {
+		t.Errorf("calendar with nil next_event should return empty, got: %s", stripANSI(result))
+	}
+}
+
+func TestStatusLineCalendarSegmentStringEvent(t *testing.T) {
+	// next_event as plain string (alternate format).
+	feedCache := map[string]interface{}{
+		"calendar": map[string]interface{}{
+			"type":      "calendar",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"next_event": "Sprint Review in 1h",
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("calendar", feedCache, nil)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "Sprint Review in 1h") {
+		t.Errorf("calendar should render string event, got: %s", stripped)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // 18. Placeholder fallback renders "--" not "0"
 // ---------------------------------------------------------------------------
 
@@ -746,15 +820,9 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 
 	for _, name := range []string{"weather", "pulse", "project", "calendar"} {
 		result := renderBuiltinSegment(name, feedCache, nil)
-		stripped := stripANSI(result)
-
-		expected := name + ": --"
-		if !strings.Contains(stripped, expected) {
-			t.Errorf("placeholder %q should show %q, got: %s", name, expected, stripped)
-		}
-		// Must NOT show "0" as a real value.
-		if strings.Contains(stripped, ": 0") {
-			t.Errorf("placeholder %q should not render '0' as real data, got: %s", name, stripped)
+		// Placeholder feeds should produce empty output (segment omitted).
+		if result != "" {
+			t.Errorf("placeholder %q should return empty, got: %s", name, stripANSI(result))
 		}
 	}
 }
@@ -774,9 +842,8 @@ func TestStatusLineSessionSegment(t *testing.T) {
 
 func TestStatusLineSessionSegmentNoSummary(t *testing.T) {
 	result := renderBuiltinSegment("session", nil, nil)
-	stripped := stripANSI(result)
-	if !strings.Contains(stripped, "session: --") {
-		t.Errorf("session segment without summary should show '--', got: %s", stripped)
+	if result != "" {
+		t.Errorf("session segment without summary should return empty, got: %s", stripANSI(result))
 	}
 }
 
@@ -796,9 +863,8 @@ func TestStatusLineCostSegment(t *testing.T) {
 func TestStatusLineCostSegmentZero(t *testing.T) {
 	summary := &analytics.DailySummaryResult{EstimatedCostUSD: 0}
 	result := renderBuiltinSegment("cost", nil, summary)
-	stripped := stripANSI(result)
-	if !strings.Contains(stripped, "cost: --") {
-		t.Errorf("cost segment with zero should show '--', got: %s", stripped)
+	if result != "" {
+		t.Errorf("cost segment with zero should return empty, got: %s", stripANSI(result))
 	}
 }
 
@@ -867,6 +933,326 @@ func TestRecordAnalytics_PostToolUse(t *testing.T) {
 	}
 	if summary.TotalEvents < 1 {
 		t.Errorf("expected at least 1 event after PostToolUse, got %d", summary.TotalEvents)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 24. Insights segment renders from cache
+// ---------------------------------------------------------------------------
+
+func TestStatusLineInsightsSegment(t *testing.T) {
+	feedCache := map[string]interface{}{
+		"insights": map[string]interface{}{
+			"type":      "insights",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"total_sessions":       72,
+				"total_messages":       486,
+				"total_lines_added":    12800,
+				"avg_duration_minutes": 225.0,
+				"top_tools": []interface{}{
+					map[string]interface{}{"name": "Bash", "count": 509},
+					map[string]interface{}{"name": "Read", "count": 323},
+					map[string]interface{}{"name": "Edit", "count": 228},
+				},
+				"friction_counts":    map[string]interface{}{"wrong_approach": 32, "misunderstood_request": 14},
+				"friction_total":     46,
+				"peak_hour":          7,
+				"days_active":        17,
+				"staleness_days":     30,
+				"recent_msgs_per_day": 55,
+				"recent_messages":     110,
+				"recent_days_active":  2,
+				"recent_session": map[string]interface{}{
+					"id":               "s1",
+					"duration_minutes": 45.0,
+					"lines_added":      200,
+					"friction_count":   3,
+					"outcome":          "success",
+					"tool_errors":      0,
+				},
+			},
+		},
+	}
+
+	// Test insights segment.
+	result := renderBuiltinSegment("insights", feedCache, nil)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "72 sessions") {
+		t.Errorf("insights should show 72 sessions, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "17d") {
+		t.Errorf("insights should show 17d, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "12.8k") {
+		t.Errorf("insights should show 12.8k lines, got: %s", stripped)
+	}
+}
+
+func TestStatusLineInsightsFrictionSegment(t *testing.T) {
+	// Friction with recent session friction > 0.
+	feedCache := map[string]interface{}{
+		"insights": map[string]interface{}{
+			"type":      "insights",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"friction_total":  5,
+				"friction_counts": map[string]interface{}{"wrong_approach": 3, "misunderstood_request": 2},
+				"recent_session": map[string]interface{}{
+					"friction_count": 3,
+				},
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("insights_friction", feedCache, nil)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "3 friction") {
+		t.Errorf("friction should show 3, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "wrong approach") {
+		t.Errorf("friction should show top category, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "break tasks into steps") {
+		t.Errorf("friction should show tip, got: %s", stripped)
+	}
+}
+
+func TestStatusLineInsightsFrictionClean(t *testing.T) {
+	// Clean session (zero recent, non-zero total).
+	feedCache := map[string]interface{}{
+		"insights": map[string]interface{}{
+			"type":      "insights",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"friction_total":  12,
+				"friction_counts": map[string]interface{}{},
+				"recent_session": map[string]interface{}{
+					"friction_count": 0,
+				},
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("insights_friction", feedCache, nil)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "Clean session") {
+		t.Errorf("should show clean session, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "12 in 30d") {
+		t.Errorf("should show historical friction count, got: %s", stripped)
+	}
+}
+
+func TestStatusLineInsightsPaceSegment(t *testing.T) {
+	feedCache := map[string]interface{}{
+		"insights": map[string]interface{}{
+			"type":      "insights",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"total_messages":    470,
+				"total_lines_added": 5400,
+				"total_sessions":    42,
+				"days_active":       10,
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("insights_pace", feedCache, nil)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "47 msgs/day") {
+		t.Errorf("pace should show 47 msgs/day, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "5.4k") {
+		t.Errorf("pace should show 5.4k lines, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "42 sessions") {
+		t.Errorf("pace should show 42 sessions, got: %s", stripped)
+	}
+}
+
+func TestStatusLineInsightsTrendSegment(t *testing.T) {
+	feedCache := map[string]interface{}{
+		"insights": map[string]interface{}{
+			"type":      "insights",
+			"timestamp": "2026-03-07T10:00:00Z",
+			"data": map[string]interface{}{
+				"top_tools": []interface{}{
+					map[string]interface{}{"name": "Bash", "count": 50},
+					map[string]interface{}{"name": "Read", "count": 30},
+					map[string]interface{}{"name": "Edit", "count": 20},
+				},
+				"peak_hour": 14,
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("insights_trend", feedCache, nil)
+	stripped := stripANSI(result)
+	if !strings.Contains(stripped, "Top: Bash, Read") {
+		t.Errorf("trend should show top 2 tools, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "Peak: afternoon") {
+		t.Errorf("trend should show peak afternoon, got: %s", stripped)
+	}
+}
+
+func TestStatusLineInsightsTrendPeakHour(t *testing.T) {
+	tests := []struct {
+		hour  int
+		label string
+	}{
+		{8, "morning"},
+		{14, "afternoon"},
+		{20, "evening"},
+		{3, "night"},
+	}
+	for _, tt := range tests {
+		feedCache := map[string]interface{}{
+			"insights": map[string]interface{}{
+				"type":      "insights",
+				"timestamp": "2026-03-07T10:00:00Z",
+				"data": map[string]interface{}{
+					"top_tools": []interface{}{
+						map[string]interface{}{"name": "Read", "count": 10},
+					},
+					"peak_hour": tt.hour,
+				},
+			},
+		}
+		result := renderBuiltinSegment("insights_trend", feedCache, nil)
+		stripped := stripANSI(result)
+		if !strings.Contains(stripped, "Peak: "+tt.label) {
+			t.Errorf("hour %d should map to %s, got: %s", tt.hour, tt.label, stripped)
+		}
+	}
+}
+
+func TestStatusLineInsightsNoData(t *testing.T) {
+	// Insights segments with no cache data should handle gracefully.
+	emptyCache := map[string]interface{}{}
+
+	result := renderBuiltinSegment("insights", emptyCache, nil)
+	if result != "" {
+		t.Errorf("insights with no data should return empty, got: %s", stripANSI(result))
+	}
+
+	// Friction/pace/trend also return empty string with no data.
+	assert := func(name string) {
+		r := renderBuiltinSegment(name, emptyCache, nil)
+		if r != "" {
+			t.Errorf("%s with no data should return empty, got: %s", name, r)
+		}
+	}
+	assert("insights_friction")
+	assert("insights_pace")
+	assert("insights_trend")
+}
+
+// ---------------------------------------------------------------------------
+// 25. Multi-line status output with insights
+// ---------------------------------------------------------------------------
+
+func TestStatusLineMultiLine(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+
+	stateDir := filepath.Join(tmpDir, ".hookwise")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+
+	// Create insights cache with real data.
+	cacheDir := filepath.Join(stateDir, "state")
+	os.MkdirAll(cacheDir, 0o700)
+
+	insightsEnvelope := map[string]interface{}{
+		"type":      "insights",
+		"timestamp": "2026-03-08T10:00:00Z",
+		"data": map[string]interface{}{
+			"total_sessions":       72,
+			"total_messages":       486,
+			"total_lines_added":    12800,
+			"avg_duration_minutes": 225.0,
+			"top_tools": []interface{}{
+				map[string]interface{}{"name": "Bash", "count": 509},
+				map[string]interface{}{"name": "Read", "count": 323},
+			},
+			"friction_counts":    map[string]interface{}{"wrong_approach": 5},
+			"friction_total":     5,
+			"peak_hour":          14,
+			"days_active":        17,
+			"staleness_days":     30,
+			"recent_msgs_per_day": 55,
+			"recent_messages":     110,
+			"recent_days_active":  2,
+			"recent_session": map[string]interface{}{
+				"friction_count": 0,
+			},
+		},
+	}
+	writeJSONFile(t, filepath.Join(cacheDir, "insights.json"), insightsEnvelope)
+
+	configYAML := `version: 1
+status_line:
+  enabled: true
+  segments:
+    - session
+    - cost
+`
+	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
+	os.WriteFile(configPath, []byte(configYAML), 0o644)
+
+	output, err := executeCommand("status-line")
+	if err != nil {
+		t.Fatalf("status-line failed: %v\noutput: %s", err, output)
+	}
+
+	stripped := stripANSI(output)
+	lines := strings.Split(strings.TrimSpace(stripped), "\n")
+
+	// Should have at least 2 lines: main segment line + insights summary lines.
+	if len(lines) < 2 {
+		t.Errorf("expected at least 2 lines for multi-line output, got %d:\n%s", len(lines), stripped)
+	}
+
+	// Check for insights summary content in lines 2+.
+	if !strings.Contains(stripped, "72 sessions") {
+		t.Errorf("multi-line output should contain '72 sessions', got:\n%s", stripped)
+	}
+	if !strings.Contains(stripped, "Bash(509)") {
+		t.Errorf("multi-line output should contain tool breakdown, got:\n%s", stripped)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 26. formatLargeNumber helper
+// ---------------------------------------------------------------------------
+
+func TestFormatLargeNumber(t *testing.T) {
+	tests := []struct {
+		input    int
+		expected string
+	}{
+		{0, "0"},
+		{340, "340"},
+		{999, "999"},
+		{1000, "1k"},
+		{5400, "5.4k"},
+		{12800, "12.8k"},
+		{28000, "28k"},
+	}
+	for _, tt := range tests {
+		result := formatLargeNumber(tt.input)
+		if result != tt.expected {
+			t.Errorf("formatLargeNumber(%d) = %q, want %q", tt.input, result, tt.expected)
+		}
 	}
 }
 

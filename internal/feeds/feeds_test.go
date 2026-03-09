@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -566,4 +568,604 @@ func TestDaemon_IsEnabled(t *testing.T) {
 	assert.True(t, d.isEnabled("pulse"), "pulse should be enabled")
 	assert.False(t, d.isEnabled("weather"), "weather should be disabled")
 	assert.True(t, d.isEnabled("unknown-custom-feed"), "unknown feeds default to enabled (fail-open)")
+}
+
+// ---------------------------------------------------------------------------
+// InsightsProducer Tests
+// ---------------------------------------------------------------------------
+
+// writeSessionMeta creates a session-meta JSON file in the given directory.
+func writeSessionMeta(t *testing.T, dir string, session map[string]interface{}) {
+	t.Helper()
+	id, _ := session["session_id"].(string)
+	if id == "" {
+		id = fmt.Sprintf("session-%d", time.Now().UnixNano())
+	}
+	data, err := json.Marshal(session)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, id+".json"), data, 0o644))
+}
+
+// writeFacet creates a facets JSON file in the given directory.
+func writeFacet(t *testing.T, dir string, facet map[string]interface{}) {
+	t.Helper()
+	sid, _ := facet["session_id"].(string)
+	if sid == "" {
+		sid = fmt.Sprintf("facet-%d", time.Now().UnixNano())
+	}
+	data, err := json.Marshal(facet)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, sid+".json"), data, 0o644))
+}
+
+func TestInsightsProducer_NoUsageData(t *testing.T) {
+	p := &InsightsProducer{}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Insights: core.InsightsFeedConfig{
+			UsageDataPath: filepath.Join(t.TempDir(), "nonexistent"),
+			StalenessDays: 30,
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	m, ok := result.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "insights", m["type"])
+
+	data, ok := m["data"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, 0, toInt(data["total_sessions"]))
+	assert.Equal(t, 0, toInt(data["total_messages"]))
+
+	// Must NOT have "source": "placeholder".
+	_, hasSource := data["source"]
+	assert.False(t, hasSource, "zeroed envelope should not have 'source' field")
+}
+
+func TestInsightsProducer_AggregatesSessionMeta(t *testing.T) {
+	tmpDir := t.TempDir()
+	metaDir := filepath.Join(tmpDir, "session-meta")
+	require.NoError(t, os.MkdirAll(metaDir, 0o700))
+
+	now := time.Now().UTC()
+
+	writeSessionMeta(t, metaDir, map[string]interface{}{
+		"session_id":         "s1",
+		"start_time":         now.Add(-1 * time.Hour).Format(time.RFC3339),
+		"user_message_count": 10,
+		"lines_added":        100,
+		"duration_minutes":   30.0,
+		"tool_counts":        map[string]interface{}{"Read": 5, "Edit": 3},
+		"message_hours":      []interface{}{14.0, 14.0, 15.0},
+	})
+	writeSessionMeta(t, metaDir, map[string]interface{}{
+		"session_id":         "s2",
+		"start_time":         now.Add(-2 * time.Hour).Format(time.RFC3339),
+		"user_message_count": 20,
+		"lines_added":        200,
+		"duration_minutes":   45.0,
+		"tool_counts":        map[string]interface{}{"Read": 10, "Bash": 7},
+		"message_hours":      []interface{}{14.0, 16.0},
+	})
+
+	p := &InsightsProducer{}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Insights: core.InsightsFeedConfig{
+			UsageDataPath: tmpDir,
+			StalenessDays: 30,
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	m := result.(map[string]interface{})
+	data := m["data"].(map[string]interface{})
+
+	assert.Equal(t, 2, toInt(data["total_sessions"]))
+	assert.Equal(t, 30, toInt(data["total_messages"]))
+	assert.Equal(t, 300, toInt(data["total_lines_added"]))
+
+	// avg_duration = (30 + 45) / 2 = 37.5
+	avgDur, ok := data["avg_duration_minutes"].(float64)
+	require.True(t, ok)
+	assert.InDelta(t, 37.5, avgDur, 0.1)
+}
+
+func TestInsightsProducer_FiltersByStaleness(t *testing.T) {
+	tmpDir := t.TempDir()
+	metaDir := filepath.Join(tmpDir, "session-meta")
+	require.NoError(t, os.MkdirAll(metaDir, 0o700))
+
+	now := time.Now().UTC()
+
+	// Recent session (within 7 days).
+	writeSessionMeta(t, metaDir, map[string]interface{}{
+		"session_id":         "recent",
+		"start_time":         now.Add(-1 * time.Hour).Format(time.RFC3339),
+		"user_message_count": 10,
+		"lines_added":        100,
+		"duration_minutes":   30.0,
+	})
+
+	// Old session (60 days ago — outside 30-day window).
+	writeSessionMeta(t, metaDir, map[string]interface{}{
+		"session_id":         "old",
+		"start_time":         now.Add(-60 * 24 * time.Hour).Format(time.RFC3339),
+		"user_message_count": 50,
+		"lines_added":        500,
+		"duration_minutes":   120.0,
+	})
+
+	p := &InsightsProducer{}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Insights: core.InsightsFeedConfig{
+			UsageDataPath: tmpDir,
+			StalenessDays: 30,
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+
+	// Only the recent session should be counted.
+	assert.Equal(t, 1, toInt(data["total_sessions"]))
+	assert.Equal(t, 10, toInt(data["total_messages"]))
+	assert.Equal(t, 100, toInt(data["total_lines_added"]))
+}
+
+func TestInsightsProducer_TopToolsLimited(t *testing.T) {
+	tmpDir := t.TempDir()
+	metaDir := filepath.Join(tmpDir, "session-meta")
+	require.NoError(t, os.MkdirAll(metaDir, 0o700))
+
+	now := time.Now().UTC()
+
+	// Create a session with 15 different tools.
+	tools := make(map[string]interface{})
+	for i := 0; i < 15; i++ {
+		tools[fmt.Sprintf("Tool%02d", i)] = i + 1
+	}
+
+	writeSessionMeta(t, metaDir, map[string]interface{}{
+		"session_id":         "many-tools",
+		"start_time":         now.Add(-1 * time.Hour).Format(time.RFC3339),
+		"user_message_count": 10,
+		"lines_added":        100,
+		"duration_minutes":   30.0,
+		"tool_counts":        tools,
+	})
+
+	p := &InsightsProducer{}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Insights: core.InsightsFeedConfig{
+			UsageDataPath: tmpDir,
+			StalenessDays: 30,
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	topTools, ok := data["top_tools"].([]map[string]interface{})
+	require.True(t, ok)
+	assert.LessOrEqual(t, len(topTools), 10, "top_tools should be limited to 10")
+}
+
+func TestInsightsProducer_FrictionFromFacets(t *testing.T) {
+	tmpDir := t.TempDir()
+	metaDir := filepath.Join(tmpDir, "session-meta")
+	facetsDir := filepath.Join(tmpDir, "facets")
+	require.NoError(t, os.MkdirAll(metaDir, 0o700))
+	require.NoError(t, os.MkdirAll(facetsDir, 0o700))
+
+	now := time.Now().UTC()
+
+	writeSessionMeta(t, metaDir, map[string]interface{}{
+		"session_id":         "s1",
+		"start_time":         now.Add(-1 * time.Hour).Format(time.RFC3339),
+		"user_message_count": 10,
+		"lines_added":        100,
+		"duration_minutes":   30.0,
+	})
+
+	writeFacet(t, facetsDir, map[string]interface{}{
+		"session_id": "s1",
+		"friction_counts": map[string]interface{}{
+			"wrong_approach":      3,
+			"misunderstood_request": 2,
+		},
+	})
+
+	// Facet for an unknown session should be ignored.
+	writeFacet(t, facetsDir, map[string]interface{}{
+		"session_id": "unknown-session",
+		"friction_counts": map[string]interface{}{
+			"tool_error": 10,
+		},
+	})
+
+	p := &InsightsProducer{}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Insights: core.InsightsFeedConfig{
+			UsageDataPath: tmpDir,
+			StalenessDays: 30,
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+
+	assert.Equal(t, 5, toInt(data["friction_total"]))
+
+	fc, ok := data["friction_counts"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, 3, toInt(fc["wrong_approach"]))
+	assert.Equal(t, 2, toInt(fc["misunderstood_request"]))
+	// tool_error from unknown session should NOT be included.
+	_, hasToolError := fc["tool_error"]
+	assert.False(t, hasToolError)
+}
+
+func TestInsightsProducer_NoPlaceholderSource(t *testing.T) {
+	tmpDir := t.TempDir()
+	metaDir := filepath.Join(tmpDir, "session-meta")
+	require.NoError(t, os.MkdirAll(metaDir, 0o700))
+
+	now := time.Now().UTC()
+	writeSessionMeta(t, metaDir, map[string]interface{}{
+		"session_id":         "s1",
+		"start_time":         now.Add(-1 * time.Hour).Format(time.RFC3339),
+		"user_message_count": 5,
+		"lines_added":        50,
+		"duration_minutes":   15.0,
+	})
+
+	p := &InsightsProducer{}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Insights: core.InsightsFeedConfig{
+			UsageDataPath: tmpDir,
+			StalenessDays: 30,
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	_, hasSource := data["source"]
+	assert.False(t, hasSource, "real insights data should NOT have 'source' field")
+}
+
+func TestInsightsProducer_MalformedFilesSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	metaDir := filepath.Join(tmpDir, "session-meta")
+	require.NoError(t, os.MkdirAll(metaDir, 0o700))
+
+	now := time.Now().UTC()
+
+	// Valid session.
+	writeSessionMeta(t, metaDir, map[string]interface{}{
+		"session_id":         "valid",
+		"start_time":         now.Add(-1 * time.Hour).Format(time.RFC3339),
+		"user_message_count": 10,
+		"lines_added":        100,
+		"duration_minutes":   30.0,
+	})
+
+	// Malformed JSON file.
+	require.NoError(t, os.WriteFile(filepath.Join(metaDir, "bad.json"), []byte("not json"), 0o644))
+
+	// Non-object JSON (array).
+	require.NoError(t, os.WriteFile(filepath.Join(metaDir, "array.json"), []byte("[1,2,3]"), 0o644))
+
+	p := &InsightsProducer{}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Insights: core.InsightsFeedConfig{
+			UsageDataPath: tmpDir,
+			StalenessDays: 30,
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	assert.Equal(t, 1, toInt(data["total_sessions"]), "should only count the valid session")
+}
+
+// ---------------------------------------------------------------------------
+// Calendar Producer Tests
+// ---------------------------------------------------------------------------
+
+// TestCalendarProducer_ImplementsConfigAware is a compile-time check.
+var _ ConfigAware = (*CalendarProducer)(nil)
+
+func TestCalendarProducer_NoToken(t *testing.T) {
+	p := &CalendarProducer{}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{
+			TokenPath: "/nonexistent/path/token.json",
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err, "ARCH-1: must not return error")
+
+	envelope := result.(map[string]interface{})
+	assert.Equal(t, "calendar", envelope["type"])
+
+	data := envelope["data"].(map[string]interface{})
+	events := data["events"].([]interface{})
+	assert.Empty(t, events, "no token → empty events")
+	assert.Nil(t, data["next_event"], "no token → nil next_event")
+}
+
+func TestCalendarProducer_NoPlaceholderSource(t *testing.T) {
+	p := &CalendarProducer{}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{
+			TokenPath: "/nonexistent/path/token.json",
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	envelope := result.(map[string]interface{})
+	data := envelope["data"].(map[string]interface{})
+	_, hasSource := data["source"]
+	assert.False(t, hasSource, "output must not contain 'source' key")
+}
+
+// writeFakeToken creates a Python google-auth format token file for testing.
+func writeFakeToken(t *testing.T, dir string) string {
+	t.Helper()
+	tokenPath := filepath.Join(dir, "token.json")
+	tok := map[string]interface{}{
+		"token":         "fake-access-token",
+		"refresh_token": "fake-refresh-token",
+		"token_uri":     "https://oauth2.googleapis.com/token",
+		"client_id":     "fake-client-id.apps.googleusercontent.com",
+		"client_secret": "fake-client-secret",
+		"expiry":        time.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
+	}
+	data, err := json.Marshal(tok)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(tokenPath, data, 0600))
+	return tokenPath
+}
+
+// fakeCalendarAPIResponse returns a Google Calendar API events list JSON response.
+func fakeCalendarAPIResponse(events []map[string]interface{}) string {
+	resp := map[string]interface{}{
+		"kind":    "calendar#events",
+		"summary": "test@example.com",
+		"items":   events,
+	}
+	data, _ := json.Marshal(resp)
+	return string(data)
+}
+
+func TestCalendarProducer_ParsesEvents(t *testing.T) {
+	now := time.Now()
+	eventStart := now.Add(30 * time.Minute).UTC().Format(time.RFC3339)
+	eventEnd := now.Add(60 * time.Minute).UTC().Format(time.RFC3339)
+
+	apiResp := fakeCalendarAPIResponse([]map[string]interface{}{
+		{
+			"summary": "Team Standup",
+			"start":   map[string]string{"dateTime": eventStart},
+			"end":     map[string]string{"dateTime": eventEnd},
+		},
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, apiResp)
+	}))
+	defer srv.Close()
+
+	tokenPath := writeFakeToken(t, t.TempDir())
+	p := &CalendarProducer{baseURL: srv.URL}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{
+			TokenPath: tokenPath,
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	envelope := result.(map[string]interface{})
+	data := envelope["data"].(map[string]interface{})
+	events := data["events"].([]interface{})
+	require.Len(t, events, 1)
+
+	ev := events[0].(map[string]interface{})
+	assert.Equal(t, "Team Standup", ev["name"])
+	assert.False(t, ev["all_day"].(bool))
+	assert.False(t, ev["is_current"].(bool))
+
+	nextEvent := data["next_event"].(map[string]interface{})
+	assert.Equal(t, "Team Standup", nextEvent["name"])
+	assert.Contains(t, nextEvent["time"], "in ")
+}
+
+func TestCalendarProducer_FindsNextEvent(t *testing.T) {
+	now := time.Now()
+
+	// First event is current (started 10m ago, ends in 20m).
+	currentStart := now.Add(-10 * time.Minute).UTC().Format(time.RFC3339)
+	currentEnd := now.Add(20 * time.Minute).UTC().Format(time.RFC3339)
+	// Second event is upcoming (starts in 45m).
+	upcomingStart := now.Add(45 * time.Minute).UTC().Format(time.RFC3339)
+	upcomingEnd := now.Add(75 * time.Minute).UTC().Format(time.RFC3339)
+
+	apiResp := fakeCalendarAPIResponse([]map[string]interface{}{
+		{
+			"summary": "Current Meeting",
+			"start":   map[string]string{"dateTime": currentStart},
+			"end":     map[string]string{"dateTime": currentEnd},
+		},
+		{
+			"summary": "Next Meeting",
+			"start":   map[string]string{"dateTime": upcomingStart},
+			"end":     map[string]string{"dateTime": upcomingEnd},
+		},
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, apiResp)
+	}))
+	defer srv.Close()
+
+	tokenPath := writeFakeToken(t, t.TempDir())
+	p := &CalendarProducer{baseURL: srv.URL}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{TokenPath: tokenPath},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	events := data["events"].([]interface{})
+	require.Len(t, events, 2)
+
+	// First event should be marked as current.
+	assert.True(t, events[0].(map[string]interface{})["is_current"].(bool))
+
+	// next_event should be the second (first non-current) event.
+	nextEvent := data["next_event"].(map[string]interface{})
+	assert.Equal(t, "Next Meeting", nextEvent["name"])
+	assert.Contains(t, nextEvent["time"], "in 4")
+}
+
+func TestCalendarProducer_AllDayEvents(t *testing.T) {
+	today := time.Now().Format("2006-01-02")
+	apiResp := fakeCalendarAPIResponse([]map[string]interface{}{
+		{
+			"summary": "Company Holiday",
+			"start":   map[string]string{"date": today},
+			"end":     map[string]string{"date": today},
+		},
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, apiResp)
+	}))
+	defer srv.Close()
+
+	tokenPath := writeFakeToken(t, t.TempDir())
+	p := &CalendarProducer{baseURL: srv.URL}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{TokenPath: tokenPath},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	events := data["events"].([]interface{})
+	require.Len(t, events, 1)
+
+	ev := events[0].(map[string]interface{})
+	assert.True(t, ev["all_day"].(bool))
+	assert.Equal(t, today, ev["start"])
+}
+
+func TestCalendarProducer_RelativeTime(t *testing.T) {
+	now := time.Date(2026, 3, 8, 10, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		start    time.Time
+		expected string
+	}{
+		{"5 minutes", now.Add(5 * time.Minute), "in 5m"},
+		{"45 minutes", now.Add(45 * time.Minute), "in 45m"},
+		{"2 hours", now.Add(2 * time.Hour), "in 2h"},
+		{"2h 30m", now.Add(2*time.Hour + 30*time.Minute), "in 2h 30m"},
+		{"2h 3m rounds", now.Add(2*time.Hour + 3*time.Minute), "in 2h"},
+		{"past/now", now.Add(-1 * time.Minute), "now"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := relativeTimeString(now, tt.start)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCalendarProducer_RelativeTime_Tomorrow(t *testing.T) {
+	now := time.Date(2026, 3, 8, 22, 0, 0, 0, time.UTC)
+	tomorrow3pm := time.Date(2026, 3, 9, 15, 0, 0, 0, time.UTC)
+
+	result := relativeTimeString(now, tomorrow3pm)
+	assert.Contains(t, result, "tomorrow")
+	assert.Contains(t, result, "3:00pm")
+}
+
+func TestCalendarProducer_RelativeTime_NextWeek(t *testing.T) {
+	now := time.Date(2026, 3, 8, 10, 0, 0, 0, time.UTC) // Sunday
+	wed9am := time.Date(2026, 3, 11, 9, 0, 0, 0, time.UTC)
+
+	result := relativeTimeString(now, wed9am)
+	assert.Contains(t, result, "Wed")
+	assert.Contains(t, result, "9:00am")
+}
+
+func TestCalendarProducer_FallbackOnAPIError(t *testing.T) {
+	callCount := 0
+	now := time.Now()
+	eventStart := now.Add(30 * time.Minute).UTC().Format(time.RFC3339)
+	eventEnd := now.Add(60 * time.Minute).UTC().Format(time.RFC3339)
+
+	goodResp := fakeCalendarAPIResponse([]map[string]interface{}{
+		{
+			"summary": "Standup",
+			"start":   map[string]string{"dateTime": eventStart},
+			"end":     map[string]string{"dateTime": eventEnd},
+		},
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, goodResp)
+		} else {
+			http.Error(w, "Internal Server Error", 500)
+		}
+	}))
+	defer srv.Close()
+
+	tokenPath := writeFakeToken(t, t.TempDir())
+	p := &CalendarProducer{baseURL: srv.URL}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{TokenPath: tokenPath},
+	})
+
+	// First call succeeds.
+	result1, err := p.Produce(context.Background())
+	require.NoError(t, err)
+	data1 := result1.(map[string]interface{})["data"].(map[string]interface{})
+	require.Len(t, data1["events"].([]interface{}), 1)
+
+	// Second call fails → returns cached result.
+	result2, err := p.Produce(context.Background())
+	require.NoError(t, err)
+	data2 := result2.(map[string]interface{})["data"].(map[string]interface{})
+	require.Len(t, data2["events"].([]interface{}), 1, "fallback should return cached events")
 }
