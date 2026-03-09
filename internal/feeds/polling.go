@@ -116,8 +116,6 @@ func (d *Daemon) intervalFor(name string) time.Duration {
 	var seconds int
 
 	switch name {
-	case "pulse":
-		seconds = d.feeds.Pulse.IntervalSeconds
 	case "project":
 		seconds = d.feeds.Project.IntervalSeconds
 	case "calendar":
@@ -126,8 +124,6 @@ func (d *Daemon) intervalFor(name string) time.Duration {
 		seconds = d.feeds.News.IntervalSeconds
 	case "weather":
 		seconds = d.feeds.Weather.IntervalSeconds
-	case "practice":
-		seconds = d.feeds.Practice.IntervalSeconds
 	case "memories":
 		seconds = d.feeds.Memories.IntervalSeconds
 	case "insights":
@@ -145,8 +141,6 @@ func (d *Daemon) intervalFor(name string) time.Duration {
 // unrecognised feeds are also considered enabled).
 func (d *Daemon) isEnabled(name string) bool {
 	switch name {
-	case "pulse":
-		return d.feeds.Pulse.Enabled
 	case "project":
 		return d.feeds.Project.Enabled
 	case "calendar":
@@ -155,8 +149,6 @@ func (d *Daemon) isEnabled(name string) bool {
 		return d.feeds.News.Enabled
 	case "weather":
 		return d.feeds.Weather.Enabled
-	case "practice":
-		return d.feeds.Practice.Enabled
 	case "memories":
 		return d.feeds.Memories.Enabled
 	case "insights":

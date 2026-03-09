@@ -357,11 +357,11 @@ func TestRegisterBuiltins_All8(t *testing.T) {
 	RegisterBuiltins(r)
 
 	all := r.All()
-	assert.Len(t, all, 8, "RegisterBuiltins should register exactly 8 producers")
+	assert.Len(t, all, 6, "RegisterBuiltins should register exactly 6 producers")
 
 	expectedNames := []string{
-		"pulse", "project", "news", "calendar",
-		"weather", "practice", "memories", "insights",
+		"project", "news", "calendar",
+		"weather", "memories", "insights",
 	}
 	sort.Strings(expectedNames)
 
@@ -503,11 +503,9 @@ func TestStopByPIDFile_NonExistentFile(t *testing.T) {
 func TestDaemon_IntervalFor(t *testing.T) {
 	r := NewRegistry()
 	d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{
-		Pulse:   core.PulseFeedConfig{IntervalSeconds: 30},
 		Weather: core.WeatherFeedConfig{IntervalSeconds: 900},
 	}, r)
 
-	assert.Equal(t, 30*time.Second, d.intervalFor("pulse"))
 	assert.Equal(t, 900*time.Second, d.intervalFor("weather"))
 	assert.Equal(t, defaultInterval, d.intervalFor("unknown-feed"))
 	assert.Equal(t, defaultInterval, d.intervalFor("project")) // 0 -> default
@@ -530,14 +528,14 @@ func TestDaemon_SkipsDisabledFeeds(t *testing.T) {
 	r := NewRegistry()
 
 	// Register two producers: one for an enabled feed, one for a disabled feed.
-	enabledProducer := newMockProducer("pulse", map[string]interface{}{"ok": true})
+	enabledProducer := newMockProducer("project", map[string]interface{}{"ok": true})
 	disabledProducer := newMockProducer("weather", map[string]interface{}{"temp": 72})
 	r.Register(enabledProducer)
 	r.Register(disabledProducer)
 
 	d, _ := newTestDaemon(t, r)
-	// Enable pulse, leave weather disabled (zero value = false).
-	d.feeds.Pulse.Enabled = true
+	// Enable project, leave weather disabled (zero value = false).
+	d.feeds.Project.Enabled = true
 	// Weather.Enabled is false by default (zero value).
 	d.SetStaggerOffset(0)
 
@@ -545,7 +543,7 @@ func TestDaemon_SkipsDisabledFeeds(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	require.NoError(t, d.Stop())
 
-	// Pulse (enabled) should have been called.
+	// Project (enabled) should have been called.
 	assert.GreaterOrEqual(t, enabledProducer.callCount.Load(), int64(1),
 		"enabled producer should have been called")
 
@@ -561,11 +559,11 @@ func TestDaemon_SkipsDisabledFeeds(t *testing.T) {
 func TestDaemon_IsEnabled(t *testing.T) {
 	r := NewRegistry()
 	d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{
-		Pulse:   core.PulseFeedConfig{Enabled: true},
+		Project: core.ProjectFeedConfig{Enabled: true},
 		Weather: core.WeatherFeedConfig{Enabled: false},
 	}, r)
 
-	assert.True(t, d.isEnabled("pulse"), "pulse should be enabled")
+	assert.True(t, d.isEnabled("project"), "project should be enabled")
 	assert.False(t, d.isEnabled("weather"), "weather should be disabled")
 	assert.True(t, d.isEnabled("unknown-custom-feed"), "unknown feeds default to enabled (fail-open)")
 }

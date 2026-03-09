@@ -726,8 +726,6 @@ func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary
 		return renderProjectSegment(feedCache)
 	case "calendar":
 		return renderCalendarSegment(feedCache)
-	case "pulse":
-		return renderPulseSegment(feedCache)
 	case "weather":
 		return renderWeatherSegment(feedCache)
 	case "insights":
@@ -923,35 +921,6 @@ func calendarRelativeTime(now, eventStart time.Time) string {
 		return "tomorrow " + timeLabel
 	}
 	return eventStart.Format("Mon") + " " + timeLabel
-}
-
-// renderPulseSegment renders the pulse segment from feed cache data.
-func renderPulseSegment(feedCache map[string]interface{}) string {
-	data := feedData(feedCache, "pulse")
-	if data == nil {
-		return ""
-	}
-
-	sessionCount, ok := data["session_count"]
-	if !ok {
-		return ""
-	}
-
-	var count int
-	switch v := sessionCount.(type) {
-	case float64:
-		count = int(v)
-	case int:
-		count = v
-	default:
-		return ""
-	}
-
-	suffix := "sessions"
-	if count == 1 {
-		suffix = "session"
-	}
-	return ansiGreen + fmt.Sprintf("pulse: %d %s", count, suffix) + ansiReset
 }
 
 // renderInsightsSegment renders a compact one-line insights summary.

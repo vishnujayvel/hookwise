@@ -422,7 +422,7 @@ func TestRenderBuiltinSegments(t *testing.T) {
 	emptyCache := map[string]interface{}{}
 
 	// Segments with no data should return empty (omitted from output).
-	noDataSegments := []string{"session", "cost", "project", "calendar", "pulse", "weather"}
+	noDataSegments := []string{"session", "cost", "project", "calendar", "weather"}
 	for _, name := range noDataSegments {
 		result := renderBuiltinSegment(name, emptyCache, nil)
 		if result != "" {
@@ -546,7 +546,6 @@ status_line:
   segments:
     - builtin: weather
     - builtin: project
-    - builtin: pulse
     - builtin: calendar
 `
 	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
@@ -792,15 +791,6 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 				"source":          "placeholder",
 			},
 		},
-		"pulse": map[string]interface{}{
-			"type":      "pulse",
-			"timestamp": "2026-03-07T10:00:00Z",
-			"data": map[string]interface{}{
-				"session_count":   0,
-				"active_sessions": 0,
-				"source":          "placeholder",
-			},
-		},
 		"project": map[string]interface{}{
 			"type":      "project",
 			"timestamp": "2026-03-07T10:00:00Z",
@@ -820,7 +810,7 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 		},
 	}
 
-	for _, name := range []string{"weather", "pulse", "project", "calendar"} {
+	for _, name := range []string{"weather", "project", "calendar"} {
 		result := renderBuiltinSegment(name, feedCache, nil)
 		// Placeholder feeds should produce empty output (segment omitted).
 		if result != "" {
