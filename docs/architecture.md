@@ -33,7 +33,7 @@ Any unhandled exception anywhere in the dispatch pipeline results in `exit 0`. h
 ## Feed Platform Architecture
 
 > **Diagram:** Feed platform showing 8 producers polling data sources on staggered intervals, writing to an atomic cache bus, consumed by 21 status line segments.
-> **Source:** feed-platform.excalidraw (in docs/assets/) -- open in [Excalidraw](https://excalidraw.com) for an editable hand-drawn version.
+> **Source:** [feed-platform.excalidraw](assets/feed-platform.excalidraw) -- open in [Excalidraw](https://excalidraw.com) for an editable hand-drawn version.
 
 ```mermaid
 graph LR

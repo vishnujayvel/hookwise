@@ -39,7 +39,7 @@ reviews:
 
     - path: "src/core/feeds/**"
       instructions: >
-        Feed platform (cache bus, registry, 5 producers, daemon manager).
+        Feed platform (cache bus, registry, 8 producers, daemon manager).
         Review against these architecture rules:
 
         1. Producers must be stateless — all persistence goes through the
@@ -61,7 +61,7 @@ reviews:
 
     - path: "src/core/status-line/**"
       instructions: >
-        Status line segments (19 segments across 5 feed producers).
+        Status line segments (21 segments across 8 feed producers).
         Check that:
 
         1. Segment output conforms to the status line format contract.
@@ -140,7 +140,7 @@ reviews:
         User-facing documentation. Check for:
 
         1. Architecture descriptions match current code (v1.2, feed platform,
-           19 segments, 5 producers). Flag stale version references.
+           21 segments, 8 producers). Flag stale version references.
         2. Code examples must be runnable — no pseudo-code without labeling.
         3. Links to source files must use relative paths and point to files
            that exist.

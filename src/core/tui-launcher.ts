@@ -214,9 +214,13 @@ export function launchTui(config: TuiConfig, pidPath?: string): boolean {
       const pythonCmd = resolveTuiPython();
       // Shell-quote the path with single quotes, escaping any embedded single quotes
       const shellQuoted = "'" + pythonCmd.replace(/'/g, "'\\''") + "'";
+      const terminalCmd = `${shellQuoted} -m hookwise_tui`;
+      // Escape for embedding inside an AppleScript double-quoted string:
+      // backslashes must be doubled, double quotes must be escaped
+      const appleScriptSafe = terminalCmd.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       const child = spawn(
         "osascript",
-        ["-e", `tell application "Terminal" to do script "${shellQuoted} -m hookwise_tui"`],
+        ["-e", `tell application "Terminal" to do script "${appleScriptSafe}"`],
         {
           detached: true,
           stdio: "ignore",
