@@ -80,6 +80,9 @@ func (p *NewsProducer) Produce(_ context.Context) (interface{}, error) {
 	}, nil
 }
 
+// defaultCalendarLookaheadMinutes is the fallback when LookaheadMinutes is not configured.
+const defaultCalendarLookaheadMinutes = 120
+
 // CalendarProducer fetches upcoming events from Google Calendar API.
 // It implements ConfigAware to receive token/credentials paths from feed config.
 type CalendarProducer struct {
@@ -87,6 +90,12 @@ type CalendarProducer struct {
 	feedsCfg   core.FeedsConfig
 	lastResult map[string]interface{}
 	baseURL    string // override endpoint for testing; empty = default Google API
+
+	// Cached across polls — initialized on first successful token load.
+	client   *http.Client
+	oauthCfg *oauth2.Config
+	origTok  *oauth2.Token
+	svc      *calendar.Service
 }
 
 func (p *CalendarProducer) Name() string { return "calendar" }
@@ -188,6 +197,34 @@ func writeBackToken(tokenPath string, tok *oauth2.Token, cfg *oauth2.Config) {
 	}
 }
 
+// ensureClient initializes the OAuth client and Calendar service on first use.
+// Subsequent calls reuse the cached client (oauth2 handles token refresh internally).
+func (p *CalendarProducer) ensureClient(ctx context.Context, tokenPath string) error {
+	if p.svc != nil {
+		return nil
+	}
+
+	client, tok, cfg, err := loadCalendarOAuthClient(ctx, tokenPath)
+	if err != nil {
+		return err
+	}
+
+	opts := []option.ClientOption{option.WithHTTPClient(client)}
+	if p.baseURL != "" {
+		opts = append(opts, option.WithEndpoint(p.baseURL))
+	}
+	svc, err := calendar.NewService(ctx, opts...)
+	if err != nil {
+		return err
+	}
+
+	p.client = client
+	p.oauthCfg = cfg
+	p.origTok = tok
+	p.svc = svc
+	return nil
+}
+
 func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 	p.mu.Lock()
 	cfg := p.feedsCfg.Calendar
@@ -201,32 +238,26 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 
 	lookahead := cfg.LookaheadMinutes
 	if lookahead <= 0 {
-		lookahead = 120
+		lookahead = defaultCalendarLookaheadMinutes
 	}
 
-	// Load OAuth client from Python-format token file.
-	client, originalToken, oauthCfg, err := loadCalendarOAuthClient(ctx, tokenPath)
-	if err != nil {
+	// Initialize OAuth client and service on first call; reuse thereafter.
+	if err := p.ensureClient(ctx, tokenPath); err != nil {
 		core.Logger().Debug("calendar: token load failed, returning empty", "error", err)
 		return p.fallbackResult("no token"), nil
 	}
 
-	// Build Google Calendar service.
-	opts := []option.ClientOption{option.WithHTTPClient(client)}
-	if p.baseURL != "" {
-		opts = append(opts, option.WithEndpoint(p.baseURL))
-	}
-	svc, err := calendar.NewService(ctx, opts...)
-	if err != nil {
-		core.Logger().Warn("calendar: failed to create service", "error", err)
-		return p.fallbackResult("service error"), nil
-	}
-
-	now := time.Now()
+	now := time.Now().UTC()
 	timeMin := now.Format(time.RFC3339)
 	timeMax := now.Add(time.Duration(lookahead) * time.Minute).Format(time.RFC3339)
 
-	eventsCall := svc.Events.List("primary").
+	// Use configured calendars or default to "primary".
+	calendarID := "primary"
+	if len(cfg.Calendars) > 0 {
+		calendarID = cfg.Calendars[0]
+	}
+
+	eventsCall := p.svc.Events.List(calendarID).
 		TimeMin(timeMin).
 		TimeMax(timeMax).
 		SingleEvents(true).
@@ -242,10 +273,11 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 	// Write back token if it was refreshed.
 	// oauth2 transport refreshes lazily; after a successful API call we can
 	// check if the token changed by requesting it from the transport.
-	if ts, ok := client.Transport.(*oauth2.Transport); ok {
+	if ts, ok := p.client.Transport.(*oauth2.Transport); ok {
 		newTok, err := ts.Source.Token()
-		if err == nil && newTok.AccessToken != originalToken.AccessToken {
-			writeBackToken(tokenPath, newTok, oauthCfg)
+		if err == nil && newTok.AccessToken != p.origTok.AccessToken {
+			writeBackToken(tokenPath, newTok, p.oauthCfg)
+			p.origTok = newTok
 		}
 	}
 
@@ -283,7 +315,7 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 
 	result := map[string]interface{}{
 		"type":      "calendar",
-		"timestamp": now.UTC().Format(time.RFC3339),
+		"timestamp": now.Format(time.RFC3339),
 		"data": map[string]interface{}{
 			"events":     eventList,
 			"next_event": nextEvent,
