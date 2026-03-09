@@ -12,8 +12,8 @@
 
 If you discover a security vulnerability, please report it responsibly:
 
-1. **Do not** open a public issue
-2. Email **vishnu@hookwise.dev** with a description, reproduction steps, and impact assessment
+1. **For sensitive vulnerabilities**, email **vishnu@hookwise.dev** with a description, reproduction steps, and impact assessment. Do not open a public issue for exploitable or unpatched vulnerabilities.
+2. **For low-severity or already-patched issues**, you may use the [Security Vulnerability issue template](https://github.com/vishnujayvel/hookwise/issues/new?template=security_vulnerability.md).
 3. You will receive an acknowledgment within 48 hours
 4. We aim to release a fix within 7 days for confirmed vulnerabilities
 

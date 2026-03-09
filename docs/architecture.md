@@ -32,7 +32,8 @@ Any unhandled exception anywhere in the dispatch pipeline results in `exit 0`. h
 
 ## Feed Platform Architecture
 
-> **Diagram source:** feed-platform.excalidraw (in docs/assets/) -- open in [Excalidraw](https://excalidraw.com) for an editable hand-drawn version.
+> **Diagram:** Feed platform showing 8 producers polling data sources on staggered intervals, writing to an atomic cache bus, consumed by 21 status line segments.
+> **Source:** [feed-platform.excalidraw](assets/feed-platform.excalidraw) -- open in [Excalidraw](https://excalidraw.com) for an editable hand-drawn version.
 
 ```mermaid
 graph LR
@@ -95,9 +96,9 @@ src/
 tui/              # Interactive TUI (Python Textual)
   hookwise_tui/   # App, tabs, widgets, data readers
 
-tests/            # 1440+ tests across 61 test files
+tests/            # 1400+ tests across 61 test files
   core/           # Unit tests for each module
-  integration/    # End-to-end dispatch flow tests
+  integration/    # Mock-based integration tests (dispatch flow, pipeline wiring)
   performance/    # Benchmarks and import boundary tests
   cli/            # CLI command tests
 

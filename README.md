@@ -204,5 +204,3 @@ Key design choices: parameterized SQL everywhere, safe YAML parsing only, restri
 `git clone`, `go test -race ./...`, `task pr`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [MIT](LICENSE) -- Built by [Vishnu](https://github.com/vishnujayvel). *Born from the gap between how fast AI makes you feel — and how fast you actually are.*
-</content>
-</invoke>

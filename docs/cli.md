@@ -46,7 +46,7 @@ hookwise migrate          Migrate from Python hookwise (v0.1.0)
 | Preset | What you get |
 |--------|-------------|
 | `minimal` | Guards only -- just the safety rails |
-| `coaching` | Guards + metacognition + builder's trap + status line |
+| `coaching` | Guards + metacognition + builder's trap + communication |
 | `analytics` | Guards + SQLite session tracking |
 | `full` | Everything enabled |
 
