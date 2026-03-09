@@ -1,0 +1,25 @@
+name: TUI Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tui/**"
+      - ".github/workflows/tui-tests.yml"
+  pull_request:
+    paths:
+      - "tui/**"
+      - ".github/workflows/tui-tests.yml"
+
+jobs:
+  tui-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: TUI Test Matrix
+        uses: dagger/dagger-for-github@v8.4.0
+        with:
+          verb: call
+          args: tui-test-matrix --src=.
+          version: "v0.20.1"

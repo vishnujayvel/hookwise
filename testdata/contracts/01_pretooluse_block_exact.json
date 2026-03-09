@@ -1,0 +1,22 @@
+{
+  "name": "PreToolUse block on exact tool match",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Bash is not allowed"
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-001",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo hello"
+    }
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash is not allowed\"}}",
+  "expected_exit_code": 0
+}

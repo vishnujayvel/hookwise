@@ -237,19 +237,19 @@ handlers:
     type: script
     events: "*"
     phase: side_effect
-    command: "node log-everything.js"
+    command: "bash log-everything.sh"
 ```
 
 ## Event Type Constants
 
-In TypeScript, all event types are available as a const array:
+In Go, all event types are defined as typed constants in `internal/core/types.go`:
 
-```typescript
-import { EVENT_TYPES, isEventType } from "hookwise";
+```go
+import "github.com/vishnujayvel/hookwise/internal/core"
 
-// EVENT_TYPES = ["UserPromptSubmit", "PreToolUse", "PostToolUse", ...]
+// core.EventPreToolUse, core.EventPostToolUse, core.EventSessionStart, ...
 
-if (isEventType(someString)) {
-  // someString is a valid EventType
+if core.IsEventType(someString) {
+    // someString is a valid EventType
 }
 ```

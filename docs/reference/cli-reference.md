@@ -127,7 +127,7 @@ hookwise migrate [--dry-run]
 |------|-------------|
 | `--dry-run` | Preview changes without applying them |
 
-Replaces the Python hookwise entry in Claude's `settings.json` with the TypeScript version and validates your config against the v1.0 schema.
+Replaces the Python hookwise entry in Claude's `settings.json` with the Go binary and validates your config against the current schema.
 
 See the [Migration guide](/reference/migration) for full details.
 

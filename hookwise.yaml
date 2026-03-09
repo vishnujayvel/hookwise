@@ -23,9 +23,10 @@ status_line:
   segments:
     - session
     - cost
+    - weather
     - project
     - calendar
 
 tui:
-  auto_launch: true
+  auto_launch: false
   launch_method: "newWindow"

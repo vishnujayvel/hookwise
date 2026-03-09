@@ -16,6 +16,7 @@ from hookwise_tui.data import (
     InsightsData,
     InsightsSummary,
     Recipe,
+    _effective_config_path,
     is_fresh,
     read_analytics,
     read_cache,
@@ -25,6 +26,7 @@ from hookwise_tui.data import (
     read_insights,
     read_insights_summary,
     read_recipes,
+    write_config,
 )
 
 
@@ -63,6 +65,63 @@ class TestReadConfig:
         config_path.write_text("- item1\n- item2\n")
         result = read_config(config_path)
         assert result == {}
+
+
+# --- write_config ---
+
+
+class TestWriteConfig:
+    def test_round_trip_consistency(self, tmp_dir):
+        config_path = tmp_dir / "hookwise.yaml"
+        original = {"version": 1, "guards": [{"match": "Bash", "action": "block"}]}
+        assert write_config(original, config_path) is True
+        result = read_config(config_path)
+        assert result == original
+
+    def test_creates_parent_directories(self, tmp_dir):
+        nested_path = tmp_dir / "a" / "b" / "hookwise.yaml"
+        assert write_config({"key": "val"}, nested_path) is True
+        assert read_config(nested_path) == {"key": "val"}
+
+    def test_overwrites_existing_config(self, tmp_dir):
+        config_path = tmp_dir / "hookwise.yaml"
+        write_config({"old": True}, config_path)
+        write_config({"new": True}, config_path)
+        assert read_config(config_path) == {"new": True}
+
+
+# --- _effective_config_path ---
+
+
+class TestEffectiveConfigPath:
+    def test_explicit_path_takes_priority(self, tmp_dir):
+        explicit = tmp_dir / "explicit.yaml"
+        result = _effective_config_path(explicit)
+        assert result == explicit
+
+    def test_local_path_when_exists(self, tmp_dir, monkeypatch):
+        local = tmp_dir / "hookwise.yaml"
+        local.write_text("version: 1\n")
+        monkeypatch.setattr("hookwise_tui.data._default_config_path", lambda: local)
+        result = _effective_config_path(None)
+        assert result == local
+
+    def test_falls_back_to_global_when_local_missing(self, tmp_dir, monkeypatch):
+        local = tmp_dir / "nonexistent" / "hookwise.yaml"
+        global_path = tmp_dir / "global" / "config.yaml"
+        global_path.parent.mkdir(parents=True)
+        global_path.write_text("version: 2\n")
+        monkeypatch.setattr("hookwise_tui.data._default_config_path", lambda: local)
+        monkeypatch.setattr("hookwise_tui.data._config_dir", lambda: tmp_dir / "global")
+        result = _effective_config_path(None)
+        assert result == global_path
+
+    def test_defaults_to_local_when_neither_exists(self, tmp_dir, monkeypatch):
+        local = tmp_dir / "nonexistent" / "hookwise.yaml"
+        monkeypatch.setattr("hookwise_tui.data._default_config_path", lambda: local)
+        monkeypatch.setattr("hookwise_tui.data._config_dir", lambda: tmp_dir / "also_nonexistent")
+        result = _effective_config_path(None)
+        assert result == local
 
 
 # --- read_cache ---
@@ -220,7 +279,7 @@ class TestReadFeedHealth:
         }
 
         feeds = read_feed_health(config, cache)
-        assert len(feeds) == 5
+        assert len(feeds) == 5  # dynamic discovery: only feeds present in config
 
         pulse = next(f for f in feeds if f.name == "pulse")
         assert pulse.enabled is True
@@ -231,11 +290,23 @@ class TestReadFeedHealth:
         assert project.healthy is True  # Disabled = healthy
 
     def test_empty_feeds_config(self):
-        # With no feeds key, defaults apply for the 5 builtin feed names
+        # No feeds in config → no feed health entries (dynamic discovery)
         feeds = read_feed_health({}, {})
-        # Empty feeds dict → empty defaults for each feed → still 5 entries
-        # because the code iterates the 5 builtin names
-        assert isinstance(feeds, list)
+        assert feeds == []
+
+    def test_discovers_unknown_feed_dynamically(self):
+        """Any key under feeds: is discovered — no hardcoded list."""
+        config = {
+            "feeds": {
+                "brand_new_feed": {"enabled": True, "interval_seconds": 42},
+            }
+        }
+        cache = {}
+        feeds = read_feed_health(config, cache)
+        assert len(feeds) == 1
+        assert feeds[0].name == "brand_new_feed"
+        assert feeds[0].interval_seconds == 42
+        assert feeds[0].healthy is False  # Enabled but no cache entry
 
 
 # --- read_insights ---
@@ -342,3 +413,36 @@ class TestReadRecipes:
         recipes = read_recipes({})
         assert recipes == []
         del os.environ["HOOKWISE_CONFIG"]
+
+
+# --- read_analytics localtime (RC-3) ---
+
+
+class TestAnalyticsLocaltime:
+    """Verify that read_analytics SQL uses 'localtime' modifier (RC-3)."""
+
+    def test_sql_uses_localtime_modifier(self, tmp_dir):
+        """The SQL queries in read_analytics must use 'localtime' for DATE()
+        to avoid UTC date boundaries grouping events on wrong local dates."""
+        import inspect
+
+        source = inspect.getsource(read_analytics)
+        # All DATE(timestamp) calls should include 'localtime'
+        assert "DATE(timestamp, 'localtime')" in source
+        # The WHERE clause should use localtime for the date cutoff
+        assert "DATE('now', ?, 'localtime')" in source
+        # GROUP BY should also use localtime
+        assert "GROUP BY DATE(timestamp, 'localtime')" in source
+
+    def test_analytics_query_does_not_use_bare_date(self, tmp_dir):
+        """Ensure no bare DATE(timestamp) without localtime remains."""
+        import inspect
+        import re
+
+        source = inspect.getsource(read_analytics)
+        # Find DATE(timestamp) without 'localtime' — should not exist
+        # Match DATE(timestamp) NOT followed by , 'localtime'
+        bare_matches = re.findall(r"DATE\(timestamp\)(?!\s*#)", source)
+        assert len(bare_matches) == 0, (
+            f"Found {len(bare_matches)} bare DATE(timestamp) without 'localtime'"
+        )

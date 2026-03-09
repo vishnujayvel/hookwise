@@ -1,0 +1,23 @@
+{
+  "name": "PreToolUse block when unless condition is false (starts_with no match)",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Bash is blocked unless ls",
+        "unless": "tool_input.command starts_with \"ls\""
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-007",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "rm -rf /tmp"
+    }
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash is blocked unless ls\"}}",
+  "expected_exit_code": 0
+}

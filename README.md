@@ -10,7 +10,6 @@
 
 **Awareness framework for AI-augmented development.**
 
-[![npm version](https://img.shields.io/npm/v/hookwise.svg)](https://www.npmjs.com/package/hookwise)
 [![CI](https://img.shields.io/github/actions/workflow/status/vishnujayvel/hookwise/ci.yml?branch=main)](https://github.com/vishnujayvel/hookwise/actions)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -28,11 +27,10 @@ AI coding tools are powerful. They're also making developers slower, more burned
 The research is clear:
 
 - **19% slower** with AI tools, despite feeling faster ([METR RCT, 246 real GitHub issues](https://arxiv.org/abs/2507.09089))
-- **45% higher burnout** among frequent AI users ([Quantum Workplace, 700K+ employees](https://www.quantumworkplace.com/press-releases/2024-trends-report))
 - **66% spend more time** fixing "almost-right" AI code ([Stack Overflow 2025, 49K+ devs](https://stackoverflow.blog/2025/12/29/developers-remain-willing-but-reluctant-to-use-ai-the-2025-developer-survey-results-are-here/))
-- **Trust in AI dropped** from 40% to 29% year-over-year ([Stack Overflow 2025](https://stackoverflow.co/company/press/archive/stack-overflow-2025-developer-survey/))
+- **Trust in AI dropped** from 40% to 29% year-over-year ([Stack Overflow 2025](https://stackoverflow.blog/2025/12/29/developers-remain-willing-but-reluctant-to-use-ai-the-2025-developer-survey-results-are-here/))
 
-Harvard researchers studied this for 8 months and found three forms of AI work intensification: **task expansion** (absorbing other roles), **blurred boundaries** (work becomes ambient), and **increased multitasking** (cognitive overload despite *feeling* productive). Their prescription: *intentional pauses, sequencing, and human grounding* ([HBR, Feb 2026](https://hbr.org/2026/02/ai-doesnt-reduce-work-it-intensifies-it)).
+Researchers at UC Berkeley studied this for 8 months and found three forms of AI work intensification: **task expansion** (absorbing other roles), **blurred boundaries** (work becomes ambient), and **increased multitasking** (cognitive overload despite *feeling* productive). Their prescription: *intentional pauses, sequencing, and human grounding* ([HBR, Feb 2026](https://hbr.org/2026/02/ai-doesnt-reduce-work-it-intensifies-it)).
 
 **hookwise gives you all three — as a framework, not willpower.**
 
@@ -88,7 +86,9 @@ One file. Claude Code reads it, understands it, and can even help you write new 
 ## Quick Start
 
 ```bash
-npm install -g hookwise
+# Download the latest binary from GitHub Releases
+# https://github.com/vishnujayvel/hookwise/releases
+
 hookwise init --preset minimal
 hookwise doctor
 ```
@@ -99,13 +99,25 @@ hookwise doctor
 
 Then [register hookwise in `.claude/settings.json`](docs/guide/getting-started.md) — one dispatcher handles all 13 hook events.
 
+## How It Works
+
+Every hook event passes through a three-phase execution engine. Guards protect, context enriches, side effects observe. If anything errors, it fails open — your AI keeps working.
+
+<div align="center">
+<img src="screenshots/execution-engine.png" alt="Three-phase execution engine — Phase 1: Guards (block/confirm/warn), Phase 2: Context (enrich tool calls), Phase 3: Side Effects (log, coach, analytics). Fail-open: any error exits 0." width="650">
+</div>
+
 ## What You Get
 
 **[Guard Rails](docs/features/guards.md)** -- Declarative rules with firewall semantics. `block` or `warn` with glob patterns and operators like `contains`, `matches`, `starts_with`.
 
 <img src="screenshots/guard-demo.gif" alt="Guard blocking a dangerous rm -rf" width="700">
 
-**[Coaching](docs/features/coaching.md)** -- Periodic **metacognition prompts** that break autopilot mode: *"Are you solving the right problem, or the most interesting one?"* Research shows planning-first developers consistently outperform reactive ones ([AIED 2025](https://arxiv.org/html/2509.03171v1)) — hookwise makes planning-first the default.
+<div align="center">
+<img src="screenshots/guard-evaluation-flow.png" alt="Guard evaluation flow — hookwise.yaml rules are matched by tool name, then condition, resulting in block, confirm, or warn actions" width="500">
+</div>
+
+**[Coaching](docs/features/coaching.md)** -- Periodic **metacognition prompts** that break autopilot mode: *"Are you solving the right problem, or the most interesting one?"* Research on AI-assisted programming shows students who plan before coding outperform those who jump straight to debugging ([AIED 2025](https://arxiv.org/abs/2509.03171)) — hookwise makes planning-first the default.
 
 **[Status Line](docs/features/status-line.md)** -- 21 composable segments powered by a [background daemon](docs/features/feeds.md) with 8 built-in feed producers. Mix `session`, `cost`, `project`, `calendar`, `news`, `insights`, and more. Peripheral vision for your development flow — you don't stare at it, but you glance at it.
 
@@ -115,40 +127,9 @@ Then [register hookwise in `.claude/settings.json`](docs/guide/getting-started.m
 
 **[Feed Platform](docs/features/feeds.md)** -- A background daemon polls 8 producers on staggered intervals and writes to an atomic cache bus with per-key TTL. Status line segments read from cache with `isFresh()` checks. If a feed is unavailable or stale, its segments silently disappear (fail-open).
 
-```mermaid
-graph LR
-    subgraph Sources[Data Sources]
-        S1[Git Repo]
-        S2[HN API]
-        S3[Calendar]
-        S4[Heartbeat]
-        S5[Usage Data]
-        S6[Practice Data]
-        S7[Weather API]
-        S8[Session History]
-    end
-
-    subgraph Daemon[Background Daemon]
-        D1[Feed Registry — 8 producers]
-        D2[pulse 30s]
-        D3[project 60s]
-        D4[calendar 5m]
-        D5[news 30m]
-        D6[insights 2m]
-        D7[practice 60s]
-        D8[weather 15m]
-        D9[memories 1h]
-    end
-
-    Sources --> D1
-    D1 --> CB[Cache Bus · Atomic JSON · Per-key TTL]
-    CB --> SL[Status Line · 21 segments]
-
-    style Sources fill:#D0EBFF,stroke:#1971C2,stroke-width:2px
-    style Daemon fill:#D3F9D8,stroke:#2B8A3E,stroke-width:2px
-    style CB fill:#FFF0DB,stroke:#D4853B,stroke-width:2px
-    style SL fill:#FFE3E3,stroke:#C92A2A,stroke-width:2px
-```
+<div align="center">
+<img src="screenshots/feed-architecture.png" alt="Feed platform architecture — data sources flow through a background daemon with 8 producers into an atomic cache bus, then to the 21-segment status line" width="600">
+</div>
 
 **[Analytics](docs/features/analytics.md)** -- SQLite-backed session tracking: tool calls, duration, cost, daily budgets. Close the perception gap between how fast you *feel* and how fast you *are*.
 
@@ -181,13 +162,16 @@ Global config at `~/.hookwise/config.yaml` applies everywhere. Project-level `ho
 
 ## Testing
 
-```typescript
-import { GuardTester } from "hookwise/testing";
-const tester = new GuardTester({ configPath: "hookwise.yaml" });
-expect(tester.testToolCall("Bash", { command: "rm -rf /" }).action).toBe("block");
+```go
+import hwtesting "github.com/vishnujayvel/hookwise/pkg/hookwise/testing"
+
+tester, err := hwtesting.NewGuardTester("hookwise.yaml")
+// handle err
+result := tester.Evaluate("Bash", map[string]any{"command": "rm -rf /"})
+assert.Equal(t, "block", result.Action)
 ```
 
-Also exports `HookRunner` and `HookResult`. [Details &rarr;](docs/cli.md)
+Go test helpers in `pkg/hookwise/testing`. [Details &rarr;](docs/cli.md)
 
 ## Recipes
 
@@ -201,7 +185,7 @@ hookwise runs inside your Claude Code session -- security is non-negotiable. The
 - **False-positive filtering** with strict exploitability criteria (confidence >= 8/10)
 - **Zero confirmed vulnerabilities** in the latest full-package audit (v1.3.0)
 
-Key design choices: parameterized SQL everywhere, safe YAML parsing only, no `eval()` or `Function()`, restrictive file permissions (0o600/0o700), fail-open architecture, and npm publish with [provenance attestations](https://docs.npmjs.com/generating-provenance-statements).
+Key design choices: parameterized SQL everywhere, safe YAML parsing only, restrictive file permissions (0o600/0o700), fail-open architecture, and Go binary releases via [GitHub Releases](https://github.com/vishnujayvel/hookwise/releases).
 
 [Full security policy, trust model, and reporting instructions &rarr;](SECURITY.md)
 
@@ -217,6 +201,6 @@ Key design choices: parameterized SQL everywhere, safe YAML parsing only, no `ev
 
 ## Contributing
 
-`git clone`, `npm install`, `npm test` (1,440 tests), `npm run build`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+`git clone`, `go test -race ./...`, `task pr`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [MIT](LICENSE) -- Built by [Vishnu](https://github.com/vishnujayvel). *Born from the gap between how fast AI makes you feel — and how fast you actually are.*

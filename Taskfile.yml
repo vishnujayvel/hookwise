@@ -1,0 +1,274 @@
+# Hookwise Taskfile — Local Development Pipeline
+# Install: brew install go-task
+# Usage:   task --list          (show all tasks)
+#          task check           (pre-commit: fast checks)
+#          task test            (tier 1: unit + contract + arch + PBT + TUI)
+#          task validate        (tier 2: integration + mutation + snapshots + install)
+#          task pr              (tier 3: full pipeline, PR readiness)
+#          task dev             (quick: install + doctor + version-check)
+
+version: '3'
+
+vars:
+  MODULE: github.com/vishnujayvel/hookwise
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "none"
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  LDFLAGS: -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildDate={{.DATE}}
+  INSTALL_PATH:
+    sh: echo "${HOOKWISE_INSTALL_PATH:-$(brew --prefix 2>/dev/null || echo /usr/local)/bin/hookwise}"
+  TUI_VENV: .venv/bin
+
+# ═══════════════════════════════════════════════
+# TIER 0: Pre-commit checks (<5s)
+# ═══════════════════════════════════════════════
+
+tasks:
+  vet:
+    desc: "Run go vet static analysis"
+    cmds:
+      - go vet ./...
+    sources:
+      - "**/*.go"
+
+  compile:
+    desc: "Verify all packages compile"
+    cmds:
+      - go build ./...
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+
+  lint:py:
+    desc: "Lint Python TUI code with ruff"
+    dir: tui
+    cmds:
+      - "{{.TUI_VENV}}/ruff check . || true"
+    sources:
+      - "tui/**/*.py"
+
+  staleness:
+    desc: "Check if installed binary matches source HEAD"
+    cmds:
+      - |
+        INSTALLED_COMMIT=$(hookwise --version 2>&1 | grep -o 'commit: [a-f0-9]*' | cut -d' ' -f2)
+        if [ "$INSTALLED_COMMIT" = "{{.COMMIT}}" ]; then
+          echo "Binary is up to date ({{.COMMIT}})"
+        else
+          echo "WARNING: Binary is STALE (installed: $INSTALLED_COMMIT, source: {{.COMMIT}})"
+          echo "Run: task install"
+        fi
+    silent: true
+
+  check:
+    desc: "TIER 0 — Fast pre-commit checks (<5s)"
+    deps: [vet, compile, lint:py, staleness]
+
+  # ═══════════════════════════════════════════════
+  # TIER 1: Local test suite (<30s)
+  # ═══════════════════════════════════════════════
+
+  test:go:unit:
+    desc: "Go unit tests with race detector"
+    deps: [vet, compile]
+    cmds:
+      - go test -race ./internal/core/... ./internal/feeds/... ./internal/bridge/... ./internal/analytics/... ./internal/notifications/... ./internal/migration/... ./pkg/...
+
+  test:go:contract:
+    desc: "Contract parity tests (33 JSON fixtures)"
+    deps: [vet, compile]
+    cmds:
+      - go test -race ./internal/contract/...
+
+  test:go:arch:
+    desc: "Architecture dependency lint"
+    deps: [vet]
+    cmds:
+      - go test -race ./internal/arch/...
+
+  test:go:pbt:
+    desc: "Property-based tests (rapid)"
+    deps: [vet]
+    cmds:
+      - go test -race ./internal/proptest/...
+
+  test:tui:unit:
+    desc: "Python TUI unit tests (no snapshots)"
+    deps: [lint:py]
+    dir: tui
+    cmds:
+      - .venv/bin/python -m pytest tests/ -x --ignore=tests/test_snapshots.py
+
+  test:cross:schema:
+    desc: "Cross-language schema boundary tests"
+    deps: [test:go:unit, test:tui:unit]
+    dir: tui
+    cmds:
+      - .venv/bin/python -m pytest tests/test_status_live_output.py -x
+
+  test:
+    desc: "TIER 1 — Full local test suite (<30s)"
+    deps: [test:go:unit, test:go:contract, test:go:arch, test:go:pbt, test:tui:unit]
+    cmds:
+      - task: test:cross:schema
+
+  # ═══════════════════════════════════════════════
+  # TIER 2: Full validation (<2min)
+  # ═══════════════════════════════════════════════
+
+  test:go:integration:
+    desc: "Integration + chaos tests"
+    deps: [test:go:unit, test:go:contract]
+    cmds:
+      - go test -race -tags integration ./...
+
+  test:go:mutation:
+    desc: "Mutation testing (93.3% kill rate)"
+    deps: [test:go:unit]
+    cmds:
+      - go test -race -tags mutation ./internal/mutation/...
+
+  test:tui:snapshots:
+    desc: "TUI visual snapshot tests"
+    deps: [test:tui:unit]
+    dir: tui
+    cmds:
+      - .venv/bin/python -m pytest tests/test_snapshots.py
+
+  install:
+    desc: "Build and install binary to PATH"
+    cmds:
+      - go build -ldflags "{{.LDFLAGS}}" -o {{.INSTALL_PATH}} ./cmd/hookwise/
+      - echo "Installed {{.INSTALL_PATH}} ({{.VERSION}} @ {{.COMMIT}})"
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.INSTALL_PATH}}"
+
+  doctor:
+    desc: "Run doctor + smoke test on installed binary"
+    deps: [install]
+    cmds:
+      - hookwise doctor
+      - hookwise status-line 2>&1 || echo "(status-line returned non-zero)"
+      - hookwise --version
+
+  validate:
+    desc: "TIER 2 — Full validation (<2min)"
+    cmds:
+      - task: test:go:integration
+      - task: test:go:mutation
+      - task: test:tui:snapshots
+      - task: install
+      - task: doctor
+
+  # ═══════════════════════════════════════════════
+  # TIER 3: PR readiness
+  # ═══════════════════════════════════════════════
+
+  e2e:
+    desc: "End-to-end boundary audit with installed binary"
+    deps: [doctor]
+    cmds:
+      - |
+        echo "Testing installed binary responds correctly..."
+        hookwise --version
+        echo '{}' | hookwise dispatch PreToolUse 2>/dev/null; echo "exit: $?"
+
+  ci-parity:
+    desc: "Verify local tests match CI configuration (runs Dagger test pipeline)"
+    deps: [doctor]
+    cmds:
+      - |
+        echo "CI parity: running same Dagger pipeline as ci.yml..."
+        dagger call test --src=.
+        echo "CI parity: OK"
+
+  pr:
+    desc: "TIER 3 — Full PR readiness pipeline (<3min)"
+    cmds:
+      - task: check
+      - task: test
+      - task: validate
+      - task: e2e
+      - task: ci-parity
+      - echo ""
+      - echo "All checks passed. Ready to push."
+
+  # ═══════════════════════════════════════════════
+  # Convenience shortcuts (daily use)
+  # ═══════════════════════════════════════════════
+
+  dev:
+    desc: "Quick dev cycle: install + doctor + version"
+    cmds:
+      - task: install
+      - task: doctor
+      - task: staleness
+
+  run:
+    desc: "Run from source (no install). Usage: task run -- status-line"
+    cmds:
+      - go run ./cmd/hookwise/ {{.CLI_ARGS}}
+
+  clean:
+    desc: "Remove local build artifacts"
+    cmds:
+      - rm -f ./hookwise ./hookwise-go
+      - echo "Cleaned (installed binary not removed)"
+
+  snapshot-update:
+    desc: "Regenerate TUI snapshot baselines"
+    dir: tui
+    cmds:
+      - .venv/bin/python -m pytest tests/test_snapshots.py --snapshot-update
+
+  # ═══════════════════════════════════════════════
+  # Dagger pipeline wrappers
+  # ═══════════════════════════════════════════════
+
+  dagger:check:
+    desc: "Dagger Tier 0 — vet + compile + lint (containerized)"
+    cmds:
+      - dagger call check --src=.
+
+  dagger:test:
+    desc: "Dagger Tier 1 — unit + contract + arch + PBT + TUI (containerized)"
+    cmds:
+      - dagger call test --src=.
+
+  dagger:validate:
+    desc: "Dagger Tier 2 — integration + mutation + snapshots (containerized)"
+    cmds:
+      - dagger call validate --src=.
+
+  dagger:build:
+    desc: "Dagger build — compile binary in container"
+    cmds:
+      - dagger call build --src=.
+
+  dagger:ci:
+    desc: "Dagger full CI — check → test → validate → build (same as GitHub Actions)"
+    cmds:
+      - dagger call ci --src=.
+
+  dagger:tui-matrix:
+    desc: "Dagger TUI tests on Python 3.11/3.12/3.13"
+    cmds:
+      - dagger call tui-test-matrix --src=.
+
+  dagger:publish:
+    desc: "Dagger publish — build release binary (linux/amd64)"
+    cmds:
+      - dagger call publish --src=. --version={{.VERSION}} --commit={{.COMMIT}} export --path=./hookwise-linux-amd64
+
+  default:
+    desc: "Show available tasks"
+    cmds:
+      - task --list

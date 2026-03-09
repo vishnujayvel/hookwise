@@ -63,22 +63,42 @@ def _default_usage_data_path() -> Path:
 
 # --- Config reader ---
 
+def _effective_config_path(config_path: Path | None = None) -> Path:
+    """Resolve config path consistently for read/write operations."""
+    if config_path is not None:
+        return config_path
+    local_path = _default_config_path()
+    if local_path.exists():
+        return local_path
+    global_path = _config_dir() / "config.yaml"
+    if global_path.exists():
+        return global_path
+    return local_path
+
+
 def read_config(config_path: Path | None = None) -> dict[str, Any]:
     """Read hookwise.yaml config. Returns empty dict if missing."""
-    path = config_path or _default_config_path()
+    path = _effective_config_path(config_path)
     if not path.exists():
-        # Try global config
-        global_path = _config_dir() / "config.yaml"
-        if global_path.exists():
-            path = global_path
-        else:
-            return {}
+        return {}
     try:
         with open(path) as f:
             data = yaml.safe_load(f)
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
+
+
+def write_config(config: dict[str, Any], config_path: Path | None = None) -> bool:
+    """Write hookwise.yaml config. Returns True on success."""
+    path = _effective_config_path(config_path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        return True
+    except Exception:
+        return False
 
 
 # --- Cache bus reader ---
@@ -163,15 +183,15 @@ def read_analytics(db_path: Path | None = None, days: int = 7) -> AnalyticsData:
         daily_rows = conn.execute(
             """
             SELECT
-                DATE(timestamp) as date,
+                DATE(timestamp, 'localtime') as date,
                 COUNT(*) as total_events,
                 COUNT(tool_name) as total_tool_calls,
                 COALESCE(SUM(lines_added), 0) as lines_added,
                 COALESCE(SUM(lines_removed), 0) as lines_removed,
                 COUNT(DISTINCT session_id) as sessions
             FROM events
-            WHERE timestamp >= DATE('now', ?)
-            GROUP BY DATE(timestamp)
+            WHERE timestamp >= DATE('now', ?, 'localtime')
+            GROUP BY DATE(timestamp, 'localtime')
             ORDER BY date DESC
             """,
             (f"-{days} days",),
@@ -316,15 +336,12 @@ def read_feed_health(
     if not isinstance(feeds_config, dict):
         return []
 
+    # Derive builtin feeds dynamically from config keys instead of hardcoding.
+    # "custom" is handled separately below; all other keys under feeds: are builtins.
     builtin_feeds = [
-        ("pulse", feeds_config.get("pulse", {})),
-        ("project", feeds_config.get("project", {})),
-        ("calendar", feeds_config.get("calendar", {})),
-        ("news", feeds_config.get("news", {})),
-        ("insights", feeds_config.get("insights", {})),
-        ("practice", feeds_config.get("practice", {})),
-        ("weather", feeds_config.get("weather", {})),
-        ("memories", feeds_config.get("memories", {})),
+        (name, feeds_config[name])
+        for name in feeds_config
+        if name != "custom" and isinstance(feeds_config[name], dict)
     ]
 
     results = []
@@ -484,10 +501,16 @@ def read_insights(
                 if isinstance(h, int) and 0 <= h < 24:
                     hour_counts[h] += 1
 
-        # Days active + daily breakdowns
+        # Days active + daily breakdowns (local timezone, not UTC)
         start_time = session.get("start_time", "")
         if isinstance(start_time, str) and len(start_time) >= 10:
-            date_str = start_time[:10]
+            try:
+                from datetime import datetime as _dt, timezone as _tz
+                utc_dt = _dt.fromisoformat(start_time.replace("Z", "+00:00"))
+                local_dt = utc_dt.astimezone()
+                date_str = local_dt.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                date_str = start_time[:10]
             active_dates.add(date_str)
             daily_sessions[date_str] += 1
             daily_messages[date_str] += msgs if isinstance(msgs, (int, float)) else 0
@@ -509,7 +532,9 @@ def read_insights(
     # Derived metrics
     avg_duration = total_duration / len(valid_sessions) if valid_sessions else 0
     top_tools = tool_counts.most_common(10)
-    peak_hour = max(range(24), key=lambda h: hour_counts[h]) if any(hour_counts) else 0
+    peak_hour_utc = max(range(24), key=lambda h: hour_counts[h]) if any(hour_counts) else 0
+    local_offset_hours = datetime.now().astimezone().utcoffset().total_seconds() / 3600
+    peak_hour = int((peak_hour_utc + local_offset_hours + 24) % 24)
     friction_total = sum(friction_counts.values())
 
     return InsightsData(
@@ -563,7 +588,7 @@ def read_insights_summary(
 def generate_insights_summary(
     insights: InsightsData,
     summary_path: Path | None = None,
-) -> InsightsSummary:
+) -> InsightsSummary | None:
     """Generate a daily LLM summary of usage insights using Claude API (haiku).
 
     Caches the result to disk. Returns cached version if already generated today.

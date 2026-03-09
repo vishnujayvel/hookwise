@@ -32,6 +32,7 @@ class FeatureCard(Widget):
         text-style: bold;
         color: $text;
         width: 1fr;
+        min-width: 20;
     }
     FeatureCard .card-badge-on {
         color: $success;

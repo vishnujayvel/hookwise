@@ -1,0 +1,25 @@
+{
+  "name": "PreToolUse when+unless: unless overrides when",
+  "description": "When both when and unless are true, unless wins and the rule is skipped.",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Push blocked",
+        "when": "tool_input.command contains \"push\"",
+        "unless": "tool_input.command contains \"dry-run\""
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-014",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "git push --dry-run"
+    }
+  },
+  "expected_stdout": null,
+  "expected_exit_code": 0
+}

@@ -109,25 +109,6 @@ DataTable > .datatable--header {
     margin: 0 0 1 0;
 }
 
-/* Metric cards */
-.metric-card {
-    height: auto;
-    padding: 1 2;
-    margin: 0 1 1 0;
-    border: round $primary;
-    background: rgba(10, 21, 32, 0.88);
-    min-width: 20;
-}
-
-.metric-value {
-    text-style: bold;
-    color: $accent;
-}
-
-.metric-label {
-    color: $text-muted;
-}
-
 /* Feed health indicators */
 .feed-healthy {
     color: $success;
@@ -225,14 +206,6 @@ DataTable > .datatable--header {
 .card-grid {
     layout: grid;
     grid-size: 2;
-    grid-gutter: 1;
-    height: auto;
-}
-
-/* Three-column grid for metrics */
-.metric-grid {
-    layout: grid;
-    grid-size: 4;
     grid-gutter: 1;
     height: auto;
 }

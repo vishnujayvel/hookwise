@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Dagger Pipeline
+        uses: dagger/dagger-for-github@v8.4.0
+        with:
+          verb: call
+          args: test --src=.
+          version: "v0.20.1"

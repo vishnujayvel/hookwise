@@ -1,0 +1,23 @@
+{
+  "name": "PreToolUse glob brace expansion match",
+  "description": "Guard with {Read,Write} brace glob pattern matches Write tool.",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "{Read,Write}",
+        "action": "confirm",
+        "reason": "File operations need confirmation"
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-015",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "/tmp/test.txt"
+    }
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"File operations need confirmation\"}}",
+  "expected_exit_code": 0
+}

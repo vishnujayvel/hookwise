@@ -1,0 +1,23 @@
+{
+  "name": "PreToolUse block with matches (regex) operator",
+  "event_type": "PreToolUse",
+  "config": {
+    "guards": [
+      {
+        "match": "Bash",
+        "action": "block",
+        "reason": "Destructive rm commands blocked",
+        "when": "tool_input.command matches \"rm\\s+-rf\""
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-011",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "rm -rf /important"
+    }
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Destructive rm commands blocked\"}}",
+  "expected_exit_code": 0
+}
