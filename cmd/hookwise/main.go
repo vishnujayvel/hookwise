@@ -490,7 +490,11 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 				continue
 			}
 			feedSegments++
-			if status, ok := feedStatuses[name]; ok && status == "ok" {
+			feedKey := name
+			if strings.HasPrefix(feedKey, "insights_") {
+				feedKey = "insights"
+			}
+			if status, ok := feedStatuses[feedKey]; ok && status == "ok" {
 				realCount++
 			}
 		}
@@ -513,8 +517,6 @@ func getFeedInterval(cfg *core.HooksConfig, feedName string) int {
 		return 0
 	}
 	switch feedName {
-	case "pulse":
-		return cfg.Feeds.Pulse.IntervalSeconds
 	case "project":
 		return cfg.Feeds.Project.IntervalSeconds
 	case "calendar":
@@ -523,13 +525,17 @@ func getFeedInterval(cfg *core.HooksConfig, feedName string) int {
 		return cfg.Feeds.News.IntervalSeconds
 	case "insights":
 		return cfg.Feeds.Insights.IntervalSeconds
-	case "practice":
-		return cfg.Feeds.Practice.IntervalSeconds
 	case "weather":
 		return cfg.Feeds.Weather.IntervalSeconds
 	case "memories":
 		return cfg.Feeds.Memories.IntervalSeconds
 	default:
+		// Check custom feeds.
+		for _, cf := range cfg.Feeds.Custom {
+			if cf.Name == feedName {
+				return cf.IntervalSeconds
+			}
+		}
 		return 0
 	}
 }

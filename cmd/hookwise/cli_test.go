@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
@@ -1258,12 +1260,8 @@ func TestDoctorFeedHealthPlaceholder(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
 	defer os.Chdir(origDir)
 
 	stateDir := filepath.Join(tmpDir, ".hookwise")
@@ -1275,13 +1273,13 @@ func TestDoctorFeedHealthPlaceholder(t *testing.T) {
 	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
 	os.WriteFile(configPath, []byte("version: 1\nguards: []\n"), 0o644)
 
-	// Write a placeholder feed.
-	writeJSONFile(t, filepath.Join(cacheDir, "practice.json"), map[string]interface{}{
-		"type":      "practice",
+	// Write a placeholder feed (using project since practice/pulse were removed).
+	writeJSONFile(t, filepath.Join(cacheDir, "project.json"), map[string]interface{}{
+		"type":      "project",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
-			"source":         "placeholder",
-			"total_sessions": 0,
+			"source": "placeholder",
+			"name":   "unknown",
 		},
 	})
 
@@ -1296,23 +1294,13 @@ func TestDoctorFeedHealthPlaceholder(t *testing.T) {
 	})
 
 	output, err := executeCommand("doctor")
-	if err != nil {
-		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
-	}
+	require.NoError(t, err, "doctor failed\noutput: %s", output)
 
-	if !strings.Contains(output, "WARN  feed:practice: placeholder") {
-		t.Errorf("doctor should warn about placeholder practice feed, got:\n%s", output)
-	}
-	if !strings.Contains(output, "INFO  feed:weather: OK") {
-		t.Errorf("doctor should show OK for weather feed, got:\n%s", output)
-	}
-	if !strings.Contains(output, "warning(s)") {
-		t.Errorf("doctor should show warning count in summary, got:\n%s", output)
-	}
+	assert.Contains(t, output, "WARN  feed:project: placeholder", "doctor should warn about placeholder project feed")
+	assert.Contains(t, output, "INFO  feed:weather: OK", "doctor should show OK for weather feed")
+	assert.Contains(t, output, "warning(s)", "doctor should show warning count in summary")
 	// Placeholders are non-blocking — should still pass.
-	if !strings.Contains(output, "All critical checks passed") {
-		t.Errorf("doctor should still pass with placeholder warnings, got:\n%s", output)
-	}
+	assert.Contains(t, output, "All critical checks passed", "doctor should still pass with placeholder warnings")
 }
 
 // ---------------------------------------------------------------------------
@@ -1323,12 +1311,8 @@ func TestDoctorFeedHealthStale(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
 	defer os.Chdir(origDir)
 
 	stateDir := filepath.Join(tmpDir, ".hookwise")
@@ -1358,13 +1342,9 @@ feeds:
 	})
 
 	output, err := executeCommand("doctor")
-	if err != nil {
-		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
-	}
+	require.NoError(t, err, "doctor failed\noutput: %s", output)
 
-	if !strings.Contains(output, "WARN  feed:weather: stale data") {
-		t.Errorf("doctor should warn about stale weather feed, got:\n%s", output)
-	}
+	assert.Contains(t, output, "WARN  feed:weather: stale data", "doctor should warn about stale weather feed")
 }
 
 // ---------------------------------------------------------------------------
@@ -1375,12 +1355,8 @@ func TestDoctorFeedHealthSegmentCoverage(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
 	defer os.Chdir(origDir)
 
 	stateDir := filepath.Join(tmpDir, ".hookwise")
@@ -1416,13 +1392,9 @@ status_line:
 	// Calendar missing entirely.
 
 	output, err := executeCommand("doctor")
-	if err != nil {
-		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
-	}
+	require.NoError(t, err, "doctor failed\noutput: %s", output)
 
-	if !strings.Contains(output, "WARN  status-line: 1/3 feed-backed segments have real data") {
-		t.Errorf("doctor should report segment coverage, got:\n%s", output)
-	}
+	assert.Contains(t, output, "WARN  status-line: 1/3 feed-backed segments have real data", "doctor should report segment coverage")
 }
 
 // ---------------------------------------------------------------------------
@@ -1433,12 +1405,8 @@ func TestDoctorFeedHealthNoStateFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
 	defer os.Chdir(origDir)
 
 	stateDir := filepath.Join(tmpDir, ".hookwise")
@@ -1450,17 +1418,11 @@ func TestDoctorFeedHealthNoStateFiles(t *testing.T) {
 	os.WriteFile(configPath, []byte("version: 1\nguards: []\n"), 0o644)
 
 	output, err := executeCommand("doctor")
-	if err != nil {
-		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
-	}
+	require.NoError(t, err, "doctor failed\noutput: %s", output)
 
 	// Should not crash, should not show feed warnings.
-	if strings.Contains(output, "feed:") {
-		t.Errorf("doctor with no state files should not show feed checks, got:\n%s", output)
-	}
-	if !strings.Contains(output, "All critical checks passed.") {
-		t.Errorf("doctor should pass cleanly with no state files, got:\n%s", output)
-	}
+	assert.NotContains(t, output, "feed:", "doctor with no state files should not show feed checks")
+	assert.Contains(t, output, "All critical checks passed.", "doctor should pass cleanly with no state files")
 }
 
 // ---------------------------------------------------------------------------
@@ -1471,12 +1433,8 @@ func TestDoctorFeedHealthAllHealthy(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
 	defer os.Chdir(origDir)
 
 	stateDir := filepath.Join(tmpDir, ".hookwise")
@@ -1505,17 +1463,11 @@ status_line:
 	})
 
 	output, err := executeCommand("doctor")
-	if err != nil {
-		t.Fatalf("doctor failed: %v\noutput: %s", err, output)
-	}
+	require.NoError(t, err, "doctor failed\noutput: %s", output)
 
-	if !strings.Contains(output, "INFO  status-line: all 2 feed-backed segments have real data") {
-		t.Errorf("doctor should report all segments healthy, got:\n%s", output)
-	}
+	assert.Contains(t, output, "INFO  status-line: all 2 feed-backed segments have real data", "doctor should report all segments healthy")
 	// No warnings — summary should NOT have "warning(s)".
-	if strings.Contains(output, "warning(s)") {
-		t.Errorf("doctor with all healthy feeds should not show warnings, got:\n%s", output)
-	}
+	assert.NotContains(t, output, "warning(s)", "doctor with all healthy feeds should not show warnings")
 }
 
 // stripANSI removes ANSI escape sequences from a string.
