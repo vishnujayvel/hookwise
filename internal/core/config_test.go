@@ -721,12 +721,6 @@ func TestGetDefaultConfig_CoachingDefaults(t *testing.T) {
 
 func TestGetDefaultConfig_FeedDefaults(t *testing.T) {
 	cfg := GetDefaultConfig()
-	if !cfg.Feeds.Pulse.Enabled {
-		t.Error("expected pulse feed enabled by default")
-	}
-	if cfg.Feeds.Pulse.IntervalSeconds != 30 {
-		t.Errorf("expected pulse interval=30, got %d", cfg.Feeds.Pulse.IntervalSeconds)
-	}
 	if !cfg.Feeds.Project.Enabled {
 		t.Error("expected project feed enabled by default")
 	}
@@ -1357,15 +1351,6 @@ func TestLoadConfig_FeedsConfig(t *testing.T) {
 	projectConfig := `
 version: 1
 feeds:
-  pulse:
-    enabled: true
-    interval_seconds: 15
-    thresholds:
-      green: 0
-      yellow: 15
-      orange: 30
-      red: 60
-      skull: 90
   calendar:
     enabled: true
     lookahead_minutes: 60
@@ -1382,12 +1367,6 @@ feeds:
 	cfg, err := LoadConfig(tmpDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.Feeds.Pulse.IntervalSeconds != 15 {
-		t.Errorf("expected pulse interval=15, got %d", cfg.Feeds.Pulse.IntervalSeconds)
-	}
-	if cfg.Feeds.Pulse.Thresholds.Skull != 90 {
-		t.Errorf("expected skull=90, got %d", cfg.Feeds.Pulse.Thresholds.Skull)
 	}
 	if !cfg.Feeds.Calendar.Enabled {
 		t.Error("expected calendar enabled")
@@ -1692,8 +1671,8 @@ version: 1
 	if cfg.Coaching.Communication.Tone != defaults.Coaching.Communication.Tone {
 		t.Errorf("expected default tone=%q, got %q", defaults.Coaching.Communication.Tone, cfg.Coaching.Communication.Tone)
 	}
-	if cfg.Feeds.Pulse.IntervalSeconds != defaults.Feeds.Pulse.IntervalSeconds {
-		t.Errorf("expected default pulse interval=%d, got %d", defaults.Feeds.Pulse.IntervalSeconds, cfg.Feeds.Pulse.IntervalSeconds)
+	if cfg.Feeds.Project.IntervalSeconds != defaults.Feeds.Project.IntervalSeconds {
+		t.Errorf("expected default project interval=%d, got %d", defaults.Feeds.Project.IntervalSeconds, cfg.Feeds.Project.IntervalSeconds)
 	}
 	if cfg.TUI.LaunchMethod != defaults.TUI.LaunchMethod {
 		t.Errorf("expected default launch method=%q, got %q", defaults.TUI.LaunchMethod, cfg.TUI.LaunchMethod)

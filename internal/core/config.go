@@ -87,11 +87,6 @@ func GetDefaultConfig() HooksConfig {
 		},
 		Includes: []string{},
 		Feeds: FeedsConfig{
-			Pulse: PulseFeedConfig{
-				Enabled:         true,
-				IntervalSeconds: 30,
-				Thresholds:      PulseThresholds{Green: 0, Yellow: 30, Orange: 60, Red: 120, Skull: 180},
-			},
 			Project: ProjectFeedConfig{
 				Enabled:         true,
 				IntervalSeconds: 60,
@@ -118,11 +113,6 @@ func GetDefaultConfig() HooksConfig {
 				IntervalSeconds: 120,
 				StalenessDays:   30,
 				UsageDataPath:   filepath.Join(home, ".claude", "usage-data"),
-			},
-			Practice: PracticeFeedConfig{
-				Enabled:         true,
-				IntervalSeconds: 120,
-				DBPath:          filepath.Join(home, ".practice-tracker", "practice-tracker.db"),
 			},
 			Weather: WeatherFeedConfig{
 				Enabled:         false,
