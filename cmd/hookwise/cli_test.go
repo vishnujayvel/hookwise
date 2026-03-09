@@ -890,7 +890,7 @@ func TestRecordAnalytics_SessionStart(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	payload := core.HookPayload{SessionID: "test-session-001"}
-	recordAnalytics(core.EventSessionStart, payload, tmpDir)
+	recordAnalytics(context.Background(), core.EventSessionStart, payload, tmpDir)
 
 	// Verify session was recorded.
 	db, err := analytics.Open(tmpDir)
@@ -915,11 +915,11 @@ func TestRecordAnalytics_PostToolUse(t *testing.T) {
 
 	// First create a session.
 	payload := core.HookPayload{SessionID: "test-session-002"}
-	recordAnalytics(core.EventSessionStart, payload, tmpDir)
+	recordAnalytics(context.Background(), core.EventSessionStart, payload, tmpDir)
 
 	// Record a tool use event.
 	payload.ToolName = "Bash"
-	recordAnalytics(core.EventPostToolUse, payload, tmpDir)
+	recordAnalytics(context.Background(), core.EventPostToolUse, payload, tmpDir)
 
 	db, err := analytics.Open(tmpDir)
 	if err != nil {

@@ -102,12 +102,37 @@ func newDispatchCmd() *cobra.Command {
 					return core.DispatchResult{ExitCode: 0}
 				}
 
+				// Resolve dispatch timeout (0 = default 500ms, negative = no timeout)
+				timeoutMs := config.Dispatch.TimeoutMs
+				if timeoutMs == 0 {
+					timeoutMs = core.DefaultDispatchTimeoutMs
+				}
+
+				var ctx context.Context
+				var cancel context.CancelFunc
+				if timeoutMs > 0 {
+					ctx, cancel = context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
+				} else {
+					ctx, cancel = context.WithCancel(context.Background())
+				}
+				defer cancel()
+				dispatchStart := time.Now()
+
 				// Run the three-phase dispatch engine
-				dispatchResult := core.Dispatch(eventType, payload, config)
+				dispatchResult := core.Dispatch(ctx, eventType, payload, config)
+
+				if ctx.Err() == context.DeadlineExceeded {
+					elapsed := time.Since(dispatchStart)
+					core.Logger().Warn("dispatch timeout",
+						"event_type", eventType,
+						"timeout_ms", timeoutMs,
+						"elapsed_ms", elapsed.Milliseconds(),
+					)
+				}
 
 				// Analytics recording (non-blocking, ARCH-7).
 				if config.Analytics.Enabled && payload.SessionID != "" {
-					go recordAnalytics(eventType, payload, config.Analytics.DBPath)
+					go recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath)
 				}
 
 				// Signal TUI launch intent (executed synchronously after SafeDispatch)
@@ -129,9 +154,6 @@ func newDispatchCmd() *cobra.Command {
 				launchTUIIfNeeded(tuiLaunchMethod)
 			}
 
-			// Brief grace period for side-effect goroutines (analytics, coaching)
-			// to finish before the process exits.
-			time.Sleep(50 * time.Millisecond)
 			os.Exit(result.ExitCode)
 			return nil
 		},
@@ -144,12 +166,16 @@ func newDispatchCmd() *cobra.Command {
 
 // recordAnalytics writes session/event data to Dolt in a background goroutine.
 // Fail-open: any error is logged but never surfaces to the user (ARCH-1).
-func recordAnalytics(eventType string, payload core.HookPayload, dataDir string) {
+func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string) {
 	defer func() {
 		if r := recover(); r != nil {
 			core.Logger().Error("panic in analytics recording", "recovered", fmt.Sprintf("%v", r))
 		}
 	}()
+
+	if ctx.Err() != nil {
+		return
+	}
 
 	db, err := analytics.Open(dataDir)
 	if err != nil {
@@ -158,7 +184,6 @@ func recordAnalytics(eventType string, payload core.HookPayload, dataDir string)
 	}
 	defer db.Close()
 
-	ctx := context.Background()
 	a := analytics.NewAnalytics(db)
 	now := time.Now()
 

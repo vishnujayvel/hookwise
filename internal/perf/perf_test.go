@@ -14,6 +14,7 @@
 package perf
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -55,7 +56,7 @@ func BenchmarkDispatch_HotPath(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		core.Dispatch(core.EventPreToolUse, payload, config)
+		core.Dispatch(context.Background(), core.EventPreToolUse, payload, config)
 	}
 }
 
@@ -80,13 +81,13 @@ func TestDispatchHotPath_Latency(t *testing.T) {
 	}
 
 	// Warm up
-	core.Dispatch(core.EventPreToolUse, payload, config)
+	core.Dispatch(context.Background(), core.EventPreToolUse, payload, config)
 
 	// Measure
 	iterations := 100
 	start := time.Now()
 	for i := 0; i < iterations; i++ {
-		core.Dispatch(core.EventPreToolUse, payload, config)
+		core.Dispatch(context.Background(), core.EventPreToolUse, payload, config)
 	}
 	elapsed := time.Since(start)
 	avgMs := float64(elapsed.Milliseconds()) / float64(iterations)
@@ -332,7 +333,7 @@ func BenchmarkDispatch_NoGuards(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		core.Dispatch(core.EventPreToolUse, payload, config)
+		core.Dispatch(context.Background(), core.EventPreToolUse, payload, config)
 	}
 }
 
@@ -348,7 +349,7 @@ func BenchmarkDispatch_UnrecognizedEvent(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		core.Dispatch("FakeEvent", payload, config)
+		core.Dispatch(context.Background(), "FakeEvent", payload, config)
 	}
 }
 
@@ -440,7 +441,7 @@ func BenchmarkPayloadToMap(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = core.Dispatch(core.EventPreToolUse, payload, core.HooksConfig{
+		_ = core.Dispatch(context.Background(), core.EventPreToolUse, payload, core.HooksConfig{
 			Guards: []core.GuardRuleConfig{
 				{Match: "Bash", Action: "warn", Reason: "test"},
 			},

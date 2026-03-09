@@ -75,6 +75,11 @@ type HandlerResult struct {
 
 // --- Config Types ---
 
+// DispatchConfig holds settings for the dispatch pipeline.
+type DispatchConfig struct {
+	TimeoutMs int `yaml:"timeout_ms" json:"timeoutMs"`
+}
+
 // HooksConfig is the top-level configuration structure.
 type HooksConfig struct {
 	Version          int                    `yaml:"version" json:"version"`
@@ -92,6 +97,7 @@ type HooksConfig struct {
 	Feeds            FeedsConfig            `yaml:"feeds" json:"feeds"`
 	Daemon           DaemonConfig           `yaml:"daemon" json:"daemon"`
 	TUI              TUIConfig              `yaml:"tui" json:"tui"`
+	Dispatch         DispatchConfig         `yaml:"dispatch" json:"dispatch"`
 }
 
 type CoachingConfig struct {

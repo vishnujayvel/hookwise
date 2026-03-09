@@ -11,6 +11,7 @@
 package contract
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -162,7 +163,7 @@ func TestContractFixtures_GoDispatch(t *testing.T) {
 			payload := buildPayload(t, fixture.Stdin)
 
 			// Run dispatch
-			result := core.Dispatch(fixture.EventType, payload, config)
+			result := core.Dispatch(context.Background(), fixture.EventType, payload, config)
 
 			// Validate exit code
 			assert.Equal(t, fixture.ExpectedExitCode, result.ExitCode,

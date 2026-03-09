@@ -43,6 +43,27 @@ func NewHandlerTimeoutError(name string, timeoutMs int) *HandlerTimeoutError {
 	}
 }
 
+// DispatchTimeoutError is raised when the overall dispatch pipeline exceeds its timeout.
+type DispatchTimeoutError struct {
+	HookwiseError
+	EventType string
+	TimeoutMs int
+	ElapsedMs int64
+	Phase     string
+}
+
+func NewDispatchTimeoutError(eventType string, timeoutMs int, elapsedMs int64, phase string) *DispatchTimeoutError {
+	return &DispatchTimeoutError{
+		HookwiseError: HookwiseError{
+			Message: fmt.Sprintf("dispatch for %q timed out after %dms (limit %dms, phase %s)", eventType, elapsedMs, timeoutMs, phase),
+		},
+		EventType: eventType,
+		TimeoutMs: timeoutMs,
+		ElapsedMs: elapsedMs,
+		Phase:     phase,
+	}
+}
+
 // StateError represents state management errors.
 type StateError struct {
 	HookwiseError
