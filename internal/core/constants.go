@@ -28,6 +28,9 @@ var (
 	// DefaultPIDPath is ~/.hookwise/daemon.pid
 	DefaultPIDPath = filepath.Join(DefaultStateDir, "daemon.pid")
 
+	// DefaultSocketPath is ~/.hookwise/daemon.sock
+	DefaultSocketPath = filepath.Join(DefaultStateDir, "daemon.sock")
+
 	// DefaultDaemonLogPath is ~/.hookwise/daemon.log
 	DefaultDaemonLogPath = filepath.Join(DefaultStateDir, "daemon.log")
 

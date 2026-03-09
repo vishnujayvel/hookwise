@@ -68,6 +68,9 @@ func (d *Daemon) runProducer(ctx context.Context, p Producer) {
 	if err := core.AtomicWriteJSON(cachePath, data); err != nil {
 		core.Logger().Error("feeds: cache write error", "producer", p.Name(), "error", err)
 	}
+
+	// IDLE-1: Reset idle timer on producer poll completion.
+	d.resetIdleTimer()
 }
 
 // runAllFeeds launches goroutines for all registered producers with

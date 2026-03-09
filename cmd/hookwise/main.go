@@ -20,6 +20,7 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/bridge"
 	"github.com/vishnujayvel/hookwise/internal/core"
+	"github.com/vishnujayvel/hookwise/internal/feeds"
 	"github.com/vishnujayvel/hookwise/internal/migration"
 	"github.com/vishnujayvel/hookwise/internal/notifications"
 	"gopkg.in/yaml.v3"
@@ -61,6 +62,7 @@ func newRootCmd() *cobra.Command {
 		newTestCmd(),
 		newUpgradeCmd(),
 		newNotificationsCmd(),
+		newDaemonCmd(),
 	)
 
 	return rootCmd
@@ -359,18 +361,20 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "PASS  dolt-db: %s\n", doltDir)
 	}
 
-	// Check 4: Daemon PID file.
-	pidPath := core.DefaultPIDPath
-	if _, err := os.Stat(pidPath); os.IsNotExist(err) {
-		fmt.Fprintln(w, "INFO  daemon: no PID file (daemon not running)")
-	} else {
-		pidData, err := os.ReadFile(pidPath)
-		if err == nil {
-			fmt.Fprintf(w, "PASS  daemon: PID file exists (pid: %s)\n", strings.TrimSpace(string(pidData)))
+	// Check 4: Daemon liveness via socket dial (replaces PID file check).
+	// Use GetStateDir() to respect HOOKWISE_STATE_DIR env override.
+	socketPath := filepath.Join(core.GetStateDir(), "daemon.sock")
+	client := feeds.NewDaemonClient(socketPath)
+	if client.IsRunning() {
+		health, healthErr := client.Health()
+		if healthErr == nil {
+			fmt.Fprintf(w, "PASS  daemon: running (pid: %v, uptime: %v)\n",
+				health["pid"], health["uptime"])
 		} else {
-			fmt.Fprintf(w, "WARN  daemon: PID file exists but unreadable: %v\n", err)
-			warnings++
+			fmt.Fprintln(w, "PASS  daemon: running (health check unavailable)")
 		}
+	} else {
+		fmt.Fprintln(w, "INFO  daemon: not running (start with 'hookwise daemon start')")
 	}
 
 	// Check 5: Feed health.
@@ -589,6 +593,11 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 		return nil
 	}
 
+	// Auto-start the feed daemon if not running (Task 6.1).
+	// Uses marker file caching to avoid socket dial on every invocation.
+	configPath := filepath.Join(projectDir, core.ProjectConfigFile)
+	ensureDaemonWithCache(configPath)
+
 	// Load feed cache from daemon's per-feed JSON files (ARCH-3: read JSON only).
 	// Use GetStateDir() to respect HOOKWISE_STATE_DIR env override.
 	cacheDir := filepath.Join(core.GetStateDir(), "state")
@@ -748,7 +757,7 @@ func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary
 }
 
 // feedData extracts the "data" sub-object from a feed cache envelope.
-// Returns nil if the feed is missing, malformed, or has source: "placeholder".
+// Returns nil if the feed is missing, malformed, stale (past TTL), or has source: "placeholder".
 func feedData(feedCache map[string]interface{}, feedName string) map[string]interface{} {
 	if feedCache == nil {
 		return nil
@@ -759,6 +768,10 @@ func feedData(feedCache map[string]interface{}, feedName string) map[string]inte
 	}
 	envelope, ok := raw.(map[string]interface{})
 	if !ok {
+		return nil
+	}
+	// TTL freshness check — stale cache entries are treated as absent.
+	if !bridge.IsEnvelopeFresh(envelope) {
 		return nil
 	}
 	dataRaw, ok := envelope["data"]
@@ -1772,4 +1785,147 @@ func runNotifications(cmd *cobra.Command, dataDir string, limit int) error {
 	}
 
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Daemon commands
+// ---------------------------------------------------------------------------
+
+func newDaemonCmd() *cobra.Command {
+	daemonCmd := &cobra.Command{
+		Use:   "daemon",
+		Short: "Manage the hookwise feed daemon",
+	}
+
+	daemonCmd.AddCommand(
+		newDaemonStartCmd(),
+		newDaemonStopCmd(),
+		newDaemonRunCmd(),
+	)
+
+	return daemonCmd
+}
+
+func newDaemonStartCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "start",
+		Short: "Start the feed daemon (connect-or-start)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			w := cmd.OutOrStdout()
+			client := feeds.NewDaemonClient(core.DefaultSocketPath)
+
+			cwd, _ := os.Getwd()
+			configPath := filepath.Join(cwd, core.ProjectConfigFile)
+
+			if err := client.EnsureDaemon(configPath); err != nil {
+				fmt.Fprintf(w, "daemon: failed to start: %v\n", err)
+				return nil // Fail-open (ARCH-1)
+			}
+
+			// Report health.
+			health, err := client.Health()
+			if err != nil {
+				fmt.Fprintln(w, "daemon: started (health check unavailable)")
+				return nil
+			}
+
+			fmt.Fprintf(w, "daemon: running (pid: %v, uptime: %v)\n",
+				health["pid"], health["uptime"])
+			return nil
+		},
+	}
+}
+
+func newDaemonStopCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the feed daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			w := cmd.OutOrStdout()
+			client := feeds.NewDaemonClient(core.DefaultSocketPath)
+
+			if !client.IsRunning() {
+				fmt.Fprintln(w, "daemon: not running")
+				return nil
+			}
+
+			if err := client.Shutdown(); err != nil {
+				fmt.Fprintf(w, "daemon: shutdown error: %v\n", err)
+				return nil
+			}
+
+			fmt.Fprintln(w, "daemon: stopped")
+			return nil
+		},
+	}
+}
+
+func newDaemonRunCmd() *cobra.Command {
+	var configPath string
+
+	cmd := &cobra.Command{
+		Use:    "run",
+		Short:  "Run the daemon in the foreground (internal)",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if configPath == "" {
+				cwd, _ := os.Getwd()
+				configPath = filepath.Join(cwd, core.ProjectConfigFile)
+			}
+
+			config, err := core.LoadConfig(filepath.Dir(configPath))
+			if err != nil {
+				// Fail-open: use defaults.
+				config = core.GetDefaultConfig()
+			}
+
+			registry := feeds.NewRegistry()
+			feeds.RegisterBuiltins(registry)
+
+			daemon := feeds.NewDaemon(config.Daemon, config.Feeds, registry)
+			if err := daemon.Start(); err != nil {
+				return fmt.Errorf("daemon: %w", err)
+			}
+
+			// Block until the daemon stops.
+			// The daemon handles SIGTERM/SIGINT and /shutdown internally.
+			<-daemon.StopCh()
+			return daemon.Stop()
+		},
+	}
+
+	cmd.Flags().StringVar(&configPath, "config", "", "Config file path")
+	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// Auto-start helper for status-line (Task 6.1)
+// ---------------------------------------------------------------------------
+
+// daemonAliveMarkerPath is the marker file used to cache daemon liveness
+// checks for 60 seconds, avoiding socket dial overhead on every hook invocation.
+var daemonAliveMarkerPath = filepath.Join(core.DefaultStateDir, "daemon-alive.marker")
+
+// ensureDaemonWithCache calls EnsureDaemon only if the alive marker is stale
+// or missing. The marker file is touched on success, caching the result for 60s.
+// Returns silently on any error (ARCH-1 fail-open).
+func ensureDaemonWithCache(configPath string) {
+	// Check marker file freshness.
+	if info, err := os.Stat(daemonAliveMarkerPath); err == nil {
+		if time.Since(info.ModTime()) < 60*time.Second {
+			return // Recent check — skip socket dial.
+		}
+	}
+
+	client := feeds.NewDaemonClient(core.DefaultSocketPath)
+	if err := client.EnsureDaemon(configPath); err != nil {
+		core.Logger().Debug("feeds: auto-start failed (fail-open)", "error", err)
+		return
+	}
+
+	// Touch the marker file.
+	if err := core.EnsureDir(filepath.Dir(daemonAliveMarkerPath), core.DefaultDirMode); err != nil {
+		return
+	}
+	os.WriteFile(daemonAliveMarkerPath, []byte("ok"), 0o600)
 }

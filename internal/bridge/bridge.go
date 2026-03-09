@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
@@ -69,6 +70,45 @@ func CollectFeedCache(cacheDir string) (map[string]interface{}, error) {
 // DefaultTTLSeconds is the default TTL for feed cache entries when the
 // producer does not specify one.
 const DefaultTTLSeconds = 300
+
+// IsEnvelopeFresh checks whether a Go-envelope cache entry ({type, timestamp, data})
+// is within its TTL. Returns false if the envelope is malformed, the timestamp is
+// unparseable, or the entry has expired. This mirrors the Python TUI's is_fresh() logic.
+func IsEnvelopeFresh(envelope map[string]interface{}) bool {
+	tsRaw, ok := envelope["timestamp"]
+	if !ok {
+		return false
+	}
+	tsStr, ok := tsRaw.(string)
+	if !ok || tsStr == "" {
+		return false
+	}
+	ts, err := time.Parse(time.RFC3339, tsStr)
+	if err != nil {
+		// Try RFC3339Nano as fallback.
+		ts, err = time.Parse(time.RFC3339Nano, tsStr)
+		if err != nil {
+			return false
+		}
+	}
+
+	ttl := DefaultTTLSeconds
+	if dataRaw, ok := envelope["data"]; ok {
+		if data, ok := dataRaw.(map[string]interface{}); ok {
+			if ttlRaw, ok := data["ttl_seconds"]; ok {
+				switch v := ttlRaw.(type) {
+				case float64:
+					ttl = int(v)
+				case int:
+					ttl = v
+				}
+			}
+		}
+	}
+
+	elapsed := time.Since(ts).Seconds()
+	return elapsed < float64(ttl)
+}
 
 // WriteTUICache collects all per-feed JSON files from cacheDir, flattens them
 // into the Python TUI-compatible format, and writes the result to
