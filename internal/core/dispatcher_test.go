@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // =============================================================================
@@ -71,7 +73,7 @@ func TestDispatch_PreToolUse_BlockGuard_DenyJSON(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	require.NotNil(t, result.Stdout)
@@ -88,7 +90,7 @@ func TestDispatch_PreToolUse_BlockGuard_ExactJSONFormat(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	expected := `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"reason"}}`
@@ -101,7 +103,7 @@ func TestDispatch_PreToolUse_BlockGuard_DefaultReason(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	hookOutput := parseHookOutput(t, result.Stdout)
@@ -115,7 +117,7 @@ func TestDispatch_PreToolUse_BlockGuard_GlobMatch(t *testing.T) {
 	})
 	payload := preToolUsePayload("mcp__gmail__send_email", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	hookOutput := parseHookOutput(t, result.Stdout)
@@ -135,7 +137,7 @@ func TestDispatch_PreToolUse_BlockGuard_WithCondition(t *testing.T) {
 		"command": "git push --force origin main",
 	})
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	hookOutput := parseHookOutput(t, result.Stdout)
@@ -156,7 +158,7 @@ func TestDispatch_PreToolUse_BlockGuard_ConditionFalse_Allow(t *testing.T) {
 		"command": "git pull",
 	})
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	// When condition is false, the guard doesn't match -> allow (no stdout)
 	assert.Equal(t, 0, result.ExitCode)
@@ -173,7 +175,7 @@ func TestDispatch_PreToolUse_ConfirmGuard_AskJSON(t *testing.T) {
 	})
 	payload := preToolUsePayload("mcp__gmail__read_email", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	require.NotNil(t, result.Stdout)
@@ -190,7 +192,7 @@ func TestDispatch_PreToolUse_ConfirmGuard_ExactJSONFormat(t *testing.T) {
 	})
 	payload := preToolUsePayload("Write", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	expected := `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"confirm write"}}`
@@ -203,7 +205,7 @@ func TestDispatch_PreToolUse_ConfirmGuard_DefaultReason(t *testing.T) {
 	})
 	payload := preToolUsePayload("Write", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	hookOutput := parseHookOutput(t, result.Stdout)
@@ -221,7 +223,7 @@ func TestDispatch_PreToolUse_WarnGuard_AdditionalContext(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	require.NotNil(t, result.Stdout)
@@ -238,7 +240,7 @@ func TestDispatch_PreToolUse_WarnGuard_DoesNotBlock(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	// Warn should NOT produce a deny/ask decision
 	require.NotNil(t, result.Stdout)
@@ -256,7 +258,7 @@ func TestDispatch_PreToolUse_NoMatchingGuard_Allow(t *testing.T) {
 	})
 	payload := preToolUsePayload("Read", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout, "no guard match should produce no stdout")
@@ -266,7 +268,7 @@ func TestDispatch_PreToolUse_EmptyGuards_Allow(t *testing.T) {
 	config := configWithGuards(nil)
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout)
@@ -282,7 +284,7 @@ func TestDispatch_PostToolUse_NoGuardEvaluation(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPostToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPostToolUse, payload, config)
 
 	// Guards only evaluate on PreToolUse — PostToolUse should not block
 	assert.Equal(t, 0, result.ExitCode)
@@ -295,7 +297,7 @@ func TestDispatch_SessionStart_NoGuardEvaluation(t *testing.T) {
 	})
 	payload := HookPayload{SessionID: "test-session"}
 
-	result := Dispatch(EventSessionStart, payload, config)
+	result := Dispatch(context.Background(), EventSessionStart, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout)
@@ -307,7 +309,7 @@ func TestDispatch_Notification_NoGuardEvaluation(t *testing.T) {
 	})
 	payload := HookPayload{SessionID: "test-session"}
 
-	result := Dispatch(EventNotification, payload, config)
+	result := Dispatch(context.Background(), EventNotification, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout)
@@ -319,7 +321,7 @@ func TestDispatch_Stop_NoGuardEvaluation(t *testing.T) {
 	})
 	payload := HookPayload{SessionID: "test-session"}
 
-	result := Dispatch(EventStop, payload, config)
+	result := Dispatch(context.Background(), EventStop, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout)
@@ -335,7 +337,7 @@ func TestDispatch_UnrecognizedEventType_ExitZeroNoStdout(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch("NonExistentEvent", payload, config)
+	result := Dispatch(context.Background(), "NonExistentEvent", payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout, "unrecognized event type should produce zero stdout")
@@ -345,7 +347,7 @@ func TestDispatch_EmptyEventType_ExitZeroNoStdout(t *testing.T) {
 	config := emptyConfig()
 	payload := HookPayload{SessionID: "test-session"}
 
-	result := Dispatch("", payload, config)
+	result := Dispatch(context.Background(), "", payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout)
@@ -412,7 +414,7 @@ func TestDispatch_ContextInjection_MergesAdditionalContext(t *testing.T) {
 	})
 	payload := HookPayload{SessionID: "test-session"}
 
-	result := Dispatch(EventSessionStart, payload, config)
+	result := Dispatch(context.Background(), EventSessionStart, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	require.NotNil(t, result.Stdout)
@@ -441,7 +443,7 @@ func TestDispatch_WarnGuard_MergedWithContextHandler(t *testing.T) {
 	}
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	hookOutput := parseHookOutput(t, result.Stdout)
@@ -455,7 +457,7 @@ func TestDispatch_NoContextHandlers_NoContextOutput(t *testing.T) {
 	config := emptyConfig()
 	payload := HookPayload{SessionID: "test-session"}
 
-	result := Dispatch(EventSessionStart, payload, config)
+	result := Dispatch(context.Background(), EventSessionStart, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout, "no context handlers should produce no stdout")
@@ -481,7 +483,7 @@ func TestDispatch_SideEffects_DontBlockResponse(t *testing.T) {
 	payload := HookPayload{SessionID: "test-session", ToolName: "Bash"}
 
 	start := time.Now()
-	result := Dispatch(EventPostToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPostToolUse, payload, config)
 	elapsed := time.Since(start)
 
 	// Side effects should not block — dispatch should return very quickly
@@ -509,7 +511,7 @@ func TestFireSideEffectsSync_RunsHandlers(t *testing.T) {
 	// FireSideEffectsSync discards return values, so reaching this point
 	// without panic is the assertion.
 	require.NotPanics(t, func() {
-		FireSideEffectsSync(handlers, HookPayload{SessionID: "test"})
+		FireSideEffectsSync(context.Background(), handlers, HookPayload{SessionID: "test"})
 	})
 }
 
@@ -525,7 +527,7 @@ func TestFireSideEffects_PanicRecovery(t *testing.T) {
 	}
 
 	// Should not panic
-	FireSideEffectsSync(handlers, HookPayload{SessionID: "test"})
+	FireSideEffectsSync(context.Background(), handlers, HookPayload{SessionID: "test"})
 }
 
 // =============================================================================
@@ -685,7 +687,7 @@ func TestExecuteHandler_InlineWithAction(t *testing.T) {
 		},
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	require.NotNil(t, result.Decision)
 	assert.Equal(t, "block", *result.Decision)
@@ -702,7 +704,7 @@ func TestExecuteHandler_InlineNoAction(t *testing.T) {
 		Action:      nil,
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	assert.Nil(t, result.Decision)
 	assert.Nil(t, result.Reason)
@@ -719,7 +721,7 @@ func TestExecuteHandler_BuiltinWithAction(t *testing.T) {
 		},
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	require.NotNil(t, result.AdditionalContext)
 	assert.Equal(t, "builtin context", *result.AdditionalContext)
@@ -731,7 +733,7 @@ func TestExecuteHandler_UnknownType(t *testing.T) {
 		HandlerType: "unknown",
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	assert.Nil(t, result.Decision)
 }
@@ -844,7 +846,7 @@ func TestIntegration_PreToolUse_BlockGuard_FullPipeline(t *testing.T) {
 	})
 
 	result := SafeDispatch(func() DispatchResult {
-		return Dispatch(EventPreToolUse, payload, config)
+		return Dispatch(context.Background(), EventPreToolUse, payload, config)
 	})
 
 	assert.Equal(t, 0, result.ExitCode)
@@ -867,7 +869,7 @@ func TestIntegration_PreToolUse_ConfirmGuard_FullPipeline(t *testing.T) {
 	payload := preToolUsePayload("mcp__slack__send_message", nil)
 
 	result := SafeDispatch(func() DispatchResult {
-		return Dispatch(EventPreToolUse, payload, config)
+		return Dispatch(context.Background(), EventPreToolUse, payload, config)
 	})
 
 	assert.Equal(t, 0, result.ExitCode)
@@ -884,7 +886,7 @@ func TestIntegration_PreToolUse_WarnGuard_FullPipeline(t *testing.T) {
 	payload := preToolUsePayload("Write", nil)
 
 	result := SafeDispatch(func() DispatchResult {
-		return Dispatch(EventPreToolUse, payload, config)
+		return Dispatch(context.Background(), EventPreToolUse, payload, config)
 	})
 
 	assert.Equal(t, 0, result.ExitCode)
@@ -902,7 +904,7 @@ func TestIntegration_UnrecognizedEvent_FullPipeline(t *testing.T) {
 	payload := preToolUsePayload("Bash", nil)
 
 	result := SafeDispatch(func() DispatchResult {
-		return Dispatch("TotallyFakeEvent", payload, config)
+		return Dispatch(context.Background(), "TotallyFakeEvent", payload, config)
 	})
 
 	assert.Equal(t, 0, result.ExitCode)
@@ -925,7 +927,7 @@ func TestIntegration_FirstMatchWins_BlockBeforeWarn(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	hookOutput := parseHookOutput(t, result.Stdout)
@@ -940,7 +942,7 @@ func TestIntegration_FirstMatchWins_WarnBeforeBlock(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	// Warn doesn't short-circuit like block/confirm, but since it's first-match-wins,
 	// the warn rule is the match and block never fires
@@ -964,7 +966,7 @@ func TestIntegration_ConditionGuard_WhenMatches(t *testing.T) {
 		"command": "rm -rf /important",
 	})
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	hookOutput := parseHookOutput(t, result.Stdout)
@@ -984,7 +986,7 @@ func TestIntegration_ConditionGuard_WhenDoesNotMatch(t *testing.T) {
 		"command": "ls -la",
 	})
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	assert.Nil(t, result.Stdout, "when condition not met should not block")
 }
@@ -1002,7 +1004,7 @@ func TestIntegration_ConditionGuard_UnlessExcludes(t *testing.T) {
 		"command": "ls -la",
 	})
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	assert.Nil(t, result.Stdout, "unless condition should prevent block")
 }
@@ -1015,19 +1017,19 @@ func TestIntegration_MultipleGuards_FirstBlockWins(t *testing.T) {
 	})
 
 	// Test Bash -> block
-	r1 := Dispatch(EventPreToolUse, preToolUsePayload("Bash", nil), config)
+	r1 := Dispatch(context.Background(), EventPreToolUse, preToolUsePayload("Bash", nil), config)
 	require.NotNil(t, r1.Stdout)
 	ho1 := parseHookOutput(t, r1.Stdout)
 	assert.Equal(t, "deny", ho1["permissionDecision"])
 
 	// Test Write -> confirm
-	r2 := Dispatch(EventPreToolUse, preToolUsePayload("Write", nil), config)
+	r2 := Dispatch(context.Background(), EventPreToolUse, preToolUsePayload("Write", nil), config)
 	require.NotNil(t, r2.Stdout)
 	ho2 := parseHookOutput(t, r2.Stdout)
 	assert.Equal(t, "ask", ho2["permissionDecision"])
 
 	// Test Read -> warn (matches *)
-	r3 := Dispatch(EventPreToolUse, preToolUsePayload("Read", nil), config)
+	r3 := Dispatch(context.Background(), EventPreToolUse, preToolUsePayload("Read", nil), config)
 	require.NotNil(t, r3.Stdout)
 	ho3 := parseHookOutput(t, r3.Stdout)
 	assert.Contains(t, ho3["additionalContext"], "general warning")
@@ -1048,7 +1050,7 @@ func TestIntegration_HandlerBasedGuard_Blocks(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	// Handler-based guard block produces different JSON format (decision/reason, not hookSpecificOutput)
@@ -1077,7 +1079,7 @@ func TestIntegration_DeclarativeGuardBeforeHandlerGuard(t *testing.T) {
 	}
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	// Declarative guards (Phase 1a) run before handler guards (Phase 1b)
 	require.NotNil(t, result.Stdout)
@@ -1092,7 +1094,7 @@ func TestIntegration_AllEventTypes_ExitZero(t *testing.T) {
 
 	for _, eventType := range EventTypes {
 		t.Run(eventType, func(t *testing.T) {
-			result := Dispatch(eventType, payload, config)
+			result := Dispatch(context.Background(), eventType, payload, config)
 			assert.Equal(t, 0, result.ExitCode, "event %s should exit 0", eventType)
 		})
 	}
@@ -1104,7 +1106,7 @@ func TestIntegration_EmptyConfig_AllEventsAllow(t *testing.T) {
 		"command": "rm -rf /",
 	})
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout, "empty config should produce no stdout")
@@ -1136,7 +1138,7 @@ echo '{"additionalContext":"hello from script"}'
 		Phase:       "context",
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	require.NotNil(t, result.AdditionalContext)
 	assert.Equal(t, "hello from script", *result.AdditionalContext)
@@ -1164,7 +1166,7 @@ exit 2
 		Phase:       "guard",
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	require.NotNil(t, result.Decision)
 	assert.Equal(t, "block", *result.Decision)
@@ -1194,7 +1196,7 @@ exit 2
 		Phase:       "guard",
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	// Exit 2 without decision:"block" should be treated as error
 	assert.Nil(t, result.Decision)
@@ -1222,7 +1224,7 @@ exit 1
 		Phase:       "guard",
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	// Exit 1 is treated as error, not a valid handler result
 	assert.Nil(t, result.Decision)
@@ -1248,7 +1250,7 @@ exit 0
 		Timeout:     5000,
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	assert.Nil(t, result.Decision)
 	assert.Nil(t, result.Reason)
@@ -1274,7 +1276,7 @@ echo 'not json at all'
 		Timeout:     5000,
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 
 	assert.Nil(t, result.Decision)
 }
@@ -1307,7 +1309,7 @@ echo '{"decision":"block","reason":"should never reach here"}'
 	}
 
 	start := time.Now()
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 	elapsed := time.Since(start)
 
 	assert.Nil(t, result.Decision, "timed-out handler should return empty result")
@@ -1344,7 +1346,7 @@ echo '{"additionalContext":"captured"}'
 		},
 	}
 
-	result := ExecuteHandler(handler, payload)
+	result := ExecuteHandler(context.Background(), handler, payload)
 	require.NotNil(t, result.AdditionalContext)
 
 	// Verify the script received the payload on stdin
@@ -1366,7 +1368,7 @@ func TestIntegration_ScriptHandler_NoCommand(t *testing.T) {
 		Timeout:     5000,
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 	assert.Nil(t, result.Decision)
 }
 
@@ -1378,7 +1380,7 @@ func TestIntegration_ScriptHandler_NonexistentCommand(t *testing.T) {
 		Timeout:     5000,
 	}
 
-	result := ExecuteHandler(handler, HookPayload{SessionID: "test"})
+	result := ExecuteHandler(context.Background(), handler, HookPayload{SessionID: "test"})
 	assert.Nil(t, result.Decision)
 }
 
@@ -1411,7 +1413,7 @@ echo '{"decision":"block","reason":"script guard blocked"}'
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	var output map[string]interface{}
@@ -1445,7 +1447,7 @@ echo '{"additionalContext":"context from script"}'
 	})
 	payload := HookPayload{SessionID: "test-session"}
 
-	result := Dispatch(EventSessionStart, payload, config)
+	result := Dispatch(context.Background(), EventSessionStart, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	hookOutput := parseHookOutput(t, result.Stdout)
@@ -1484,7 +1486,7 @@ func TestDispatch_AllPhases_ExecuteInOrder(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	// Guard didn't block, context should be present
 	require.NotNil(t, result.Stdout)
@@ -1498,7 +1500,7 @@ func TestDispatch_SpecialCharactersInReason(t *testing.T) {
 	})
 	payload := preToolUsePayload("Bash", nil)
 
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
 	// Verify the JSON is valid and contains the special chars
@@ -1516,7 +1518,7 @@ func TestDispatch_EmptyPayload(t *testing.T) {
 	payload := HookPayload{} // completely empty
 
 	// Should not panic even with empty payload
-	result := Dispatch(EventPreToolUse, payload, config)
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 	assert.Equal(t, 0, result.ExitCode)
 }
 
@@ -1541,7 +1543,7 @@ func TestDispatch_MultipleGuardRules_ComplexScenario(t *testing.T) {
 	})
 
 	// rm -rf -> block
-	r1 := Dispatch(EventPreToolUse, preToolUsePayload("Bash", map[string]interface{}{
+	r1 := Dispatch(context.Background(), EventPreToolUse, preToolUsePayload("Bash", map[string]interface{}{
 		"command": "rm -rf /tmp",
 	}), config)
 	require.NotNil(t, r1.Stdout)
@@ -1549,7 +1551,7 @@ func TestDispatch_MultipleGuardRules_ComplexScenario(t *testing.T) {
 	assert.Equal(t, "deny", ho1["permissionDecision"])
 
 	// safe bash -> warn
-	r2 := Dispatch(EventPreToolUse, preToolUsePayload("Bash", map[string]interface{}{
+	r2 := Dispatch(context.Background(), EventPreToolUse, preToolUsePayload("Bash", map[string]interface{}{
 		"command": "ls -la",
 	}), config)
 	require.NotNil(t, r2.Stdout)
@@ -1557,7 +1559,7 @@ func TestDispatch_MultipleGuardRules_ComplexScenario(t *testing.T) {
 	assert.Contains(t, ho2["additionalContext"], "bash usage noted")
 
 	// MCP tool -> confirm
-	r3 := Dispatch(EventPreToolUse, preToolUsePayload("mcp__slack__send", nil), config)
+	r3 := Dispatch(context.Background(), EventPreToolUse, preToolUsePayload("mcp__slack__send", nil), config)
 	require.NotNil(t, r3.Stdout)
 	ho3 := parseHookOutput(t, r3.Stdout)
 	assert.Equal(t, "ask", ho3["permissionDecision"])
@@ -1612,4 +1614,280 @@ func TestInferPhase_PostToolUse_SideEffect(t *testing.T) {
 func TestInferPhase_SessionEnd_SideEffect(t *testing.T) {
 	h := CustomHandlerConfig{Events: []string{EventSessionEnd}, Type: "script"}
 	assert.Equal(t, "side_effect", inferPhase(h))
+}
+
+// =============================================================================
+// Task 5.1: Dispatch Respects Context Cancellation
+// =============================================================================
+
+func TestDispatch_CancelledContext_ReturnsExitZero(t *testing.T) {
+	// A pre-cancelled context should cause Dispatch to return exit 0 immediately
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	config := configWithGuards([]GuardRuleConfig{
+		{Match: "Bash", Action: "block", Reason: "should not evaluate"},
+	})
+	payload := preToolUsePayload("Bash", nil)
+
+	result := Dispatch(ctx, EventPreToolUse, payload, config)
+
+	assert.Equal(t, 0, result.ExitCode, "cancelled context should fail-open with exit 0")
+	assert.Nil(t, result.Stdout, "cancelled context should produce no stdout")
+}
+
+func TestDispatch_DeadlineExceeded_ReturnsExitZero(t *testing.T) {
+	// A context past its deadline should fail-open
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Microsecond)
+	defer cancel()
+	time.Sleep(5 * time.Millisecond) // ensure deadline has passed
+
+	config := emptyConfig()
+	payload := preToolUsePayload("Read", nil)
+
+	result := Dispatch(ctx, EventPreToolUse, payload, config)
+
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Nil(t, result.Stdout)
+}
+
+func TestDispatch_GuardBlockSurvives_WhenContextValid(t *testing.T) {
+	// Guard decisions computed before timeout should still be returned.
+	// Use a generous timeout so the guard runs normally.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	config := configWithGuards([]GuardRuleConfig{
+		{Match: "Bash", Action: "block", Reason: "no bash"},
+	})
+	payload := preToolUsePayload("Bash", nil)
+
+	result := Dispatch(ctx, EventPreToolUse, payload, config)
+
+	assert.Equal(t, 0, result.ExitCode)
+	require.NotNil(t, result.Stdout, "guard block should produce stdout")
+	hookOutput := parseHookOutput(t, result.Stdout)
+	assert.Equal(t, "deny", hookOutput["permissionDecision"])
+	assert.Equal(t, "no bash", hookOutput["permissionDecisionReason"])
+}
+
+func TestDispatch_ContextPropagatedToGuardHandlers(t *testing.T) {
+	// Verify that a cancelled context stops guard handler execution
+	if runtime.GOOS == "windows" {
+		t.Skip("script tests require unix shell")
+	}
+
+	// Create a context that cancels after 50ms
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	// Script handler that sleeps 10s — should be cancelled by context
+	tmpDir := t.TempDir()
+	scriptPath := filepath.Join(tmpDir, "slow-guard.sh")
+	err := os.WriteFile(scriptPath, []byte("#!/bin/sh\nsleep 10\necho '{\"decision\":\"block\",\"reason\":\"too slow\"}'\n"), 0o755)
+	require.NoError(t, err)
+
+	config := configWithHandlers([]CustomHandlerConfig{
+		{
+			Name:    "slow-guard",
+			Type:    "script",
+			Events:  []string{EventPreToolUse},
+			Command: scriptPath,
+			Timeout: 30, // 30s handler timeout — but dispatch ctx is 50ms
+		},
+	})
+	payload := preToolUsePayload("Bash", nil)
+
+	start := time.Now()
+	result := Dispatch(ctx, EventPreToolUse, payload, config)
+	elapsed := time.Since(start)
+
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Nil(t, result.Stdout, "cancelled handler should not produce block decision")
+	assert.Less(t, elapsed, 2*time.Second, "dispatch should exit well before handler would complete")
+}
+
+func TestDispatch_ContextPropagatedToContextPhase(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("script tests require unix shell")
+	}
+
+	// Context handler that would sleep — dispatch ctx cancels first
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	tmpDir := t.TempDir()
+	scriptPath := filepath.Join(tmpDir, "slow-ctx.sh")
+	err := os.WriteFile(scriptPath, []byte("#!/bin/sh\nsleep 10\necho '{\"additionalContext\":\"late context\"}'\n"), 0o755)
+	require.NoError(t, err)
+
+	config := configWithHandlers([]CustomHandlerConfig{
+		{
+			Name:    "slow-context",
+			Type:    "script",
+			Events:  []string{EventSessionStart},
+			Phase:   "context",
+			Command: scriptPath,
+			Timeout: 30,
+		},
+	})
+	payload := HookPayload{SessionID: "test-session-123"}
+
+	start := time.Now()
+	result := Dispatch(ctx, EventSessionStart, payload, config)
+	elapsed := time.Since(start)
+
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Nil(t, result.Stdout, "timed out context handler should not produce output")
+	assert.Less(t, elapsed, 2*time.Second)
+}
+
+// =============================================================================
+// Task 5.2: DispatchConfig Defaults and Edge Cases
+// =============================================================================
+
+func TestDispatchConfig_ZeroTimeout_UsesDefault(t *testing.T) {
+	// Zero value is preserved in struct; CLI resolves to default
+	cfg := DispatchConfig{TimeoutMs: 0}
+	assert.Equal(t, 0, cfg.TimeoutMs, "zero value should be preserved in struct")
+	assert.Equal(t, 500, DefaultDispatchTimeoutMs, "default constant should be 500ms")
+}
+
+func TestDispatchConfig_CustomTimeout_Respected(t *testing.T) {
+	cfg := DispatchConfig{TimeoutMs: 1000}
+	assert.Equal(t, 1000, cfg.TimeoutMs)
+}
+
+func TestDispatchConfig_NegativeTimeout_NoTimeout(t *testing.T) {
+	// Negative timeout means no timeout (opt-out)
+	cfg := DispatchConfig{TimeoutMs: -1}
+	assert.Less(t, cfg.TimeoutMs, 0, "negative timeout signals no timeout")
+}
+
+func TestDispatchConfig_InHooksConfig(t *testing.T) {
+	// Verify DispatchConfig is part of HooksConfig and default config sets the timeout
+	cfg := GetDefaultConfig()
+	assert.Equal(t, DefaultDispatchTimeoutMs, cfg.Dispatch.TimeoutMs, "default config should set dispatch timeout")
+}
+
+func TestDispatchConfig_YAMLUnmarshal(t *testing.T) {
+	yamlStr := `
+version: 1
+dispatch:
+  timeout_ms: 750
+`
+	var cfg HooksConfig
+	err := yaml.Unmarshal([]byte(yamlStr), &cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 750, cfg.Dispatch.TimeoutMs)
+}
+
+func TestDispatchConfig_YAMLUnmarshal_Absent(t *testing.T) {
+	yamlStr := `
+version: 1
+`
+	var cfg HooksConfig
+	err := yaml.Unmarshal([]byte(yamlStr), &cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 0, cfg.Dispatch.TimeoutMs, "absent dispatch section should leave zero value")
+}
+
+// =============================================================================
+// Task 5.3: Dispatch-Level Timeout with Slow Script Handlers
+// =============================================================================
+
+func TestDispatch_TimeoutKillsSlowGuardHandler(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("script tests require unix shell")
+	}
+
+	_, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skip("sleep command not found")
+	}
+
+	tmpDir := t.TempDir()
+	scriptPath := filepath.Join(tmpDir, "very-slow-guard.sh")
+	err = os.WriteFile(scriptPath, []byte("#!/bin/sh\nsleep 30\necho '{\"decision\":\"block\",\"reason\":\"never\"}'\n"), 0o755)
+	require.NoError(t, err)
+
+	config := configWithHandlers([]CustomHandlerConfig{
+		{
+			Name:    "very-slow-guard",
+			Type:    "script",
+			Events:  []string{EventPreToolUse},
+			Command: scriptPath,
+			Timeout: 60, // 60s handler timeout
+		},
+	})
+	payload := preToolUsePayload("Bash", nil)
+
+	// Dispatch context with 100ms timeout — should override the 60s handler timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	result := Dispatch(ctx, EventPreToolUse, payload, config)
+	elapsed := time.Since(start)
+
+	assert.Equal(t, 0, result.ExitCode, "timeout should fail-open")
+	assert.Nil(t, result.Stdout, "timed-out handler should not produce output")
+	assert.Less(t, elapsed, 2*time.Second, "dispatch should terminate within 2s")
+}
+
+func TestDispatch_TimeoutDoesNotAffectFastDispatch(t *testing.T) {
+	// A fast dispatch with a timeout should work normally
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	config := configWithGuards([]GuardRuleConfig{
+		{Match: "Bash", Action: "block", Reason: "blocked"},
+	})
+	payload := preToolUsePayload("Bash", nil)
+
+	result := Dispatch(ctx, EventPreToolUse, payload, config)
+
+	assert.Equal(t, 0, result.ExitCode)
+	require.NotNil(t, result.Stdout, "fast dispatch should still produce guard result")
+	hookOutput := parseHookOutput(t, result.Stdout)
+	assert.Equal(t, "deny", hookOutput["permissionDecision"])
+}
+
+func TestDispatch_TimeoutWithSideEffects(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("script tests require unix shell")
+	}
+
+	tmpDir := t.TempDir()
+	markerPath := filepath.Join(tmpDir, "side-effect-marker")
+	scriptPath := filepath.Join(tmpDir, "slow-side-effect.sh")
+	// Side effect writes a marker after 5s sleep — should be killed by context
+	err := os.WriteFile(scriptPath, []byte(fmt.Sprintf("#!/bin/sh\nsleep 5\ntouch %s\n", markerPath)), 0o755)
+	require.NoError(t, err)
+
+	config := configWithHandlers([]CustomHandlerConfig{
+		{
+			Name:    "slow-side-effect",
+			Type:    "script",
+			Events:  []string{EventPostToolUse},
+			Phase:   "side_effect",
+			Command: scriptPath,
+			Timeout: 30,
+		},
+	})
+	payload := HookPayload{SessionID: "test-session-123", ToolName: "Bash"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	// Use FireSideEffectsSync to wait for completion (or cancellation)
+	handlers := GetHandlersForEvent(ResolveHandlers(config), EventPostToolUse)
+	FireSideEffectsSync(ctx, handlers, payload)
+	elapsed := time.Since(start)
+
+	assert.Less(t, elapsed, 2*time.Second, "side effect should be cancelled by context")
+	// Marker file should NOT exist since the script was killed
+	_, err = os.Stat(markerPath)
+	assert.True(t, os.IsNotExist(err), "side effect marker should not exist — script was killed")
 }

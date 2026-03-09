@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -101,12 +102,40 @@ func newDispatchCmd() *cobra.Command {
 					return core.DispatchResult{ExitCode: 0}
 				}
 
+				// Resolve dispatch timeout (0 = default 500ms, negative = no timeout)
+				timeoutMs := config.Dispatch.TimeoutMs
+				if timeoutMs == 0 {
+					timeoutMs = core.DefaultDispatchTimeoutMs
+				}
+
+				var ctx context.Context
+				var cancel context.CancelFunc
+				if timeoutMs > 0 {
+					ctx, cancel = context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
+				} else {
+					ctx, cancel = context.WithCancel(context.Background())
+				}
+				// cancel is NOT deferred: side-effect goroutines and the analytics
+				// goroutine share this context and should keep running until os.Exit
+				// terminates the process. On timeout, WithTimeout cancels automatically.
+				_ = cancel
+				dispatchStart := time.Now()
+
 				// Run the three-phase dispatch engine
-				dispatchResult := core.Dispatch(eventType, payload, config)
+				dispatchResult := core.Dispatch(ctx, eventType, payload, config)
+
+				if ctx.Err() == context.DeadlineExceeded {
+					elapsed := time.Since(dispatchStart)
+					core.Logger().Warn("dispatch timeout",
+						"event_type", eventType,
+						"timeout_ms", timeoutMs,
+						"elapsed_ms", elapsed.Milliseconds(),
+					)
+				}
 
 				// Analytics recording (non-blocking, ARCH-7).
 				if config.Analytics.Enabled && payload.SessionID != "" {
-					go recordAnalytics(eventType, payload, config.Analytics.DBPath)
+					go recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath)
 				}
 
 				// Signal TUI launch intent (executed synchronously after SafeDispatch)
@@ -128,9 +157,6 @@ func newDispatchCmd() *cobra.Command {
 				launchTUIIfNeeded(tuiLaunchMethod)
 			}
 
-			// Brief grace period for side-effect goroutines (analytics, coaching)
-			// to finish before the process exits.
-			time.Sleep(50 * time.Millisecond)
 			os.Exit(result.ExitCode)
 			return nil
 		},
@@ -143,12 +169,16 @@ func newDispatchCmd() *cobra.Command {
 
 // recordAnalytics writes session/event data to Dolt in a background goroutine.
 // Fail-open: any error is logged but never surfaces to the user (ARCH-1).
-func recordAnalytics(eventType string, payload core.HookPayload, dataDir string) {
+func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string) {
 	defer func() {
 		if r := recover(); r != nil {
 			core.Logger().Error("panic in analytics recording", "recovered", fmt.Sprintf("%v", r))
 		}
 	}()
+
+	if ctx.Err() != nil {
+		return
+	}
 
 	db, err := analytics.Open(dataDir)
 	if err != nil {
@@ -157,7 +187,6 @@ func recordAnalytics(eventType string, payload core.HookPayload, dataDir string)
 	}
 	defer db.Close()
 
-	ctx := context.Background()
 	a := analytics.NewAnalytics(db)
 	now := time.Now()
 
@@ -278,6 +307,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(w, strings.Repeat("-", 40))
 
 	allOK := true
+	warnings := 0
 
 	// Check 1: hookwise.yaml exists and is valid.
 	cwd, _ := os.Getwd()
@@ -305,7 +335,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 					for _, e := range vr.Errors {
 						fmt.Fprintf(w, "       - %s: %s\n", e.Path, e.Message)
 					}
-					// Warnings don't fail doctor outright.
+					warnings++
 				}
 			}
 		}
@@ -324,6 +354,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	doltDir := analytics.DefaultDoltDir()
 	if info, err := os.Stat(doltDir); err != nil || !info.IsDir() {
 		fmt.Fprintf(w, "WARN  dolt-db: %s not found (will be created on first dispatch)\n", doltDir)
+		warnings++
 	} else {
 		fmt.Fprintf(w, "PASS  dolt-db: %s\n", doltDir)
 	}
@@ -338,17 +369,169 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(w, "PASS  daemon: PID file exists (pid: %s)\n", strings.TrimSpace(string(pidData)))
 		} else {
 			fmt.Fprintf(w, "WARN  daemon: PID file exists but unreadable: %v\n", err)
+			warnings++
 		}
 	}
 
+	// Check 5: Feed health.
+	var feedCfg *core.HooksConfig
+	if loadedCfg, loadErr := core.LoadConfig(cwd); loadErr == nil {
+		feedCfg = &loadedCfg
+	}
+	warnings += checkFeedHealth(w, filepath.Join(stateDir, "state"), feedCfg)
+
 	fmt.Fprintln(w, strings.Repeat("-", 40))
 	if allOK {
-		fmt.Fprintln(w, "All critical checks passed.")
+		if warnings > 0 {
+			fmt.Fprintf(w, "All critical checks passed. %d warning(s).\n", warnings)
+		} else {
+			fmt.Fprintln(w, "All critical checks passed.")
+		}
 	} else {
 		fmt.Fprintln(w, "Some checks failed. Run 'hookwise init' to fix.")
 	}
 
 	return nil
+}
+
+// checkFeedHealth reads feed cache files and reports placeholder/stale feeds.
+// Returns the number of warnings emitted.
+func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
+	warnings := 0
+
+	feedFiles, err := filepath.Glob(filepath.Join(cacheDir, "*.json"))
+	if err != nil || len(feedFiles) == 0 {
+		return 0
+	}
+
+	feedStatuses := make(map[string]string) // feed name → "ok" | "placeholder" | "stale"
+
+	for _, f := range feedFiles {
+		base := filepath.Base(f)
+		// Skip non-feed files.
+		if base == "status-line-cache.json" {
+			continue
+		}
+		feedName := strings.TrimSuffix(base, ".json")
+
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+
+		var envelope map[string]interface{}
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			continue
+		}
+
+		// Must have standard feed envelope format: type + timestamp + data.
+		if _, hasType := envelope["type"].(string); !hasType {
+			continue
+		}
+		if _, hasTS := envelope["timestamp"].(string); !hasTS {
+			continue
+		}
+		dataRaw, ok := envelope["data"]
+		if !ok {
+			continue
+		}
+		dataMap, ok := dataRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Check placeholder.
+		if src, ok := dataMap["source"].(string); ok && src == "placeholder" {
+			fmt.Fprintf(w, "WARN  feed:%s: placeholder data (no real source configured)\n", feedName)
+			warnings++
+			feedStatuses[feedName] = "placeholder"
+			continue
+		}
+
+		// Parse timestamp once for staleness and reporting.
+		tsStr := envelope["timestamp"].(string)
+		ts, parseErr := time.Parse(time.RFC3339, tsStr)
+		if parseErr != nil {
+			fmt.Fprintf(w, "INFO  feed:%s: OK\n", feedName)
+			feedStatuses[feedName] = "ok"
+			continue
+		}
+
+		age := time.Since(ts).Truncate(time.Second)
+
+		// Check staleness.
+		interval := getFeedInterval(cfg, feedName)
+		if interval > 0 {
+			staleThreshold := time.Duration(2*interval) * time.Second
+			if age > staleThreshold {
+				fmt.Fprintf(w, "WARN  feed:%s: stale data (last updated %s ago)\n", feedName, age)
+				warnings++
+				feedStatuses[feedName] = "stale"
+				continue
+			}
+		}
+
+		// Feed is healthy.
+		fmt.Fprintf(w, "INFO  feed:%s: OK (last updated %s ago)\n", feedName, age)
+		feedStatuses[feedName] = "ok"
+	}
+
+	// Cross-reference with status_line segments.
+	if cfg != nil && cfg.StatusLine.Enabled && len(cfg.StatusLine.Segments) > 0 {
+		realCount := 0
+		feedSegments := 0
+		for _, seg := range cfg.StatusLine.Segments {
+			name := seg.Builtin
+			if name == "" {
+				continue
+			}
+			// session and cost are computed from analytics, not feed-backed.
+			if name == "session" || name == "cost" {
+				continue
+			}
+			feedSegments++
+			if status, ok := feedStatuses[name]; ok && status == "ok" {
+				realCount++
+			}
+		}
+		if feedSegments > 0 {
+			if realCount < feedSegments {
+				fmt.Fprintf(w, "WARN  status-line: %d/%d feed-backed segments have real data\n", realCount, feedSegments)
+				warnings++
+			} else {
+				fmt.Fprintf(w, "INFO  status-line: all %d feed-backed segments have real data\n", feedSegments)
+			}
+		}
+	}
+
+	return warnings
+}
+
+// getFeedInterval returns the configured interval_seconds for a feed name.
+func getFeedInterval(cfg *core.HooksConfig, feedName string) int {
+	if cfg == nil {
+		return 0
+	}
+	switch feedName {
+	case "pulse":
+		return cfg.Feeds.Pulse.IntervalSeconds
+	case "project":
+		return cfg.Feeds.Project.IntervalSeconds
+	case "calendar":
+		return cfg.Feeds.Calendar.IntervalSeconds
+	case "news":
+		return cfg.Feeds.News.IntervalSeconds
+	case "insights":
+		return cfg.Feeds.Insights.IntervalSeconds
+	case "practice":
+		return cfg.Feeds.Practice.IntervalSeconds
+	case "weather":
+		return cfg.Feeds.Weather.IntervalSeconds
+	case "memories":
+		return cfg.Feeds.Memories.IntervalSeconds
+	default:
+		return 0
+	}
 }
 
 // ---------------------------------------------------------------------------
