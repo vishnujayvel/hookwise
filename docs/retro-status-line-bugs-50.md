@@ -25,7 +25,7 @@ values despite data being available. Weather (the only live producer) was missin
 
 The hookwise architecture has 4 independent data pipelines:
 
-```
+```text
 Pipeline 1: Daemon → Feed JSON → bridge.CollectFeedCache → renderSegment
 Pipeline 2: Dispatch → [MISSING] → Dolt → DailySummary → renderBuiltinSegment
 Pipeline 3: Config YAML → LoadConfig → StatusLine.Segments → segment loop
@@ -92,18 +92,24 @@ The project/calendar/pulse/news producers were implemented as placeholders (`sou
 ## Lessons Learned
 
 ### L1: "Infrastructure-ready" ≠ "Wired"
+
 The dispatch command had goroutine infrastructure, 50ms grace period, and side-effect handler patterns — everything EXCEPT the actual analytics call. The comment `// Brief grace period for side-effect goroutines (analytics, coaching)` promised work that didn't exist. **Lesson:** Comments describing intended behavior are not substitutes for code.
 
 ### L2: Timezone bugs hide in happy-path tests
+
 All existing analytics tests used `time.Date(2025, 3, 6, 9, 0, 0, 0, time.UTC)` — a UTC timestamp where local and UTC dates are the same. The bug only manifests in negative UTC offsets during evening hours. **Lesson:** Test with edge-case timestamps (midnight, day boundaries, DST transitions).
 
 ### L3: Config completeness is untestable without a "full pipeline" smoke test
+
 Weather was enabled in feeds config but absent from segments config. No test validates that enabled feeds appear in the status line. **Lesson:** A single e2e test that runs `hookwise status-line` with a known config and validates all expected segments appear would catch this instantly.
 
 ### L4: The Mock Confidence Trap is a recurring pattern
+
 This is the third time (after Bug #29 and the original status-line stub bug) that both sides of a boundary pass all tests while the real system fails. **Lesson:** After shipping any feature that crosses a producer→consumer boundary, add an integration test that validates the full pipeline with real (not mocked) data.
 
 ## Proposed E2E Test
+
+> **Note:** This is pseudocode illustrating the test structure, not a runnable test.
 
 ```go
 // TestStatusLine_EndToEnd_DispatchThenRender validates the full pipeline:

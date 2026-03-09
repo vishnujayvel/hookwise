@@ -752,9 +752,16 @@ func TestInsightsProducer_TopToolsLimited(t *testing.T) {
 	require.NoError(t, err)
 
 	data := result.(map[string]interface{})["data"].(map[string]interface{})
-	topTools, ok := data["top_tools"].([]map[string]interface{})
-	require.True(t, ok)
-	assert.LessOrEqual(t, len(topTools), 10, "top_tools should be limited to 10")
+	// top_tools may be []map[string]interface{} (direct from producer) or
+	// []interface{} (after JSON round-trip). Handle both safely.
+	switch tt := data["top_tools"].(type) {
+	case []map[string]interface{}:
+		assert.LessOrEqual(t, len(tt), 10, "top_tools should be limited to 10")
+	case []interface{}:
+		assert.LessOrEqual(t, len(tt), 10, "top_tools should be limited to 10")
+	default:
+		t.Fatalf("top_tools has unexpected type %T", data["top_tools"])
+	}
 }
 
 func TestInsightsProducer_FrictionFromFacets(t *testing.T) {

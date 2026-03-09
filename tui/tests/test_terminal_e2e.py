@@ -356,8 +356,9 @@ class TestStatusLineCleanup:
 # (not implemented here) would evaluate the collected artifacts.
 # ===========================================================================
 
-# Artifact directory for captured screen state
-ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), "..", "artifacts")
+# Artifact directory for captured screen state (absolute path for portability)
+ARTIFACT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "artifacts"))
+os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
 
 class ActorState(Enum):

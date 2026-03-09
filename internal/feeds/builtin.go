@@ -312,6 +312,10 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 	cfg := p.feedsCfg.Calendar
 	p.mu.Unlock()
 
+	// Add timeout to prevent blocking the poll cycle.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	// Resolve token path.
 	tokenPath := cfg.TokenPath
 	if tokenPath == "" {
@@ -450,7 +454,7 @@ func parseGoogleEventTime(edt *calendar.EventDateTime) (time.Time, bool) {
 	if edt.Date != "" {
 		t, err := time.Parse("2006-01-02", edt.Date)
 		if err != nil {
-			return time.Time{}, true
+			return time.Time{}, false // Parse failed, don't claim it's all-day
 		}
 		return t, true
 	}

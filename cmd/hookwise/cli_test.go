@@ -998,6 +998,7 @@ func TestStatusLineInsightsFrictionSegment(t *testing.T) {
 			"type":      "insights",
 			"timestamp": "2026-03-07T10:00:00Z",
 			"data": map[string]interface{}{
+				"total_sessions":  5,
 				"friction_total":  5,
 				"friction_counts": map[string]interface{}{"wrong_approach": 3, "misunderstood_request": 2},
 				"recent_session": map[string]interface{}{
@@ -1027,6 +1028,7 @@ func TestStatusLineInsightsFrictionClean(t *testing.T) {
 			"type":      "insights",
 			"timestamp": "2026-03-07T10:00:00Z",
 			"data": map[string]interface{}{
+				"total_sessions":  10,
 				"friction_total":  12,
 				"friction_counts": map[string]interface{}{},
 				"recent_session": map[string]interface{}{

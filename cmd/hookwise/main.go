@@ -408,7 +408,7 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	// Load today's daily summary from Dolt for session/cost segments.
 	// Fail-open: nil summary → segments fall back to "--".
 	var dailySummary *analytics.DailySummaryResult
-	if db, err := analytics.Open(""); err == nil {
+	if db, err := analytics.Open(config.Analytics.DBPath); err == nil {
 		defer db.Close()
 		today := time.Now().UTC().Format("2006-01-02")
 		a := analytics.NewAnalytics(db)
@@ -436,7 +436,7 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	}
 
 	// Surface unsurfaced notifications (R12.5).
-	notifSegment := renderNotificationSegment()
+	notifSegment := renderNotificationSegment(config.Analytics.DBPath)
 	if notifSegment != "" {
 		segments = append(segments, notifSegment)
 	}
@@ -465,8 +465,8 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 // renderNotificationSegment queries the Dolt DB for unsurfaced notifications
 // and returns a status-line segment summarising them. If the DB cannot be
 // opened or there are no pending notifications, returns "".
-func renderNotificationSegment() string {
-	db, err := analytics.Open("")
+func renderNotificationSegment(dbPath string) string {
+	db, err := analytics.Open(dbPath)
 	if err != nil {
 		return ""
 	}
@@ -792,6 +792,9 @@ func renderInsightsFrictionSegment(feedCache map[string]interface{}) string {
 	if data == nil {
 		return ""
 	}
+	if toInt(data["total_sessions"]) == 0 {
+		return "" // No usage data — don't show "✅ No friction" for empty envelopes
+	}
 
 	// Check recent session friction
 	recentFriction := 0
@@ -820,6 +823,9 @@ func renderInsightsPaceSegment(feedCache map[string]interface{}) string {
 	data := feedData(feedCache, "insights")
 	if data == nil {
 		return ""
+	}
+	if toInt(data["total_sessions"]) == 0 {
+		return "" // No usage data — don't show "0 msgs/day | 0 lines | 0 sessions"
 	}
 	totalMessages := toInt(data["total_messages"])
 	daysActive := toInt(data["days_active"])
