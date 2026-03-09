@@ -206,7 +206,7 @@ func TestIntegration_FullDispatchWithDoltWrites(t *testing.T) {
 		ToolName:  "Bash",
 		ToolInput: map[string]interface{}{"command": "rm -rf /"},
 	}
-	result := core.Dispatch(core.EventPreToolUse, payload, config)
+	result := core.Dispatch(context.Background(), core.EventPreToolUse, payload, config)
 	assert.Equal(t, 0, result.ExitCode, "ARCH-1: blocked tool still returns exit 0")
 	require.NotNil(t, result.Stdout)
 	assert.Contains(t, *result.Stdout, "deny", "blocked tool should produce deny decision")
@@ -214,7 +214,7 @@ func TestIntegration_FullDispatchWithDoltWrites(t *testing.T) {
 
 	// Dispatch 2: warned tool
 	payload.ToolName = "Write"
-	result = core.Dispatch(core.EventPreToolUse, payload, config)
+	result = core.Dispatch(context.Background(), core.EventPreToolUse, payload, config)
 	assert.Equal(t, 0, result.ExitCode)
 	// Warn adds context, does not block
 	if result.Stdout != nil {
@@ -222,13 +222,13 @@ func TestIntegration_FullDispatchWithDoltWrites(t *testing.T) {
 	}
 
 	// Dispatch 3: unrecognized event type -> no output
-	result = core.Dispatch("UnknownEvent", payload, config)
+	result = core.Dispatch(context.Background(), "UnknownEvent", payload, config)
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Nil(t, result.Stdout, "unrecognized event should produce no stdout")
 
 	// Dispatch 4: confirm tool
 	payload.ToolName = "mcp__gmail__send"
-	result = core.Dispatch(core.EventPreToolUse, payload, config)
+	result = core.Dispatch(context.Background(), core.EventPreToolUse, payload, config)
 	assert.Equal(t, 0, result.ExitCode)
 	require.NotNil(t, result.Stdout)
 	assert.Contains(t, *result.Stdout, "ask", "confirm should produce ask decision")
@@ -616,7 +616,7 @@ func TestIntegration_DispatchFailOpenGuarantee(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := core.Dispatch(tc.eventType, tc.payload, config)
+			result := core.Dispatch(context.Background(), tc.eventType, tc.payload, config)
 			assert.Equal(t, 0, result.ExitCode,
 				"ARCH-1: dispatch must never return non-zero exit code for %q", tc.name)
 		})
@@ -653,7 +653,7 @@ func TestIntegration_GuardsAndInlineHandlers(t *testing.T) {
 	}
 
 	// Test 1: PreToolUse with Write -> guard warns
-	result := core.Dispatch(core.EventPreToolUse, core.HookPayload{
+	result := core.Dispatch(context.Background(), core.EventPreToolUse, core.HookPayload{
 		SessionID: "s1",
 		ToolName:  "Write",
 	}, config)
@@ -663,7 +663,7 @@ func TestIntegration_GuardsAndInlineHandlers(t *testing.T) {
 	}
 
 	// Test 2: SessionStart -> inline handler provides context
-	result = core.Dispatch(core.EventSessionStart, core.HookPayload{
+	result = core.Dispatch(context.Background(), core.EventSessionStart, core.HookPayload{
 		SessionID: "s1",
 	}, config)
 	assert.Equal(t, 0, result.ExitCode)
@@ -840,7 +840,7 @@ analytics:
 	assert.Len(t, config.Guards, 3)
 
 	// Dispatch with "rm" command -> block (first rule matches)
-	result := core.Dispatch(core.EventPreToolUse, core.HookPayload{
+	result := core.Dispatch(context.Background(), core.EventPreToolUse, core.HookPayload{
 		SessionID: "s1",
 		ToolName:  "Bash",
 		ToolInput: map[string]interface{}{"command": "rm -rf /tmp"},
@@ -851,7 +851,7 @@ analytics:
 	assert.Contains(t, *result.Stdout, "Bash is blocked for safety")
 
 	// Dispatch with "ls" command -> warn (first rule skipped due to when, second matches)
-	result = core.Dispatch(core.EventPreToolUse, core.HookPayload{
+	result = core.Dispatch(context.Background(), core.EventPreToolUse, core.HookPayload{
 		SessionID: "s1",
 		ToolName:  "Bash",
 		ToolInput: map[string]interface{}{"command": "ls -la"},
@@ -864,7 +864,7 @@ analytics:
 	}
 
 	// Dispatch MCP tool -> confirm
-	result = core.Dispatch(core.EventPreToolUse, core.HookPayload{
+	result = core.Dispatch(context.Background(), core.EventPreToolUse, core.HookPayload{
 		SessionID: "s1",
 		ToolName:  "mcp__slack__send_message",
 	}, config)

@@ -65,6 +65,9 @@ const (
 
 	// DefaultFeedTimeout in seconds.
 	DefaultFeedTimeout = 10
+
+	// DefaultDispatchTimeoutMs is the total dispatch pipeline timeout in milliseconds.
+	DefaultDispatchTimeoutMs = 500
 )
 
 func homeDir() string {

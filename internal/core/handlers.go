@@ -134,7 +134,7 @@ func GetHandlersForEvent(handlers []ResolvedHandler, eventType string) []Resolve
 
 // ExecuteHandler executes a single handler with error boundary.
 // Returns a HandlerResult; on any error, returns an empty result (fail-open).
-func ExecuteHandler(handler ResolvedHandler, payload HookPayload) HandlerResult {
+func ExecuteHandler(ctx context.Context, handler ResolvedHandler, payload HookPayload) HandlerResult {
 	defer func() {
 		if r := recover(); r != nil {
 			Logger().Error("panic in handler execution", "handler", handler.Name, "recovered", fmt.Sprintf("%v", r))
@@ -143,11 +143,11 @@ func ExecuteHandler(handler ResolvedHandler, payload HookPayload) HandlerResult 
 
 	switch handler.HandlerType {
 	case "builtin":
-		return executeBuiltinHandler(handler, payload)
+		return executeBuiltinHandler(ctx, handler, payload)
 	case "script":
-		return executeScriptHandler(handler, payload)
+		return executeScriptHandler(ctx, handler, payload)
 	case "inline":
-		return executeInlineHandler(handler)
+		return executeInlineHandler(ctx, handler)
 	default:
 		Logger().Error("unknown handler type", "type", handler.HandlerType, "handler", handler.Name)
 		return emptyHandlerResult()
@@ -156,7 +156,8 @@ func ExecuteHandler(handler ResolvedHandler, payload HookPayload) HandlerResult 
 
 // executeBuiltinHandler handles builtin-type handlers.
 // If the handler has an action object, return it as the result.
-func executeBuiltinHandler(handler ResolvedHandler, payload HookPayload) HandlerResult {
+// ctx is accepted for API consistency with other handler types.
+func executeBuiltinHandler(ctx context.Context, handler ResolvedHandler, payload HookPayload) HandlerResult {
 	Logger().Debug("executing builtin handler", "handler", handler.Name, "module", handler.Module)
 
 	if handler.Action != nil {
@@ -172,7 +173,7 @@ func executeBuiltinHandler(handler ResolvedHandler, payload HookPayload) Handler
 //   - 0: success, parse stdout as HandlerResult
 //   - 2: block only if stdout has valid block JSON (decision: "block")
 //   - Other: error, log and skip
-func executeScriptHandler(handler ResolvedHandler, payload HookPayload) HandlerResult {
+func executeScriptHandler(ctx context.Context, handler ResolvedHandler, payload HookPayload) HandlerResult {
 	command := handler.Command
 	if command == "" {
 		Logger().Error("script handler has no command", "handler", handler.Name)
@@ -200,10 +201,10 @@ func executeScriptHandler(handler ResolvedHandler, payload HookPayload) HandlerR
 	if timeoutMs <= 0 {
 		timeoutMs = DefaultHandlerTimeout * 1000
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
+	handlerCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
+	cmd := exec.CommandContext(handlerCtx, parts[0], parts[1:]...)
 	cmd.Stdin = bytes.NewReader(payloadJSON)
 	// Ensure the process group is killed on cancel so child processes (e.g., sleep) are also terminated
 	cmd.Cancel = func() error {
@@ -218,7 +219,7 @@ func executeScriptHandler(handler ResolvedHandler, payload HookPayload) HandlerR
 	err = cmd.Run()
 
 	// Check for timeout (context deadline or process killed by signal)
-	if ctx.Err() == context.DeadlineExceeded {
+	if handlerCtx.Err() == context.DeadlineExceeded {
 		Logger().Error("handler timed out", "handler", handler.Name, "timeout_ms", timeoutMs)
 		return emptyHandlerResult()
 	}
@@ -273,7 +274,7 @@ func executeScriptHandler(handler ResolvedHandler, payload HookPayload) HandlerR
 }
 
 // executeInlineHandler evaluates a handler's static action object.
-func executeInlineHandler(handler ResolvedHandler) HandlerResult {
+func executeInlineHandler(ctx context.Context, handler ResolvedHandler) HandlerResult {
 	Logger().Debug("executing inline handler", "handler", handler.Name)
 
 	if handler.Action == nil {

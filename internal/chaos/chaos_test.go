@@ -45,7 +45,7 @@ func TestChaos_DispatchFailOpen_AnalyticsEnabled(t *testing.T) {
 
 	for _, eventType := range events {
 		t.Run(eventType, func(t *testing.T) {
-			result := core.Dispatch(eventType, core.HookPayload{
+			result := core.Dispatch(context.Background(), eventType, core.HookPayload{
 				SessionID: "chaos-session-001",
 				ToolName:  "Bash",
 				ToolInput: map[string]interface{}{"command": "ls"},
@@ -103,7 +103,7 @@ func TestChaos_DispatchWithMalformedPayload(t *testing.T) {
 
 	for i, payload := range payloads {
 		t.Run(fmt.Sprintf("payload_%d", i), func(t *testing.T) {
-			result := core.Dispatch(core.EventPreToolUse, payload, config)
+			result := core.Dispatch(context.Background(), core.EventPreToolUse, payload, config)
 			assert.Equal(t, 0, result.ExitCode,
 				"ARCH-1: dispatch must handle malformed payload gracefully")
 		})
@@ -295,7 +295,7 @@ func TestChaos_ConcurrentDispatchStress(t *testing.T) {
 				toolName = "Write"
 			}
 
-			result := core.Dispatch(core.EventPreToolUse, core.HookPayload{
+			result := core.Dispatch(context.Background(), core.EventPreToolUse, core.HookPayload{
 				SessionID: fmt.Sprintf("stress-%d", idx),
 				ToolName:  toolName,
 				ToolInput: map[string]interface{}{
@@ -355,7 +355,7 @@ func TestChaos_DispatchUnrecognizedEventType(t *testing.T) {
 
 	for i, evt := range bogusEvents {
 		t.Run(fmt.Sprintf("bogus_%d", i), func(t *testing.T) {
-			result := core.Dispatch(evt, core.HookPayload{
+			result := core.Dispatch(context.Background(), evt, core.HookPayload{
 				SessionID: "test",
 				ToolName:  "Bash",
 			}, config)
@@ -384,7 +384,7 @@ func TestChaos_GuardEvaluationWithEdgeCasePatterns(t *testing.T) {
 		t.Run(fmt.Sprintf("guard_%d", i), func(t *testing.T) {
 			cfg := config
 			cfg.Guards = []core.GuardRuleConfig{guard}
-			result := core.Dispatch(core.EventPreToolUse, core.HookPayload{
+			result := core.Dispatch(context.Background(), core.EventPreToolUse, core.HookPayload{
 				SessionID: "test",
 				ToolName:  "Bash",
 				ToolInput: map[string]interface{}{"command": "ls"},

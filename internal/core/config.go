@@ -30,6 +30,7 @@ var knownSections = map[string]bool{
 	"feeds":             true,
 	"daemon":            true,
 	"tui":               true,
+	"dispatch":          true,
 }
 
 // --- Default Config ---
@@ -87,11 +88,6 @@ func GetDefaultConfig() HooksConfig {
 		},
 		Includes: []string{},
 		Feeds: FeedsConfig{
-			Pulse: PulseFeedConfig{
-				Enabled:         true,
-				IntervalSeconds: 30,
-				Thresholds:      PulseThresholds{Green: 0, Yellow: 30, Orange: 60, Red: 120, Skull: 180},
-			},
 			Project: ProjectFeedConfig{
 				Enabled:         true,
 				IntervalSeconds: 60,
@@ -119,11 +115,6 @@ func GetDefaultConfig() HooksConfig {
 				StalenessDays:   30,
 				UsageDataPath:   filepath.Join(home, ".claude", "usage-data"),
 			},
-			Practice: PracticeFeedConfig{
-				Enabled:         true,
-				IntervalSeconds: 120,
-				DBPath:          filepath.Join(home, ".practice-tracker", "practice-tracker.db"),
-			},
 			Weather: WeatherFeedConfig{
 				Enabled:         false,
 				IntervalSeconds: 600,
@@ -146,6 +137,9 @@ func GetDefaultConfig() HooksConfig {
 		TUI: TUIConfig{
 			AutoLaunch:   false,
 			LaunchMethod: "newWindow",
+		},
+		Dispatch: DispatchConfig{
+			TimeoutMs: DefaultDispatchTimeoutMs,
 		},
 	}
 }

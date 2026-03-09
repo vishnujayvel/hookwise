@@ -75,6 +75,11 @@ type HandlerResult struct {
 
 // --- Config Types ---
 
+// DispatchConfig holds settings for the dispatch pipeline.
+type DispatchConfig struct {
+	TimeoutMs int `yaml:"timeout_ms" json:"timeoutMs"`
+}
+
 // HooksConfig is the top-level configuration structure.
 type HooksConfig struct {
 	Version          int                    `yaml:"version" json:"version"`
@@ -92,6 +97,7 @@ type HooksConfig struct {
 	Feeds            FeedsConfig            `yaml:"feeds" json:"feeds"`
 	Daemon           DaemonConfig           `yaml:"daemon" json:"daemon"`
 	TUI              TUIConfig              `yaml:"tui" json:"tui"`
+	Dispatch         DispatchConfig         `yaml:"dispatch" json:"dispatch"`
 }
 
 type CoachingConfig struct {
@@ -435,20 +441,6 @@ type FeedDefinition struct {
 	Enabled         bool   `json:"enabled"`
 }
 
-type PulseFeedConfig struct {
-	Enabled         bool                `yaml:"enabled" json:"enabled"`
-	IntervalSeconds int                 `yaml:"interval_seconds" json:"intervalSeconds"`
-	Thresholds      PulseThresholds     `yaml:"thresholds" json:"thresholds"`
-}
-
-type PulseThresholds struct {
-	Green  int `yaml:"green" json:"green"`
-	Yellow int `yaml:"yellow" json:"yellow"`
-	Orange int `yaml:"orange" json:"orange"`
-	Red    int `yaml:"red" json:"red"`
-	Skull  int `yaml:"skull" json:"skull"`
-}
-
 type ProjectFeedConfig struct {
 	Enabled         bool   `yaml:"enabled" json:"enabled"`
 	IntervalSeconds int    `yaml:"interval_seconds" json:"intervalSeconds"`
@@ -489,12 +481,6 @@ type InsightsFeedConfig struct {
 	UsageDataPath   string `yaml:"usage_data_path" json:"usageDataPath"`
 }
 
-type PracticeFeedConfig struct {
-	Enabled         bool   `yaml:"enabled" json:"enabled"`
-	IntervalSeconds int    `yaml:"interval_seconds" json:"intervalSeconds"`
-	DBPath          string `yaml:"db_path" json:"dbPath"`
-}
-
 type WeatherFeedConfig struct {
 	Enabled         bool    `yaml:"enabled" json:"enabled"`
 	IntervalSeconds int     `yaml:"interval_seconds" json:"intervalSeconds"`
@@ -510,12 +496,10 @@ type MemoriesFeedConfig struct {
 }
 
 type FeedsConfig struct {
-	Pulse    PulseFeedConfig    `yaml:"pulse" json:"pulse"`
 	Project  ProjectFeedConfig  `yaml:"project" json:"project"`
 	Calendar CalendarFeedConfig `yaml:"calendar" json:"calendar"`
 	News     NewsFeedConfig     `yaml:"news" json:"news"`
 	Insights InsightsFeedConfig `yaml:"insights" json:"insights"`
-	Practice PracticeFeedConfig `yaml:"practice" json:"practice"`
 	Weather  WeatherFeedConfig  `yaml:"weather" json:"weather"`
 	Memories MemoriesFeedConfig `yaml:"memories" json:"memories"`
 	Custom   []CustomFeedConfig `yaml:"custom" json:"custom"`

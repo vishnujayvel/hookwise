@@ -424,7 +424,7 @@ func TestRenderBuiltinSegments(t *testing.T) {
 	emptyCache := map[string]interface{}{}
 
 	// Segments with no data should return empty (omitted from output).
-	noDataSegments := []string{"session", "cost", "project", "calendar", "pulse", "weather"}
+	noDataSegments := []string{"session", "cost", "project", "calendar", "weather"}
 	for _, name := range noDataSegments {
 		result := renderBuiltinSegment(name, emptyCache, nil)
 		if result != "" {
@@ -548,7 +548,6 @@ status_line:
   segments:
     - builtin: weather
     - builtin: project
-    - builtin: pulse
     - builtin: calendar
 `
 	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
@@ -794,15 +793,6 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 				"source":          "placeholder",
 			},
 		},
-		"pulse": map[string]interface{}{
-			"type":      "pulse",
-			"timestamp": "2026-03-07T10:00:00Z",
-			"data": map[string]interface{}{
-				"session_count":   0,
-				"active_sessions": 0,
-				"source":          "placeholder",
-			},
-		},
 		"project": map[string]interface{}{
 			"type":      "project",
 			"timestamp": "2026-03-07T10:00:00Z",
@@ -822,7 +812,7 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 		},
 	}
 
-	for _, name := range []string{"weather", "pulse", "project", "calendar"} {
+	for _, name := range []string{"weather", "project", "calendar"} {
 		result := renderBuiltinSegment(name, feedCache, nil)
 		// Placeholder feeds should produce empty output (segment omitted).
 		if result != "" {
@@ -892,7 +882,7 @@ func TestRecordAnalytics_SessionStart(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	payload := core.HookPayload{SessionID: "test-session-001"}
-	recordAnalytics(core.EventSessionStart, payload, tmpDir)
+	recordAnalytics(context.Background(), core.EventSessionStart, payload, tmpDir)
 
 	// Verify session was recorded.
 	db, err := analytics.Open(tmpDir)
@@ -917,11 +907,11 @@ func TestRecordAnalytics_PostToolUse(t *testing.T) {
 
 	// First create a session.
 	payload := core.HookPayload{SessionID: "test-session-002"}
-	recordAnalytics(core.EventSessionStart, payload, tmpDir)
+	recordAnalytics(context.Background(), core.EventSessionStart, payload, tmpDir)
 
 	// Record a tool use event.
 	payload.ToolName = "Bash"
-	recordAnalytics(core.EventPostToolUse, payload, tmpDir)
+	recordAnalytics(context.Background(), core.EventPostToolUse, payload, tmpDir)
 
 	db, err := analytics.Open(tmpDir)
 	if err != nil {
@@ -1283,13 +1273,13 @@ func TestDoctorFeedHealthPlaceholder(t *testing.T) {
 	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
 	os.WriteFile(configPath, []byte("version: 1\nguards: []\n"), 0o644)
 
-	// Write a placeholder feed.
-	writeJSONFile(t, filepath.Join(cacheDir, "practice.json"), map[string]interface{}{
-		"type":      "practice",
+	// Write a placeholder feed (using project since practice/pulse were removed).
+	writeJSONFile(t, filepath.Join(cacheDir, "project.json"), map[string]interface{}{
+		"type":      "project",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
-			"source":         "placeholder",
-			"total_sessions": 0,
+			"source": "placeholder",
+			"name":   "unknown",
 		},
 	})
 
@@ -1306,7 +1296,7 @@ func TestDoctorFeedHealthPlaceholder(t *testing.T) {
 	output, err := executeCommand("doctor")
 	require.NoError(t, err, "doctor failed\noutput: %s", output)
 
-	assert.Contains(t, output, "WARN  feed:practice: placeholder", "doctor should warn about placeholder practice feed")
+	assert.Contains(t, output, "WARN  feed:project: placeholder", "doctor should warn about placeholder project feed")
 	assert.Contains(t, output, "INFO  feed:weather: OK", "doctor should show OK for weather feed")
 	assert.Contains(t, output, "warning(s)", "doctor should show warning count in summary")
 	// Placeholders are non-blocking — should still pass.

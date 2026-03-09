@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -17,9 +18,14 @@ import (
 // Output is a DispatchResult with JSON on stdout for block/confirm/context.
 // Unrecognized event types return ExitCode 0 with no stdout.
 // Follows fail-open guarantee (ARCH-1).
-func Dispatch(eventType string, payload HookPayload, config HooksConfig) DispatchResult {
+func Dispatch(ctx context.Context, eventType string, payload HookPayload, config HooksConfig) DispatchResult {
 	// Unrecognized event type -> exit 0, no stdout
 	if !IsEventType(eventType) {
+		return DispatchResult{ExitCode: 0}
+	}
+
+	// Context cancelled -> fail-open
+	if ctx.Err() != nil {
 		return DispatchResult{ExitCode: 0}
 	}
 
@@ -76,16 +82,16 @@ func Dispatch(eventType string, payload HookPayload, config HooksConfig) Dispatc
 	}
 
 	// Phase 1b: Handler-based guards (handlers with phase: "guard")
-	guardPhaseResult := executeGuardPhase(handlers, payload)
+	guardPhaseResult := executeGuardPhase(ctx, handlers, payload)
 	if guardPhaseResult != nil {
 		return *guardPhaseResult
 	}
 
 	// Phase 2: Context Injection
-	contextOutput := executeContextPhase(handlers, payload)
+	contextOutput := executeContextPhase(ctx, handlers, payload)
 
 	// Phase 3: Side Effects (non-blocking goroutines)
-	fireSideEffects(handlers, payload)
+	fireSideEffects(ctx, handlers, payload)
 
 	// Merge warn context with Phase 2 context output
 	finalContext := mergeContext(warnContext, contextOutput)
@@ -104,8 +110,11 @@ func Dispatch(eventType string, payload HookPayload, config HooksConfig) Dispatc
 // executeGuardPhase runs guard-phase handlers synchronously.
 // On first block decision, short-circuits and returns the block result.
 // Returns nil if no guard blocked.
-func executeGuardPhase(handlers []ResolvedHandler, payload HookPayload) *DispatchResult {
+func executeGuardPhase(ctx context.Context, handlers []ResolvedHandler, payload HookPayload) *DispatchResult {
 	for i := range handlers {
+		if ctx.Err() != nil {
+			return nil
+		}
 		if handlers[i].Phase != PhaseGuard {
 			continue
 		}
@@ -117,7 +126,7 @@ func executeGuardPhase(handlers []ResolvedHandler, payload HookPayload) *Dispatc
 				}
 			}()
 
-			hr := ExecuteHandler(handlers[i], payload)
+			hr := ExecuteHandler(ctx, handlers[i], payload)
 
 			if hr.Decision != nil && *hr.Decision == ActionBlock {
 				reason := "Blocked by guard rule"
@@ -141,10 +150,13 @@ func executeGuardPhase(handlers []ResolvedHandler, payload HookPayload) *Dispatc
 
 // executeContextPhase runs context-phase handlers and collects additionalContext strings.
 // Returns the combined context string or empty string if none.
-func executeContextPhase(handlers []ResolvedHandler, payload HookPayload) string {
+func executeContextPhase(ctx context.Context, handlers []ResolvedHandler, payload HookPayload) string {
 	var parts []string
 
 	for i := range handlers {
+		if ctx.Err() != nil {
+			break
+		}
 		if handlers[i].Phase != PhaseContext {
 			continue
 		}
@@ -156,7 +168,7 @@ func executeContextPhase(handlers []ResolvedHandler, payload HookPayload) string
 				}
 			}()
 
-			hr := ExecuteHandler(handlers[i], payload)
+			hr := ExecuteHandler(ctx, handlers[i], payload)
 			if hr.AdditionalContext != nil && *hr.AdditionalContext != "" {
 				parts = append(parts, *hr.AdditionalContext)
 			}
@@ -174,22 +186,25 @@ func executeContextPhase(handlers []ResolvedHandler, payload HookPayload) string
 // fireSideEffects launches side-effect handlers in goroutines.
 // Each goroutine has its own defer/recover boundary (ARCH-7).
 // Side effects do NOT block the response.
-func fireSideEffects(handlers []ResolvedHandler, payload HookPayload) {
-	runSideEffects(handlers, payload, false)
+func fireSideEffects(ctx context.Context, handlers []ResolvedHandler, payload HookPayload) {
+	runSideEffects(ctx, handlers, payload, false)
 }
 
 // FireSideEffectsSync is like fireSideEffects but waits for completion.
 // Used in tests to verify side effects ran without blocking dispatch.
-func FireSideEffectsSync(handlers []ResolvedHandler, payload HookPayload) {
-	runSideEffects(handlers, payload, true)
+func FireSideEffectsSync(ctx context.Context, handlers []ResolvedHandler, payload HookPayload) {
+	runSideEffects(ctx, handlers, payload, true)
 }
 
 // runSideEffects is the shared implementation for side-effect execution.
 // If wait is true, blocks until all goroutines complete.
-func runSideEffects(handlers []ResolvedHandler, payload HookPayload, wait bool) {
+func runSideEffects(ctx context.Context, handlers []ResolvedHandler, payload HookPayload, wait bool) {
 	var wg sync.WaitGroup
 
 	for i := range handlers {
+		if ctx.Err() != nil {
+			break
+		}
 		if handlers[i].Phase != PhaseSideEffect {
 			continue
 		}
@@ -202,7 +217,7 @@ func runSideEffects(handlers []ResolvedHandler, payload HookPayload, wait bool) 
 					Logger().Error("panic in side-effect handler", "handler", h.Name, "recovered", fmt.Sprintf("%v", r))
 				}
 			}()
-			ExecuteHandler(h, payload)
+			ExecuteHandler(ctx, h, payload)
 		}(handlers[i])
 	}
 

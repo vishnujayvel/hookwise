@@ -102,12 +102,40 @@ func newDispatchCmd() *cobra.Command {
 					return core.DispatchResult{ExitCode: 0}
 				}
 
+				// Resolve dispatch timeout (0 = default 500ms, negative = no timeout)
+				timeoutMs := config.Dispatch.TimeoutMs
+				if timeoutMs == 0 {
+					timeoutMs = core.DefaultDispatchTimeoutMs
+				}
+
+				var ctx context.Context
+				var cancel context.CancelFunc
+				if timeoutMs > 0 {
+					ctx, cancel = context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
+				} else {
+					ctx, cancel = context.WithCancel(context.Background())
+				}
+				// cancel is NOT deferred: side-effect goroutines and the analytics
+				// goroutine share this context and should keep running until os.Exit
+				// terminates the process. On timeout, WithTimeout cancels automatically.
+				_ = cancel
+				dispatchStart := time.Now()
+
 				// Run the three-phase dispatch engine
-				dispatchResult := core.Dispatch(eventType, payload, config)
+				dispatchResult := core.Dispatch(ctx, eventType, payload, config)
+
+				if ctx.Err() == context.DeadlineExceeded {
+					elapsed := time.Since(dispatchStart)
+					core.Logger().Warn("dispatch timeout",
+						"event_type", eventType,
+						"timeout_ms", timeoutMs,
+						"elapsed_ms", elapsed.Milliseconds(),
+					)
+				}
 
 				// Analytics recording (non-blocking, ARCH-7).
 				if config.Analytics.Enabled && payload.SessionID != "" {
-					go recordAnalytics(eventType, payload, config.Analytics.DBPath)
+					go recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath)
 				}
 
 				// Signal TUI launch intent (executed synchronously after SafeDispatch)
@@ -129,9 +157,6 @@ func newDispatchCmd() *cobra.Command {
 				launchTUIIfNeeded(tuiLaunchMethod)
 			}
 
-			// Brief grace period for side-effect goroutines (analytics, coaching)
-			// to finish before the process exits.
-			time.Sleep(50 * time.Millisecond)
 			os.Exit(result.ExitCode)
 			return nil
 		},
@@ -144,12 +169,16 @@ func newDispatchCmd() *cobra.Command {
 
 // recordAnalytics writes session/event data to Dolt in a background goroutine.
 // Fail-open: any error is logged but never surfaces to the user (ARCH-1).
-func recordAnalytics(eventType string, payload core.HookPayload, dataDir string) {
+func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string) {
 	defer func() {
 		if r := recover(); r != nil {
 			core.Logger().Error("panic in analytics recording", "recovered", fmt.Sprintf("%v", r))
 		}
 	}()
+
+	if ctx.Err() != nil {
+		return
+	}
 
 	db, err := analytics.Open(dataDir)
 	if err != nil {
@@ -158,7 +187,6 @@ func recordAnalytics(eventType string, payload core.HookPayload, dataDir string)
 	}
 	defer db.Close()
 
-	ctx := context.Background()
 	a := analytics.NewAnalytics(db)
 	now := time.Now()
 
@@ -489,8 +517,6 @@ func getFeedInterval(cfg *core.HooksConfig, feedName string) int {
 		return 0
 	}
 	switch feedName {
-	case "pulse":
-		return cfg.Feeds.Pulse.IntervalSeconds
 	case "project":
 		return cfg.Feeds.Project.IntervalSeconds
 	case "calendar":
@@ -499,8 +525,6 @@ func getFeedInterval(cfg *core.HooksConfig, feedName string) int {
 		return cfg.Feeds.News.IntervalSeconds
 	case "insights":
 		return cfg.Feeds.Insights.IntervalSeconds
-	case "practice":
-		return cfg.Feeds.Practice.IntervalSeconds
 	case "weather":
 		return cfg.Feeds.Weather.IntervalSeconds
 	case "memories":
@@ -708,8 +732,6 @@ func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary
 		return renderProjectSegment(feedCache)
 	case "calendar":
 		return renderCalendarSegment(feedCache)
-	case "pulse":
-		return renderPulseSegment(feedCache)
 	case "weather":
 		return renderWeatherSegment(feedCache)
 	case "insights":
@@ -905,35 +927,6 @@ func calendarRelativeTime(now, eventStart time.Time) string {
 		return "tomorrow " + timeLabel
 	}
 	return eventStart.Format("Mon") + " " + timeLabel
-}
-
-// renderPulseSegment renders the pulse segment from feed cache data.
-func renderPulseSegment(feedCache map[string]interface{}) string {
-	data := feedData(feedCache, "pulse")
-	if data == nil {
-		return ""
-	}
-
-	sessionCount, ok := data["session_count"]
-	if !ok {
-		return ""
-	}
-
-	var count int
-	switch v := sessionCount.(type) {
-	case float64:
-		count = int(v)
-	case int:
-		count = v
-	default:
-		return ""
-	}
-
-	suffix := "sessions"
-	if count == 1 {
-		suffix = "session"
-	}
-	return ansiGreen + fmt.Sprintf("pulse: %d %s", count, suffix) + ansiReset
 }
 
 // renderInsightsSegment renders a compact one-line insights summary.

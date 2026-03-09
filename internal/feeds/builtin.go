@@ -25,23 +25,6 @@ import (
 // Each returns placeholder data; actual API/data-fetching logic is deferred.
 // ---------------------------------------------------------------------------
 
-// PulseProducer returns session count and recent activity summary.
-type PulseProducer struct{}
-
-func (p *PulseProducer) Name() string { return "pulse" }
-func (p *PulseProducer) Produce(_ context.Context) (interface{}, error) {
-	return map[string]interface{}{
-		"type":      "pulse",
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-		"data": map[string]interface{}{
-			"session_count":   0,
-			"active_sessions": 0,
-			"recent_activity": "No recent activity (placeholder)",
-			"source":          "placeholder",
-		},
-	}, nil
-}
-
 // ProjectProducer returns project directory info by running git commands.
 // It implements ConfigAware to receive feed configuration.
 type ProjectProducer struct {
@@ -735,24 +718,6 @@ func WeatherTestFixture() map[string]interface{} {
 	}
 }
 
-// PracticeProducer returns practice session summary.
-type PracticeProducer struct{}
-
-func (p *PracticeProducer) Name() string { return "practice" }
-func (p *PracticeProducer) Produce(_ context.Context) (interface{}, error) {
-	return map[string]interface{}{
-		"type":      "practice",
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-		"data": map[string]interface{}{
-			"total_sessions":   0,
-			"streak_days":      0,
-			"last_practice_at": nil,
-			"focus_area":       "none",
-			"source":           "placeholder",
-		},
-	}, nil
-}
-
 // MemoriesProducer returns placeholder memories.
 type MemoriesProducer struct{}
 
@@ -1188,14 +1153,12 @@ func InsightsTestFixture() map[string]interface{} {
 	}
 }
 
-// RegisterBuiltins registers all 8 built-in feed producers with the registry.
+// RegisterBuiltins registers all 6 built-in feed producers with the registry.
 func RegisterBuiltins(r *Registry) {
-	r.Register(&PulseProducer{})
 	r.Register(&ProjectProducer{})
 	r.Register(&NewsProducer{})
 	r.Register(&CalendarProducer{})
 	r.Register(&WeatherProducer{})
-	r.Register(&PracticeProducer{})
 	r.Register(&MemoriesProducer{})
 	r.Register(&InsightsProducer{})
 }
