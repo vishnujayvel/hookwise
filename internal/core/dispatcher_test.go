@@ -1638,9 +1638,9 @@ func TestDispatch_CancelledContext_ReturnsExitZero(t *testing.T) {
 
 func TestDispatch_DeadlineExceeded_ReturnsExitZero(t *testing.T) {
 	// A context past its deadline should fail-open
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Microsecond)
 	defer cancel()
-	time.Sleep(1 * time.Millisecond) // ensure deadline has passed
+	time.Sleep(5 * time.Millisecond) // ensure deadline has passed
 
 	config := emptyConfig()
 	payload := preToolUsePayload("Read", nil)
@@ -1747,13 +1747,10 @@ func TestDispatch_ContextPropagatedToContextPhase(t *testing.T) {
 // =============================================================================
 
 func TestDispatchConfig_ZeroTimeout_UsesDefault(t *testing.T) {
-	// TimeoutMs == 0 (Go zero value / unset) should use DefaultDispatchTimeoutMs
+	// Zero value is preserved in struct; CLI resolves to default
 	cfg := DispatchConfig{TimeoutMs: 0}
-	effective := cfg.TimeoutMs
-	if effective == 0 {
-		effective = DefaultDispatchTimeoutMs
-	}
-	assert.Equal(t, 500, effective)
+	assert.Equal(t, 0, cfg.TimeoutMs, "zero value should be preserved in struct")
+	assert.Equal(t, 500, DefaultDispatchTimeoutMs, "default constant should be 500ms")
 }
 
 func TestDispatchConfig_CustomTimeout_Respected(t *testing.T) {
@@ -1768,9 +1765,9 @@ func TestDispatchConfig_NegativeTimeout_NoTimeout(t *testing.T) {
 }
 
 func TestDispatchConfig_InHooksConfig(t *testing.T) {
-	// Verify DispatchConfig is part of HooksConfig and default config works
+	// Verify DispatchConfig is part of HooksConfig and default config sets the timeout
 	cfg := GetDefaultConfig()
-	assert.Equal(t, 0, cfg.Dispatch.TimeoutMs, "default config should have zero (meaning use default)")
+	assert.Equal(t, DefaultDispatchTimeoutMs, cfg.Dispatch.TimeoutMs, "default config should set dispatch timeout")
 }
 
 func TestDispatchConfig_YAMLUnmarshal(t *testing.T) {

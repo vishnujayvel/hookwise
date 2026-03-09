@@ -156,6 +156,7 @@ func ExecuteHandler(ctx context.Context, handler ResolvedHandler, payload HookPa
 
 // executeBuiltinHandler handles builtin-type handlers.
 // If the handler has an action object, return it as the result.
+// ctx is accepted for API consistency with other handler types.
 func executeBuiltinHandler(ctx context.Context, handler ResolvedHandler, payload HookPayload) HandlerResult {
 	Logger().Debug("executing builtin handler", "handler", handler.Name, "module", handler.Module)
 

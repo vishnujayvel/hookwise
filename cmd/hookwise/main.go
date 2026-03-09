@@ -115,7 +115,10 @@ func newDispatchCmd() *cobra.Command {
 				} else {
 					ctx, cancel = context.WithCancel(context.Background())
 				}
-				defer cancel()
+				// cancel is NOT deferred: side-effect goroutines and the analytics
+				// goroutine share this context and should keep running until os.Exit
+				// terminates the process. On timeout, WithTimeout cancels automatically.
+				_ = cancel
 				dispatchStart := time.Now()
 
 				// Run the three-phase dispatch engine

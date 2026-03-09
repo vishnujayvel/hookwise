@@ -30,6 +30,7 @@ var knownSections = map[string]bool{
 	"feeds":             true,
 	"daemon":            true,
 	"tui":               true,
+	"dispatch":          true,
 }
 
 // --- Default Config ---
@@ -146,6 +147,9 @@ func GetDefaultConfig() HooksConfig {
 		TUI: TUIConfig{
 			AutoLaunch:   false,
 			LaunchMethod: "newWindow",
+		},
+		Dispatch: DispatchConfig{
+			TimeoutMs: DefaultDispatchTimeoutMs,
 		},
 	}
 }
