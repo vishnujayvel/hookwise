@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/core"
+	"github.com/vishnujayvel/hookwise/internal/feeds"
 )
 
 // ---------------------------------------------------------------------------
@@ -465,7 +466,7 @@ func TestStatusLineWithFeedCache(t *testing.T) {
 	// Write weather feed cache with real data.
 	weatherEnvelope := map[string]interface{}{
 		"type":      "weather",
-		"timestamp": "2026-03-07T10:00:00Z",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
 			"temperature":     72.0,
 			"temperatureUnit": "fahrenheit",
@@ -480,7 +481,7 @@ func TestStatusLineWithFeedCache(t *testing.T) {
 	// Write project feed cache with real data.
 	projectEnvelope := map[string]interface{}{
 		"type":      "project",
-		"timestamp": "2026-03-07T10:00:00Z",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
 			"name":   "hookwise",
 			"branch": "main",
@@ -578,7 +579,7 @@ func TestStatusLineWeatherSegment(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"weather": map[string]interface{}{
 			"type":      "weather",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"temperature":     55.0,
 				"temperatureUnit": "fahrenheit",
@@ -610,7 +611,7 @@ func TestStatusLineWeatherZeroTemp(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"weather": map[string]interface{}{
 			"type":      "weather",
-			"timestamp": "2026-01-15T08:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"temperature":     0.0,
 				"temperatureUnit": "fahrenheit",
@@ -643,7 +644,7 @@ func TestStatusLineWeatherCelsius(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"weather": map[string]interface{}{
 			"type":      "weather",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"temperature":     22.0,
 				"temperatureUnit": "celsius",
@@ -675,7 +676,7 @@ func TestStatusLineProjectSegment(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"project": map[string]interface{}{
 			"type":      "project",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"name":   "myapp",
 				"branch": "feature/xyz",
@@ -704,7 +705,7 @@ func TestStatusLineCalendarSegment(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"calendar": map[string]interface{}{
 			"type":      "calendar",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"events": []interface{}{
 					map[string]interface{}{
@@ -742,7 +743,7 @@ func TestStatusLineCalendarSegmentEmpty(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"calendar": map[string]interface{}{
 			"type":      "calendar",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"events":     []interface{}{},
 				"next_event": nil,
@@ -761,7 +762,7 @@ func TestStatusLineCalendarSegmentStringEvent(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"calendar": map[string]interface{}{
 			"type":      "calendar",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"next_event": "Sprint Review in 1h",
 			},
@@ -784,7 +785,7 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"weather": map[string]interface{}{
 			"type":      "weather",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"temperature":     0.0,
 				"temperatureUnit": "fahrenheit",
@@ -795,7 +796,7 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 		},
 		"project": map[string]interface{}{
 			"type":      "project",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"name":   "unknown (placeholder)",
 				"branch": "main",
@@ -804,7 +805,7 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 		},
 		"calendar": map[string]interface{}{
 			"type":      "calendar",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"next_event": nil,
 				"source":     "placeholder",
@@ -938,7 +939,7 @@ func TestStatusLineInsightsSegment(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"insights": map[string]interface{}{
 			"type":      "insights",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"total_sessions":       72,
 				"total_messages":       486,
@@ -988,7 +989,7 @@ func TestStatusLineInsightsFrictionSegment(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"insights": map[string]interface{}{
 			"type":      "insights",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"total_sessions":  5,
 				"friction_total":  5,
@@ -1018,7 +1019,7 @@ func TestStatusLineInsightsFrictionClean(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"insights": map[string]interface{}{
 			"type":      "insights",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"total_sessions":  10,
 				"friction_total":  12,
@@ -1044,7 +1045,7 @@ func TestStatusLineInsightsPaceSegment(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"insights": map[string]interface{}{
 			"type":      "insights",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"total_messages":    470,
 				"total_lines_added": 5400,
@@ -1071,7 +1072,7 @@ func TestStatusLineInsightsTrendSegment(t *testing.T) {
 	feedCache := map[string]interface{}{
 		"insights": map[string]interface{}{
 			"type":      "insights",
-			"timestamp": "2026-03-07T10:00:00Z",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"data": map[string]interface{}{
 				"top_tools": []interface{}{
 					map[string]interface{}{"name": "Bash", "count": 50},
@@ -1107,7 +1108,7 @@ func TestStatusLineInsightsTrendPeakHour(t *testing.T) {
 		feedCache := map[string]interface{}{
 			"insights": map[string]interface{}{
 				"type":      "insights",
-				"timestamp": "2026-03-07T10:00:00Z",
+				"timestamp": time.Now().UTC().Format(time.RFC3339),
 				"data": map[string]interface{}{
 					"top_tools": []interface{}{
 						map[string]interface{}{"name": "Read", "count": 10},
@@ -1170,7 +1171,7 @@ func TestStatusLineMultiLine(t *testing.T) {
 
 	insightsEnvelope := map[string]interface{}{
 		"type":      "insights",
-		"timestamp": "2026-03-08T10:00:00Z",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
 			"total_sessions":       72,
 			"total_messages":       486,
@@ -1468,6 +1469,126 @@ status_line:
 	assert.Contains(t, output, "INFO  status-line: all 2 feed-backed segments have real data", "doctor should report all segments healthy")
 	// No warnings — summary should NOT have "warning(s)".
 	assert.NotContains(t, output, "warning(s)", "doctor with all healthy feeds should not show warnings")
+}
+
+// ---------------------------------------------------------------------------
+// 32. Daemon CLI subcommands exist
+// ---------------------------------------------------------------------------
+
+func TestDaemonCommandExists(t *testing.T) {
+	rootCmd := newRootCmd()
+	daemonCmd, _, err := rootCmd.Find([]string{"daemon"})
+	require.NoError(t, err, "daemon command not found")
+	assert.Equal(t, "daemon", daemonCmd.Use)
+}
+
+func TestDaemonSubcommands(t *testing.T) {
+	rootCmd := newRootCmd()
+	daemonCmd, _, err := rootCmd.Find([]string{"daemon"})
+	require.NoError(t, err, "daemon command not found")
+
+	subCmds := make(map[string]bool)
+	for _, c := range daemonCmd.Commands() {
+		subCmds[c.Use] = true
+	}
+
+	for _, name := range []string{"start", "stop", "run"} {
+		assert.True(t, subCmds[name], "daemon should have '%s' subcommand", name)
+	}
+}
+
+func TestDaemonRunIsHidden(t *testing.T) {
+	rootCmd := newRootCmd()
+	daemonCmd, _, _ := rootCmd.Find([]string{"daemon"})
+
+	var found bool
+	for _, c := range daemonCmd.Commands() {
+		if c.Use == "run" {
+			found = true
+			assert.True(t, c.Hidden, "daemon run should be hidden")
+			break
+		}
+	}
+	assert.True(t, found, "daemon run subcommand not found")
+}
+
+func TestDaemonRunHasConfigFlag(t *testing.T) {
+	rootCmd := newRootCmd()
+	daemonCmd, _, _ := rootCmd.Find([]string{"daemon"})
+
+	var found bool
+	for _, c := range daemonCmd.Commands() {
+		if c.Use == "run" {
+			found = true
+			assert.NotNil(t, c.Flags().Lookup("config"), "daemon run should have --config flag")
+			break
+		}
+	}
+	assert.True(t, found, "daemon run subcommand not found")
+}
+
+func TestDaemonStopNotRunning(t *testing.T) {
+	// daemon stop when no daemon is running should report "not running".
+	// We override the socket path to a non-existent path so it's never running.
+	// Since we can't easily override the socket path in the CLI, we test via
+	// the feeds.DaemonClient directly.
+	tmpDir := t.TempDir()
+	socketPath := filepath.Join(tmpDir, "nonexistent.sock")
+	client := feeds.NewDaemonClient(socketPath)
+	assert.False(t, client.IsRunning(), "client should not be running on a nonexistent socket")
+}
+
+// ---------------------------------------------------------------------------
+// 33. Doctor uses socket-based daemon check
+// ---------------------------------------------------------------------------
+
+func TestDoctorDaemonNotRunning(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	defer os.Chdir(origDir)
+
+	stateDir := filepath.Join(tmpDir, ".hookwise")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+	os.MkdirAll(stateDir, 0o700)
+
+	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
+	os.WriteFile(configPath, []byte("version: 1\nguards: []\n"), 0o644)
+
+	output, err := executeCommand("doctor")
+	require.NoError(t, err, "doctor failed: output: %s", output)
+
+	// Should report daemon not running (socket-based check).
+	assert.Contains(t, output, "daemon: not running", "doctor should report daemon not running")
+	assert.Contains(t, output, "hookwise daemon start", "doctor should suggest 'hookwise daemon start'")
+}
+
+// ---------------------------------------------------------------------------
+// 34. Auto-start marker file caching
+// ---------------------------------------------------------------------------
+
+func TestEnsureDaemonWithCache_MarkerFileCaching(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Override the state dir so marker and socket paths resolve under tmpDir.
+	t.Setenv("HOOKWISE_STATE_DIR", tmpDir)
+
+	markerPath := filepath.Join(tmpDir, "daemon-alive.marker")
+
+	// Write a fresh marker file (less than 60s old).
+	require.NoError(t, os.WriteFile(markerPath, []byte("ok"), 0o600))
+
+	// ensureDaemonWithCache should see the fresh marker, verify the socket
+	// is not reachable (no daemon running in tmpDir), and attempt to start
+	// one. Since no binary is running, the marker file fast-path is tested
+	// through the stale-socket fallthrough path.
+	ensureDaemonWithCache("/nonexistent/config.yaml")
+
+	// Marker should still exist.
+	_, err := os.Stat(markerPath)
+	assert.NoError(t, err, "marker file should still exist after cache check")
 }
 
 // stripANSI removes ANSI escape sequences from a string.

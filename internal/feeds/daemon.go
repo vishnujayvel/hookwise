@@ -1,6 +1,7 @@
 package feeds
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -28,9 +29,18 @@ type Daemon struct {
 	registry      *Registry
 	pidFile       string
 	cacheDir      string // directory for JSON cache files
+	socketPath    string
+	server        *SocketServer
+	startedAt     time.Time
 	staggerOffset time.Duration
 	stopCh        chan struct{}
 	wg            sync.WaitGroup
+	shutdownOnce  sync.Once // ensures stopCh is closed exactly once
+
+	// Idle timeout fields (IDLE-1).
+	idleTimer       *time.Timer
+	idleMu          sync.Mutex
+	idleTimeoutOverride time.Duration // test-only: overrides InactivityTimeoutMinutes
 }
 
 // NewDaemon creates a new daemon with the given configuration and registry.
@@ -43,6 +53,7 @@ func NewDaemon(config core.DaemonConfig, feeds core.FeedsConfig, registry *Regis
 		registry:      registry,
 		pidFile:       core.DefaultPIDPath,
 		cacheDir:      filepath.Dir(core.DefaultCachePath),
+		socketPath:    core.DefaultSocketPath,
 		staggerOffset: defaultStaggerOffset,
 	}
 }
@@ -57,55 +68,67 @@ func (d *Daemon) SetCacheDir(path string) {
 	d.cacheDir = path
 }
 
+// SetSocketPath overrides the socket file path (used in tests).
+func (d *Daemon) SetSocketPath(path string) {
+	d.socketPath = path
+}
+
 // SetStaggerOffset overrides the stagger delay between feed goroutine starts
 // (used in tests to speed up execution).
 func (d *Daemon) SetStaggerOffset(offset time.Duration) {
 	d.staggerOffset = offset
 }
 
-// Start writes the PID file and launches feed goroutines.
-// Returns an error if the daemon is already running (PID file exists and
-// process is alive).
+// SetIdleTimeout overrides the idle timeout duration (used in tests).
+// Must be called before Start().
+func (d *Daemon) SetIdleTimeout(timeout time.Duration) {
+	d.idleTimeoutOverride = timeout
+}
+
+// triggerShutdown closes stopCh exactly once to initiate graceful shutdown.
+// All shutdown paths route through this method via shutdownOnce.
+func (d *Daemon) triggerShutdown() {
+	d.shutdownOnce.Do(func() {
+		close(d.stopCh)
+	})
+}
+
+// Start binds the unix socket (single-instance authority per SOCKET-1),
+// writes a PID file for debugging visibility, installs signal handlers,
+// and launches feed goroutines.
 func (d *Daemon) Start() error {
-	// Ensure parent directory exists.
-	if err := core.EnsureDir(filepath.Dir(d.pidFile), core.DefaultDirMode); err != nil {
-		return fmt.Errorf("feeds: ensure pid dir: %w", err)
+	// MIGRATE-1: Detect and shut down old PID-only daemon before socket bind.
+	d.migrateOldDaemon()
+
+	d.startedAt = time.Now()
+
+	// Initialize stopCh before creating the socket server so the shutdown
+	// callback never references a nil channel. Only create if not already
+	// set (a failed second Start() must not clobber the running daemon's channel).
+	if d.stopCh == nil {
+		d.stopCh = make(chan struct{})
 	}
 
-	// Attempt to create PID file exclusively to prevent double-start.
-	f, err := os.OpenFile(d.pidFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		if os.IsExist(err) {
-			// PID file exists — check if the process is still alive.
-			if d.isProcessAlive() {
-				return fmt.Errorf("feeds: daemon already running (pid file %s)", d.pidFile)
-			}
-			// Stale PID file — remove and retry.
-			os.Remove(d.pidFile)
-			f, err = os.OpenFile(d.pidFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-			if err != nil {
-				return fmt.Errorf("feeds: create pid file after stale cleanup: %w", err)
-			}
-		} else {
-			return fmt.Errorf("feeds: create pid file: %w", err)
-		}
+	// Create SocketServer — socket bind IS the single-instance check (SOCKET-1).
+	d.server = NewSocketServer(d.socketPath, func() {
+		d.triggerShutdown()
+	}, d.startedAt)
+
+	if err := d.server.Start(); err != nil {
+		return fmt.Errorf("feeds: daemon already running: %w", err)
 	}
 
-	pid := os.Getpid()
-	if _, err := fmt.Fprintf(f, "%d\n", pid); err != nil {
-		f.Close()
-		os.Remove(d.pidFile)
-		return fmt.Errorf("feeds: write pid: %w", err)
+	// Write PID file for debugging visibility only (not for liveness).
+	if err := d.writePIDFile(); err != nil {
+		// Non-fatal: PID file is informational. Log and continue.
+		core.Logger().Error("feeds: failed to write pid file", "error", err)
 	}
-	if err := f.Close(); err != nil {
-		os.Remove(d.pidFile)
-		return fmt.Errorf("feeds: close pid file: %w", err)
-	}
-
-	d.stopCh = make(chan struct{})
 
 	// Install signal handler for graceful shutdown.
 	d.installSignalHandler()
+
+	// Start idle monitor if configured.
+	d.startIdleMonitor()
 
 	// Launch feed goroutines.
 	d.runAllFeeds()
@@ -113,14 +136,52 @@ func (d *Daemon) Start() error {
 	return nil
 }
 
-// Stop signals all feed goroutines to stop, waits for them to finish,
-// and removes the PID file.
+// Stop gracefully shuts down the daemon: stops the socket server, signals
+// feed goroutines to stop, waits for completion, and cleans up the PID file.
 func (d *Daemon) Stop() error {
+	// Signal all goroutines to exit via centralized shutdown.
 	if d.stopCh != nil {
-		close(d.stopCh)
+		d.triggerShutdown()
 	}
-	d.wg.Wait()
+
+	// Stop the idle timer if running.
+	d.idleMu.Lock()
+	if d.idleTimer != nil {
+		d.idleTimer.Stop()
+	}
+	d.idleMu.Unlock()
+
+	// Shut down the socket server with a timeout.
+	if d.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := d.server.Shutdown(ctx); err != nil {
+			core.Logger().Error("feeds: socket server shutdown error", "error", err)
+		}
+	}
+
+	// Wait for feed goroutines with a timeout.
+	done := make(chan struct{})
+	go func() {
+		d.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All goroutines finished.
+	case <-time.After(10 * time.Second):
+		core.Logger().Error("feeds: timed out waiting for feed goroutines to stop")
+	}
+
+	// Remove PID file (socket file is already removed by SocketServer.Shutdown).
 	return d.removePIDFile()
+}
+
+// StopCh returns the stop channel, which is closed when the daemon is shutting down.
+// Used by the CLI `daemon run` command to block until shutdown.
+func (d *Daemon) StopCh() <-chan struct{} {
+	return d.stopCh
 }
 
 // IsRunning checks whether the daemon process identified by the PID file is
@@ -168,6 +229,117 @@ func StopByPIDFile(pidFile string) error {
 	return nil
 }
 
+// idleTimeout returns the effective idle timeout duration, preferring
+// the test override if set.
+func (d *Daemon) idleTimeout() time.Duration {
+	if d.idleTimeoutOverride > 0 {
+		return d.idleTimeoutOverride
+	}
+	return time.Duration(d.config.InactivityTimeoutMinutes) * time.Minute
+}
+
+// resetIdleTimer resets the idle timeout timer. Called after each producer
+// poll completes (IDLE-1: idle timer resets on producer poll completion).
+func (d *Daemon) resetIdleTimer() {
+	d.idleMu.Lock()
+	defer d.idleMu.Unlock()
+	if d.idleTimer != nil {
+		d.idleTimer.Reset(d.idleTimeout())
+	}
+}
+
+// startIdleMonitor starts the idle timeout goroutine if InactivityTimeoutMinutes
+// is configured (or idleTimeoutOverride is set). When the timer fires without
+// being reset, the daemon shuts down.
+func (d *Daemon) startIdleMonitor() {
+	if d.config.InactivityTimeoutMinutes <= 0 && d.idleTimeoutOverride <= 0 {
+		return
+	}
+
+	timeout := d.idleTimeout()
+
+	d.idleMu.Lock()
+	d.idleTimer = time.NewTimer(timeout)
+	d.idleMu.Unlock()
+
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		select {
+		case <-d.idleTimer.C:
+			core.Logger().Info("feeds: idle timeout reached, shutting down",
+				"timeout_minutes", d.config.InactivityTimeoutMinutes)
+			d.triggerShutdown()
+		case <-d.stopCh:
+			// Daemon is shutting down for another reason.
+		}
+	}()
+}
+
+// migrateOldDaemon detects and shuts down an old PID-only daemon (MIGRATE-1).
+// An old-style daemon is identified by: PID file exists AND socket file does NOT exist.
+// This runs BEFORE socket bind, so it doesn't interfere with new startup.
+func (d *Daemon) migrateOldDaemon() {
+	// Check if PID file exists.
+	_, pidErr := os.Stat(d.pidFile)
+	if pidErr != nil {
+		return // No PID file — nothing to migrate.
+	}
+
+	// Check if socket file exists.
+	_, sockErr := os.Stat(d.socketPath)
+	if sockErr == nil {
+		return // Socket exists — this is a new-style daemon, not an old one.
+	}
+
+	// Old-style daemon detected: PID file exists, socket does not.
+	core.Logger().Info("feeds: detected old-style daemon, attempting migration")
+
+	pid := d.readPID()
+	if pid <= 0 {
+		// Invalid PID file — just clean up.
+		os.Remove(d.pidFile)
+		return
+	}
+
+	// Verify the process is alive.
+	if !isProcessAliveByPID(pid) {
+		// Stale PID file — clean up.
+		core.Logger().Info("feeds: old daemon not running, removing stale PID file", "pid", pid)
+		os.Remove(d.pidFile)
+		return
+	}
+
+	// Send SIGTERM and wait for the old daemon to exit.
+	core.Logger().Info("feeds: sending SIGTERM to old daemon", "pid", pid)
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		os.Remove(d.pidFile)
+		return
+	}
+
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		core.Logger().Error("feeds: failed to send SIGTERM to old daemon", "pid", pid, "error", err)
+		os.Remove(d.pidFile)
+		return
+	}
+
+	// Wait up to 3 seconds for the process to exit.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if !isProcessAliveByPID(pid) {
+			core.Logger().Info("feeds: old daemon exited", "pid", pid)
+			os.Remove(d.pidFile)
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Process didn't exit in time — remove PID file anyway and proceed.
+	core.Logger().Error("feeds: old daemon did not exit within timeout", "pid", pid)
+	os.Remove(d.pidFile)
+}
+
 // installSignalHandler listens for SIGTERM/SIGINT and triggers graceful shutdown.
 func (d *Daemon) installSignalHandler() {
 	sigCh := make(chan os.Signal, 1)
@@ -179,19 +351,24 @@ func (d *Daemon) installSignalHandler() {
 		select {
 		case <-sigCh:
 			// Received signal — trigger shutdown.
-			if d.stopCh != nil {
-				select {
-				case <-d.stopCh:
-					// Already closed.
-				default:
-					close(d.stopCh)
-				}
-			}
+			d.triggerShutdown()
 		case <-d.stopCh:
 			// Daemon is stopping normally.
 		}
 		signal.Stop(sigCh)
 	}()
+}
+
+// writePIDFile writes the current process PID to the PID file.
+// This is for debugging visibility only — the socket bind is the
+// authoritative single-instance check (SOCKET-1).
+func (d *Daemon) writePIDFile() error {
+	if err := core.EnsureDir(filepath.Dir(d.pidFile), core.DefaultDirMode); err != nil {
+		return fmt.Errorf("feeds: ensure pid dir: %w", err)
+	}
+
+	pid := os.Getpid()
+	return os.WriteFile(d.pidFile, []byte(fmt.Sprintf("%d\n", pid)), 0o600)
 }
 
 // readPID reads the PID from the PID file, returning 0 on any error.

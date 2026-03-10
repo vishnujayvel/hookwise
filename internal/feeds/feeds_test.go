@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,14 +50,19 @@ func newMockProducer(name string, data interface{}) *mockProducer {
 	return &mockProducer{name: name, data: data}
 }
 
-// newTestDaemon creates a Daemon wired to temp directories for PID file and cache.
+// newTestDaemon creates a Daemon wired to temp directories for PID file, cache,
+// and socket path. Uses /tmp for socket to avoid macOS 104-byte path limit.
 func newTestDaemon(t *testing.T, registry *Registry) (*Daemon, string) {
 	t.Helper()
 	tmpDir := t.TempDir()
 
+	// Socket paths must be short (macOS 104-byte limit), so use /tmp.
+	sockDir := socketTempDir(t)
+
 	d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, registry)
 	d.SetPIDFile(filepath.Join(tmpDir, "daemon.pid"))
 	d.SetCacheDir(filepath.Join(tmpDir, "cache"))
+	d.SetSocketPath(filepath.Join(sockDir, "d.sock"))
 
 	return d, tmpDir
 }
@@ -182,9 +189,16 @@ func TestDaemon_SignalHandling(t *testing.T) {
 	mp := newMockProducer("sig-feed", map[string]interface{}{"status": "ok"})
 	r.Register(mp)
 
-	d, tmpDir := newTestDaemon(t, r)
+	d, _ := newTestDaemon(t, r)
 
 	require.NoError(t, d.Start())
+	t.Cleanup(func() {
+		// Clean up socket server + PID file if signal handler fired.
+		if d.server != nil {
+			_ = d.server.Shutdown(context.Background())
+		}
+		_ = d.removePIDFile()
+	})
 
 	// Wait briefly for goroutines to start.
 	time.Sleep(200 * time.Millisecond)
@@ -208,10 +222,6 @@ func TestDaemon_SignalHandling(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("daemon did not shut down within timeout after SIGTERM")
 	}
-
-	// Clean up PID file manually since Stop() wasn't called (signal handler closed stopCh).
-	pidPath := filepath.Join(tmpDir, "daemon.pid")
-	os.Remove(pidPath)
 }
 
 // ---------------------------------------------------------------------------
@@ -566,6 +576,199 @@ func TestDaemon_IsEnabled(t *testing.T) {
 	assert.True(t, d.isEnabled("project"), "project should be enabled")
 	assert.False(t, d.isEnabled("weather"), "weather should be disabled")
 	assert.True(t, d.isEnabled("unknown-custom-feed"), "unknown feeds default to enabled (fail-open)")
+}
+
+// ---------------------------------------------------------------------------
+// Test 21: Socket-based start — socket exists, /health responds
+// ---------------------------------------------------------------------------
+
+func TestDaemon_SocketBasedStart(t *testing.T) {
+	r := NewRegistry()
+	mp := newMockProducer("test-feed", map[string]interface{}{"value": 1})
+	r.Register(mp)
+
+	d, _ := newTestDaemon(t, r)
+
+	require.NoError(t, d.Start())
+	t.Cleanup(func() { _ = d.Stop() })
+
+	// Verify the socket file exists.
+	_, err := os.Stat(d.socketPath)
+	require.NoError(t, err, "socket file should exist after Start")
+
+	// Verify /health responds via the unix socket.
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial("unix", d.socketPath)
+			},
+		},
+		Timeout: 2 * time.Second,
+	}
+
+	resp, err := client.Get("http://unix/health")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	var health map[string]interface{}
+	require.NoError(t, json.Unmarshal(body, &health))
+	assert.Equal(t, "ok", health["status"])
+	assert.NotZero(t, health["pid"])
+}
+
+// ---------------------------------------------------------------------------
+// Test 22: Socket bind prevents double-start (SOCKET-1)
+// ---------------------------------------------------------------------------
+
+func TestDaemon_SocketBindPreventsDoubleStart(t *testing.T) {
+	r := NewRegistry()
+	sockDir := socketTempDir(t)
+	socketPath := filepath.Join(sockDir, "d.sock")
+
+	// First daemon starts successfully.
+	d1 := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, r)
+	d1.SetPIDFile(filepath.Join(t.TempDir(), "d1.pid"))
+	d1.SetCacheDir(filepath.Join(t.TempDir(), "cache1"))
+	d1.SetSocketPath(socketPath)
+
+	require.NoError(t, d1.Start())
+	t.Cleanup(func() { _ = d1.Stop() })
+
+	// Second daemon with the same socket path should fail.
+	d2 := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, r)
+	d2.SetPIDFile(filepath.Join(t.TempDir(), "d2.pid"))
+	d2.SetCacheDir(filepath.Join(t.TempDir(), "cache2"))
+	d2.SetSocketPath(socketPath)
+
+	err := d2.Start()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already running")
+}
+
+// ---------------------------------------------------------------------------
+// Test 23: Graceful shutdown cleans up socket + PID file
+// ---------------------------------------------------------------------------
+
+func TestDaemon_GracefulShutdown(t *testing.T) {
+	r := NewRegistry()
+	mp := newMockProducer("cleanup-feed", map[string]interface{}{"ok": true})
+	r.Register(mp)
+
+	d, tmpDir := newTestDaemon(t, r)
+
+	require.NoError(t, d.Start())
+
+	pidPath := filepath.Join(tmpDir, "daemon.pid")
+	socketPath := d.socketPath
+
+	// Verify socket + PID file exist.
+	_, err := os.Stat(socketPath)
+	require.NoError(t, err, "socket file should exist")
+	_, err = os.Stat(pidPath)
+	require.NoError(t, err, "PID file should exist")
+
+	// Stop the daemon.
+	require.NoError(t, d.Stop())
+
+	// Verify socket file is removed (by SocketServer.Shutdown).
+	_, err = os.Stat(socketPath)
+	assert.True(t, os.IsNotExist(err), "socket file should be removed after Stop")
+
+	// Verify PID file is removed.
+	_, err = os.Stat(pidPath)
+	assert.True(t, os.IsNotExist(err), "PID file should be removed after Stop")
+}
+
+// ---------------------------------------------------------------------------
+// Test 24: Idle timeout triggers shutdown
+// ---------------------------------------------------------------------------
+
+func TestDaemon_IdleTimeout(t *testing.T) {
+	r := NewRegistry()
+	// No producers registered, so no resetIdleTimer calls — timer should fire.
+
+	sockDir := socketTempDir(t)
+
+	d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, r)
+	d.SetPIDFile(filepath.Join(t.TempDir(), "idle.pid"))
+	d.SetCacheDir(filepath.Join(t.TempDir(), "cache"))
+	d.SetSocketPath(filepath.Join(sockDir, "idle.sock"))
+	d.SetIdleTimeout(100 * time.Millisecond) // short timeout for testing
+
+	require.NoError(t, d.Start())
+
+	// Wait for the idle timeout to fire and shut down the daemon.
+	done := make(chan struct{})
+	go func() {
+		d.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Idle timeout triggered shutdown — success.
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "daemon did not shut down within timeout after idle timeout")
+	}
+
+	// Clean up socket server.
+	if d.server != nil {
+		_ = d.server.Shutdown(context.Background())
+	}
+	_ = d.removePIDFile()
+}
+
+// ---------------------------------------------------------------------------
+// Test 25: Backward-compatible migration from old PID-only daemon (MIGRATE-1)
+// ---------------------------------------------------------------------------
+
+func TestDaemon_MigrateOldDaemon(t *testing.T) {
+	r := NewRegistry()
+	sockDir := socketTempDir(t)
+	tmpDir := t.TempDir()
+
+	pidPath := filepath.Join(tmpDir, "daemon.pid")
+	socketPath := filepath.Join(sockDir, "migrate.sock")
+
+	// Simulate an old-style daemon: PID file exists, socket does NOT exist.
+	// Use a very high PID that is extremely unlikely to be alive.
+	stalePID := 2147483647
+	require.NoError(t, os.MkdirAll(filepath.Dir(pidPath), 0o700))
+	require.NoError(t, os.WriteFile(pidPath, []byte(fmt.Sprintf("%d\n", stalePID)), 0o600))
+
+	// Verify the PID file exists before Start.
+	_, err := os.Stat(pidPath)
+	require.NoError(t, err, "stale PID file should exist before migration")
+
+	// Verify no socket file exists (old-style daemon condition).
+	_, err = os.Stat(socketPath)
+	require.True(t, os.IsNotExist(err), "socket should not exist for old-style daemon")
+
+	d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, r)
+	d.SetPIDFile(pidPath)
+	d.SetCacheDir(filepath.Join(tmpDir, "cache"))
+	d.SetSocketPath(socketPath)
+
+	// Start should succeed — migrateOldDaemon removes the stale PID file.
+	require.NoError(t, d.Start())
+	t.Cleanup(func() { _ = d.Stop() })
+
+	// Verify PID file was updated with current PID.
+	data, err := os.ReadFile(pidPath)
+	require.NoError(t, err)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	require.NoError(t, err)
+	assert.Equal(t, os.Getpid(), pid,
+		"PID file should contain current process PID after migration")
+
+	// Verify socket is now bound.
+	_, err = os.Stat(socketPath)
+	require.NoError(t, err, "socket file should exist after successful start")
 }
 
 // ---------------------------------------------------------------------------
@@ -1290,4 +1493,89 @@ func TestProjectTestFixture_FieldConsistency(t *testing.T) {
 		_, ok := realData[key]
 		assert.True(t, ok, "fixture data has extra key %q", key)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Concurrent daemon start test (Task 8.4)
+// ---------------------------------------------------------------------------
+
+// TestDaemon_ConcurrentStartOnlyOneWins verifies that when multiple goroutines
+// try to start the daemon concurrently, exactly one succeeds (socket bind is
+// single-instance authority per SOCKET-1).
+func TestDaemon_ConcurrentStartOnlyOneWins(t *testing.T) {
+	sockDir := socketTempDir(t)
+	sockPath := filepath.Join(sockDir, "race.sock")
+
+	const N = 5
+
+	type startResult struct {
+		daemon *Daemon
+		err    error
+	}
+	results := make(chan startResult, N)
+
+	for i := 0; i < N; i++ {
+		go func() {
+			tmpDir := t.TempDir()
+			r := NewRegistry()
+			r.Register(newMockProducer("p1", "data"))
+			d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, r)
+			d.SetPIDFile(filepath.Join(tmpDir, "daemon.pid"))
+			d.SetCacheDir(filepath.Join(tmpDir, "cache"))
+			d.SetSocketPath(sockPath)
+			d.SetStaggerOffset(0)
+			results <- startResult{daemon: d, err: d.Start()}
+		}()
+	}
+
+	var successes, failures int
+	var winner *Daemon
+
+	for i := 0; i < N; i++ {
+		res := <-results
+		if res.err == nil {
+			successes++
+			winner = res.daemon
+		} else {
+			failures++
+		}
+	}
+
+	// Stop the winning daemon so resources are cleaned up.
+	if winner != nil {
+		t.Cleanup(func() { winner.Stop() })
+	}
+
+	// Exactly one goroutine should have won the socket bind.
+	assert.Equal(t, 1, successes, "exactly one daemon should start successfully")
+	assert.Equal(t, N-1, failures, "all other daemons should fail with socket in use")
+}
+
+// ---------------------------------------------------------------------------
+// Socket bind released after daemon stop (Task 8.1)
+// ---------------------------------------------------------------------------
+
+// TestDaemon_SocketBindReleasedOnStop verifies that after stopping a daemon,
+// a new daemon can bind the same socket path.
+func TestDaemon_SocketBindReleasedOnStop(t *testing.T) {
+	r := NewRegistry()
+	r.Register(newMockProducer("p1", "data"))
+	d1, _ := newTestDaemon(t, r)
+	d1.SetStaggerOffset(0)
+
+	// Start and stop first daemon.
+	require.NoError(t, d1.Start())
+	require.NoError(t, d1.Stop())
+
+	// Second daemon should be able to start on the same socket.
+	r2 := NewRegistry()
+	r2.Register(newMockProducer("p1", "data"))
+	d2 := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, r2)
+	d2.SetPIDFile(d1.pidFile + ".2")
+	d2.SetCacheDir(d1.cacheDir)
+	d2.SetSocketPath(d1.socketPath)
+	d2.SetStaggerOffset(0)
+
+	require.NoError(t, d2.Start(), "second daemon should start after first stopped")
+	require.NoError(t, d2.Stop())
 }

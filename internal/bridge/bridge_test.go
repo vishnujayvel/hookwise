@@ -745,3 +745,99 @@ func TestFlattenForTUI_PreservesTTLFromData(t *testing.T) {
 	// Should use the ttl_seconds from data, not the default.
 	assert.Equal(t, float64(600), entry["ttl_seconds"])
 }
+
+// =============================================================================
+// IsEnvelopeFresh tests
+// =============================================================================
+
+func TestIsEnvelopeFresh_RecentTimestamp(t *testing.T) {
+	envelope := map[string]interface{}{
+		"type":      "calendar",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"data":      map[string]interface{}{},
+	}
+	assert.True(t, IsEnvelopeFresh(envelope), "just-written envelope should be fresh")
+}
+
+func TestIsEnvelopeFresh_StaleTimestamp(t *testing.T) {
+	// 10 minutes ago — well past the 300s default TTL
+	staleTime := time.Now().UTC().Add(-10 * time.Minute)
+	envelope := map[string]interface{}{
+		"type":      "calendar",
+		"timestamp": staleTime.Format(time.RFC3339),
+		"data":      map[string]interface{}{},
+	}
+	assert.False(t, IsEnvelopeFresh(envelope), "10-minute-old envelope should be stale with 300s TTL")
+}
+
+func TestIsEnvelopeFresh_CustomTTL(t *testing.T) {
+	// 8 minutes ago, but TTL is 600s (10 min) — still fresh
+	ts := time.Now().UTC().Add(-8 * time.Minute)
+	envelope := map[string]interface{}{
+		"type":      "calendar",
+		"timestamp": ts.Format(time.RFC3339),
+		"data": map[string]interface{}{
+			"ttl_seconds": float64(600),
+		},
+	}
+	assert.True(t, IsEnvelopeFresh(envelope), "8-min-old with 600s TTL should be fresh")
+}
+
+func TestIsEnvelopeFresh_CustomTTL_Expired(t *testing.T) {
+	// 12 minutes ago with 600s TTL — expired
+	ts := time.Now().UTC().Add(-12 * time.Minute)
+	envelope := map[string]interface{}{
+		"type":      "calendar",
+		"timestamp": ts.Format(time.RFC3339),
+		"data": map[string]interface{}{
+			"ttl_seconds": float64(600),
+		},
+	}
+	assert.False(t, IsEnvelopeFresh(envelope), "12-min-old with 600s TTL should be stale")
+}
+
+func TestIsEnvelopeFresh_MissingTimestamp(t *testing.T) {
+	envelope := map[string]interface{}{
+		"type": "calendar",
+		"data": map[string]interface{}{},
+	}
+	assert.False(t, IsEnvelopeFresh(envelope), "missing timestamp should be stale")
+}
+
+func TestIsEnvelopeFresh_EmptyTimestamp(t *testing.T) {
+	envelope := map[string]interface{}{
+		"type":      "calendar",
+		"timestamp": "",
+		"data":      map[string]interface{}{},
+	}
+	assert.False(t, IsEnvelopeFresh(envelope), "empty timestamp should be stale")
+}
+
+func TestIsEnvelopeFresh_InvalidTimestamp(t *testing.T) {
+	envelope := map[string]interface{}{
+		"type":      "calendar",
+		"timestamp": "not-a-timestamp",
+		"data":      map[string]interface{}{},
+	}
+	assert.False(t, IsEnvelopeFresh(envelope), "invalid timestamp should be stale")
+}
+
+func TestIsEnvelopeFresh_NilEnvelope(t *testing.T) {
+	assert.False(t, IsEnvelopeFresh(nil), "nil envelope should be stale")
+}
+
+func TestIsEnvelopeFresh_YesterdayData(t *testing.T) {
+	// Simulates the exact bug scenario: yesterday's calendar data
+	yesterday := time.Now().UTC().Add(-24 * time.Hour)
+	envelope := map[string]interface{}{
+		"type":      "calendar",
+		"timestamp": yesterday.Format(time.RFC3339),
+		"data": map[string]interface{}{
+			"next_event": map[string]interface{}{
+				"name":  "RAG mock interview",
+				"start": yesterday.Format(time.RFC3339),
+			},
+		},
+	}
+	assert.False(t, IsEnvelopeFresh(envelope), "yesterday's calendar data should be stale")
+}
