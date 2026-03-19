@@ -97,6 +97,11 @@ fi
 
 # Check 2: Memory pressure
 avail_mb=$(get_available_memory_mb)
+# Guard against non-numeric values (e.g., parse failures from vm_stat/awk).
+if [ -n "$avail_mb" ] && ! [ "$avail_mb" -eq "$avail_mb" ] 2>/dev/null; then
+    echo -e "${YELLOW}WARNING: Could not parse available memory ('$avail_mb'). Skipping memory check.${NC}"
+    avail_mb=""
+fi
 if [ -n "$avail_mb" ]; then
     if [ "$avail_mb" -lt "$MIN_FREE_MB" ]; then
         echo -e "${RED}BLOCKED (retro-009): Only ~$((avail_mb / 1024)) GB ($avail_mb MB) free memory (minimum: $((MIN_FREE_MB / 1024)) GB)${NC}"

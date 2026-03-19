@@ -18,7 +18,7 @@ func TestParseTimeFlex(t *testing.T) {
 		{"RFC3339 with offset", "2026-03-10T14:30:00+05:30", false},
 		{"RFC3339Nano", "2026-03-10T14:30:00.123456789Z", false},
 		{"RFC3339Nano with offset", "2026-03-10T14:30:00.999999999+05:30", false},
-		{"bare datetime with Z", "2026-03-10T14:30:00Z", false},
+		{"bare datetime", "2026-03-10T14:30:00", false},
 		{"bare datetime space", "2026-03-10 14:30:00", false},
 		{"date only", "2026-03-10", false},
 		{"empty string", "", true},

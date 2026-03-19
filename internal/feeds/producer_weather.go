@@ -79,7 +79,7 @@ func wmoCodeToDescription(code int) string {
 		return "Freezing Rain"
 	case code >= 71 && code <= 75:
 		return "Snow"
-	case code >= 77 && code <= 77:
+	case code == 77:
 		return "Snow Grains"
 	case code >= 80 && code <= 82:
 		return "Showers"

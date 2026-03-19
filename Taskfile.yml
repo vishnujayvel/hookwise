@@ -144,7 +144,7 @@ tasks:
 
   test:go:integration:
     desc: "Integration + chaos tests"
-    deps: [test:go:unit, test:go:contract]
+    deps: [test:go:unit, test:go:contract, test:guard]
     env:
       GOMEMLIMIT: "{{.GOMEMLIMIT}}"
     cmds:
@@ -152,7 +152,7 @@ tasks:
 
   test:go:mutation:
     desc: "Mutation testing (93.3% kill rate)"
-    deps: [test:go:unit]
+    deps: [test:go:unit, test:guard]
     env:
       GOMEMLIMIT: "{{.GOMEMLIMIT}}"
     cmds:

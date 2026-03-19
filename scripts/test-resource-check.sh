@@ -15,47 +15,6 @@ total=0
 
 # --- Test helpers ---
 
-run_test() {
-    local name="$1"
-    local expected_exit="$2"
-    local expected_pattern="$3"
-    shift 3
-    total=$((total + 1))
-
-    # Run with test mode and capture output + exit code
-    local output exit_code
-    output=$(HOOKWISE_TEST_MODE=1 "$@" bash "$TARGET" 2>&1) || true
-    exit_code=$?
-    # Re-run to get actual exit code (the || true above masks it)
-    HOOKWISE_TEST_MODE=1 "$@" bash "$TARGET" >/dev/null 2>&1
-    exit_code=$?
-
-    local status="PASS"
-    local reason=""
-
-    # Check exit code
-    if [ "$exit_code" -ne "$expected_exit" ]; then
-        status="FAIL"
-        reason="expected exit $expected_exit, got $exit_code"
-    fi
-
-    # Check output pattern (if provided)
-    if [ -n "$expected_pattern" ] && ! echo "$output" | grep -q "$expected_pattern"; then
-        status="FAIL"
-        reason="${reason:+$reason; }expected pattern '$expected_pattern' not found in output"
-    fi
-
-    if [ "$status" = "PASS" ]; then
-        echo "  ✓ $name"
-        passed=$((passed + 1))
-    else
-        echo "  ✗ $name — $reason"
-        echo "    output: $(echo "$output" | head -3)"
-        failed=$((failed + 1))
-    fi
-}
-
-# Better test runner that captures exit code properly
 assert() {
     local name="$1"
     local expected_exit="$2"
