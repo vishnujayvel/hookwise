@@ -72,28 +72,15 @@ When to use what:
 ## Testing
 
 ```bash
-task test                                     # Preferred: uses -p 2 + GOMEMLIMIT + guard
-go test -race -p 2 ./...                      # All unit tests (ALWAYS use -p 2)
-go test -race -p 2 -tags integration ./...    # + integration/chaos tests
-go test -race -p 2 -tags mutation ./...       # + mutation tests
+go test -race ./...                           # All unit tests
+go test -race -tags integration ./...         # + integration/chaos tests
+go test -race -tags mutation ./...            # + mutation tests
 cd tui && .venv/bin/python -m pytest tests/   # TUI tests
 ```
 
 - Use `testify/assert` + `require` (not stdlib testing alone)
 - Contract tests use JSON fixtures in `testdata/contracts/`
 - TUI snapshot tests: `pytest --snapshot-update` to regenerate
-
-### Resource Safety (retro-009)
-
-**CRITICAL: Each hookwise.test binary is ~149 MB (Dolt embedded). With `-race`, ~300 MB. Uncontrolled `go test ./...` can consume 4.5 GB per invocation.**
-
-- **ALWAYS use `-p 2`** to limit package parallelism (2 packages, not 15)
-- **Set `GOMEMLIMIT=4GiB`** when running tests: `GOMEMLIMIT=4GiB go test -race -p 2 ./...`
-- **NEVER run `go test` without `-p 2`** on this project — it WILL exhaust memory
-- **Check for stale test processes** before running: `pgrep -f hookwise.test`
-- **Kill zombies if found**: `task kill:tests` or `pkill -f hookwise.test`
-- **PDLC Critics MUST NOT run tests** — review code and Actor's test output only
-- See: `.claude/specs/retro/retro-009-system-crash-memory-exhaustion.md`
 
 ## Common Gotchas
 

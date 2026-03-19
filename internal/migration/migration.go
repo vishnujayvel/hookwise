@@ -72,7 +72,11 @@ type CostStateJSON struct {
 func hookwiseDir(opts MigrationOpts) string {
 	home := opts.HomeDir
 	if home == "" {
-		home = core.HomeDir()
+		var err error
+		home, err = os.UserHomeDir()
+		if err != nil {
+			home = os.TempDir()
+		}
 	}
 	return filepath.Join(home, ".hookwise")
 }

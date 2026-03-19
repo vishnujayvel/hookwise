@@ -8,7 +8,7 @@ import (
 
 var (
 	// DefaultStateDir is ~/.hookwise/
-	DefaultStateDir = filepath.Join(HomeDir(), ".hookwise")
+	DefaultStateDir = filepath.Join(homeDir(), ".hookwise")
 
 	// DefaultDBPath is ~/.hookwise/analytics.db
 	DefaultDBPath = filepath.Join(DefaultStateDir, "analytics.db")
@@ -73,9 +73,7 @@ const (
 	DefaultDispatchTimeoutMs = 500
 )
 
-// HomeDir returns the user's home directory, falling back to the system
-// temp directory if os.UserHomeDir() is unavailable.
-func HomeDir() string {
+func homeDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		tmp := os.TempDir()

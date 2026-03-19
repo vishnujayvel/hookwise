@@ -120,20 +120,3 @@ func SafeDispatch(fn func() DispatchResult) (result DispatchResult) {
 	}()
 	return fn()
 }
-
-// SafeDispatchWithWarnings wraps a function with panic recovery and warning
-// collection. On panic, the warning is recorded in the collector AND logged.
-// Exit code remains 0 in all cases (fail-open per ARCH-1).
-func SafeDispatchWithWarnings(wc *WarningCollector, fn func() DispatchResult) (result DispatchResult) {
-	defer func() {
-		if r := recover(); r != nil {
-			msg := fmt.Sprintf("panic: %v", r)
-			Logger().Error("panic in dispatch", "recovered", msg)
-			if wc != nil {
-				wc.Add("dispatch", msg)
-			}
-			result = DispatchResult{ExitCode: 0}
-		}
-	}()
-	return fn()
-}

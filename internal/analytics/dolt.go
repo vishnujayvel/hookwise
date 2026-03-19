@@ -16,7 +16,6 @@ import (
 	"time"
 
 	_ "github.com/dolthub/driver" // registers "dolt" sql driver
-	"github.com/vishnujayvel/hookwise/internal/core"
 )
 
 // validDoltRef matches valid Dolt refs (commit hashes, branch names, tags).
@@ -61,7 +60,11 @@ type DB struct {
 
 // DefaultDoltDir returns the conventional Dolt data directory.
 func DefaultDoltDir() string {
-	return filepath.Join(core.HomeDir(), ".hookwise", "dolt")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.TempDir()
+	}
+	return filepath.Join(home, ".hookwise", "dolt")
 }
 
 // Open creates (if needed) and opens the Dolt embedded database at dataDir.
@@ -271,7 +274,10 @@ func (d *DB) Log(ctx context.Context, limit int) ([]LogEntry, error) {
 			return nil, fmt.Errorf("analytics: dolt_log scan: %w", err)
 		}
 		// dolt_log returns datetime as string; parse flexibly.
-		e.Date, _ = core.ParseTimeFlex(dateStr)
+		e.Date, _ = time.Parse("2006-01-02 15:04:05", dateStr)
+		if e.Date.IsZero() {
+			e.Date, _ = time.Parse(time.RFC3339, dateStr)
+		}
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
@@ -300,10 +306,6 @@ func (d *DB) initSchema(ctx context.Context) error {
 			return fmt.Errorf("ddl: %w\nquery: %s", err, ddl)
 		}
 	}
-
-	// Migration: add ttl_seconds to notifications (v2).
-	// Ignore error — column may already exist.
-	_, _ = d.db.ExecContext(ctx, "ALTER TABLE notifications ADD COLUMN ttl_seconds INT DEFAULT 86400")
 
 	// Commit any schema changes so the working tree starts clean.
 	// On subsequent opens this will be a no-op (nothing to commit).
@@ -421,8 +423,7 @@ var schemaDDL = []string{
 		created_at TEXT NOT NULL,
 		surfaced_at TEXT,
 		acted_on INT DEFAULT 0,
-		branch VARCHAR(255),
-		ttl_seconds INT DEFAULT 86400
+		branch VARCHAR(255)
 	)`,
 
 	`CREATE TABLE IF NOT EXISTS schema_meta (

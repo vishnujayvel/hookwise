@@ -37,7 +37,7 @@ var knownSections = map[string]bool{
 
 // GetDefaultConfig returns sensible defaults matching the TypeScript implementation.
 func GetDefaultConfig() HooksConfig {
-	home := HomeDir()
+	home := homeDir()
 	return HooksConfig{
 		Version:  1,
 		Guards:   []GuardRuleConfig{},
