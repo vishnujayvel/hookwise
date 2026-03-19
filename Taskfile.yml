@@ -21,12 +21,26 @@ vars:
   INSTALL_PATH:
     sh: echo "${HOOKWISE_INSTALL_PATH:-$(brew --prefix 2>/dev/null || echo /usr/local)/bin/hookwise}"
   TUI_VENV: .venv/bin
+  # M1 (retro-009): Limit test parallelism to 2 packages to prevent memory exhaustion.
+  # Each hookwise.test binary is ~149 MB (Dolt embedded). With -race, ~300 MB.
+  # 15 packages × 300 MB = 4.5 GB per `go test ./...`. -p 2 caps at ~600 MB.
+  TEST_PARALLEL: "2"
+  GOMEMLIMIT: 4GiB
 
 # ═══════════════════════════════════════════════
 # TIER 0: Pre-commit checks (<5s)
 # ═══════════════════════════════════════════════
 
 tasks:
+  # M2+M6 (retro-009): Two-layer resource guard before test execution.
+  # Layer 1 (soft): Agent checks MCP mcp-monitor get_memory_info before running tests
+  # Layer 2 (hard): This script checks process count + free memory, blocks if unsafe
+  test:guard:
+    desc: "Pre-test resource check (retro-009: process count + memory pressure)"
+    internal: true
+    cmds:
+      - ./scripts/pre-test-resource-check.sh
+
   vet:
     desc: "Run go vet static analysis"
     cmds:
@@ -74,27 +88,35 @@ tasks:
 
   test:go:unit:
     desc: "Go unit tests with race detector"
-    deps: [vet, compile]
+    deps: [vet, compile, test:guard]
+    env:
+      GOMEMLIMIT: "{{.GOMEMLIMIT}}"
     cmds:
-      - go test -race ./internal/core/... ./internal/feeds/... ./internal/bridge/... ./internal/analytics/... ./internal/notifications/... ./internal/migration/... ./pkg/...
+      - go test -race -p {{.TEST_PARALLEL}} ./internal/core/... ./internal/feeds/... ./internal/bridge/... ./internal/analytics/... ./internal/notifications/... ./internal/migration/... ./pkg/...
 
   test:go:contract:
     desc: "Contract parity tests (33 JSON fixtures)"
-    deps: [vet, compile]
+    deps: [vet, compile, test:guard]
+    env:
+      GOMEMLIMIT: "{{.GOMEMLIMIT}}"
     cmds:
-      - go test -race ./internal/contract/...
+      - go test -race -p {{.TEST_PARALLEL}} ./internal/contract/...
 
   test:go:arch:
     desc: "Architecture dependency lint"
-    deps: [vet]
+    deps: [vet, test:guard]
+    env:
+      GOMEMLIMIT: "{{.GOMEMLIMIT}}"
     cmds:
-      - go test -race ./internal/arch/...
+      - go test -race -p {{.TEST_PARALLEL}} ./internal/arch/...
 
   test:go:pbt:
     desc: "Property-based tests (rapid)"
-    deps: [vet]
+    deps: [vet, test:guard]
+    env:
+      GOMEMLIMIT: "{{.GOMEMLIMIT}}"
     cmds:
-      - go test -race ./internal/proptest/...
+      - go test -race -p {{.TEST_PARALLEL}} ./internal/proptest/...
 
   test:tui:unit:
     desc: "Python TUI unit tests (no snapshots)"
@@ -123,14 +145,18 @@ tasks:
   test:go:integration:
     desc: "Integration + chaos tests"
     deps: [test:go:unit, test:go:contract]
+    env:
+      GOMEMLIMIT: "{{.GOMEMLIMIT}}"
     cmds:
-      - go test -race -tags integration ./...
+      - go test -race -p {{.TEST_PARALLEL}} -tags integration ./...
 
   test:go:mutation:
     desc: "Mutation testing (93.3% kill rate)"
     deps: [test:go:unit]
+    env:
+      GOMEMLIMIT: "{{.GOMEMLIMIT}}"
     cmds:
-      - go test -race -tags mutation ./internal/mutation/...
+      - go test -race -p {{.TEST_PARALLEL}} -tags mutation ./internal/mutation/...
 
   test:tui:snapshots:
     desc: "TUI visual snapshot tests"
@@ -222,6 +248,37 @@ tasks:
     cmds:
       - rm -f ./hookwise ./hookwise-go
       - echo "Cleaned (installed binary not removed)"
+
+  # M4 (retro-009): Clean stale agent worktrees to reclaim disk and prevent orphaned test runs.
+  clean:worktrees:
+    desc: "Remove stale Claude Code agent worktrees"
+    cmds:
+      - |
+        count=$(ls -d .claude/worktrees/agent-* 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$count" -gt 0 ]; then
+          rm -rf .claude/worktrees/agent-*
+          echo "Cleaned $count stale agent worktree(s)"
+        else
+          echo "No stale agent worktrees found"
+        fi
+
+  # Kill zombie test processes (emergency use)
+  kill:tests:
+    desc: "Kill all running hookwise.test processes"
+    cmds:
+      - |
+        count=$(pgrep -f hookwise.test 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$count" -gt 0 ]; then
+          pkill -f hookwise.test
+          echo "Killed $count hookwise.test process(es)"
+        else
+          echo "No hookwise.test processes running"
+        fi
+
+  test:resource-guard:
+    desc: "Test the pre-test resource check script (retro-009)"
+    cmds:
+      - bash scripts/test-resource-check.sh
 
   snapshot-update:
     desc: "Regenerate TUI snapshot baselines"

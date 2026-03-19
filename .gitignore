@@ -18,6 +18,12 @@ Thumbs.db
 # Claude Code (PDLC specs, product context)
 .claude/
 
+# OpenSpec (local spec-driven dev, not shipped)
+openspec/
+
+# Loki Mode (autonomous orchestration state)
+.loki/
+
 # Python TUI
 __pycache__/
 *.py[cod]

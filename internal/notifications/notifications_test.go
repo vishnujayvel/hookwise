@@ -509,3 +509,101 @@ func TestUnsurfaced_EmptyWhenAllSurfaced(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, unsurfaced)
 }
+
+// ---------------------------------------------------------------------------
+// Test 19: CreateWithTTL stores custom TTL
+// ---------------------------------------------------------------------------
+
+func TestCreateWithTTL_StoresTTL(t *testing.T) {
+	ns, _, cleanup := testService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a notification with a custom TTL of 3600 seconds (1 hour).
+	require.NoError(t, ns.CreateWithTTL(ctx, "budget", "budget_threshold", "Custom TTL", 3600))
+
+	notifs, err := ns.List(ctx, 1)
+	require.NoError(t, err)
+	require.Len(t, notifs, 1)
+
+	assert.Equal(t, 3600, notifs[0].TTLSeconds)
+	assert.Equal(t, "Custom TTL", notifs[0].Content)
+	assert.Equal(t, "budget", notifs[0].Producer)
+}
+
+// ---------------------------------------------------------------------------
+// Test 20: Unsurfaced excludes expired notifications
+// ---------------------------------------------------------------------------
+
+func TestUnsurfaced_ExcludesExpired(t *testing.T) {
+	ns, db, cleanup := testService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a notification with a very short TTL (1 second).
+	require.NoError(t, ns.CreateWithTTL(ctx, "test", "test_type", "expires fast", 1))
+
+	// Create one with a long TTL that will not expire.
+	require.NoError(t, ns.CreateWithTTL(ctx, "test", "test_type", "stays active", 86400))
+
+	// Backdate the first notification's created_at to 10 seconds ago so it's expired.
+	// We need to update it directly via SQL.
+	past := time.Now().UTC().Add(-10 * time.Second).Format(time.RFC3339)
+	_, err := db.Exec(ctx,
+		`UPDATE notifications SET created_at = ? WHERE content = ?`, past, "expires fast")
+	require.NoError(t, err)
+
+	unsurfaced, err := ns.Unsurfaced(ctx)
+	require.NoError(t, err)
+
+	// Only the non-expired notification should be returned.
+	require.Len(t, unsurfaced, 1)
+	assert.Equal(t, "stays active", unsurfaced[0].Content)
+}
+
+// ---------------------------------------------------------------------------
+// Test 21: Notification Expired field is computed at read time
+// ---------------------------------------------------------------------------
+
+func TestNotification_ExpiredComputed(t *testing.T) {
+	ns, db, cleanup := testService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a notification with TTL of 1 second.
+	require.NoError(t, ns.CreateWithTTL(ctx, "test", "test_type", "soon expired", 1))
+
+	// Create a notification with TTL of 86400 seconds.
+	require.NoError(t, ns.CreateWithTTL(ctx, "test", "test_type", "not expired", 86400))
+
+	// Backdate the first notification so it's definitely expired.
+	past := time.Now().UTC().Add(-10 * time.Second).Format(time.RFC3339)
+	_, err := db.Exec(ctx,
+		`UPDATE notifications SET created_at = ? WHERE content = ?`, past, "soon expired")
+	require.NoError(t, err)
+
+	// List returns all (including expired), so we can check the Expired field.
+	notifs, err := ns.List(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, notifs, 2)
+
+	// Find each notification by content (List returns newest first).
+	var expiredNotif, activeNotif *Notification
+	for i := range notifs {
+		switch notifs[i].Content {
+		case "soon expired":
+			expiredNotif = &notifs[i]
+		case "not expired":
+			activeNotif = &notifs[i]
+		}
+	}
+
+	require.NotNil(t, expiredNotif, "should find 'soon expired' notification")
+	require.NotNil(t, activeNotif, "should find 'not expired' notification")
+
+	assert.True(t, expiredNotif.Expired, "notification with TTL=1s and created 10s ago should be expired")
+	assert.False(t, activeNotif.Expired, "notification with TTL=86400s just created should not be expired")
+}
