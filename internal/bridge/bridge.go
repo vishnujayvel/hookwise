@@ -83,13 +83,9 @@ func IsEnvelopeFresh(envelope map[string]interface{}) bool {
 	if !ok || tsStr == "" {
 		return false
 	}
-	ts, err := time.Parse(time.RFC3339, tsStr)
+	ts, err := core.ParseTimeFlex(tsStr)
 	if err != nil {
-		// Try RFC3339Nano as fallback.
-		ts, err = time.Parse(time.RFC3339Nano, tsStr)
-		if err != nil {
-			return false
-		}
+		return false
 	}
 
 	ttl := DefaultTTLSeconds

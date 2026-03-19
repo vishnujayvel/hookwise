@@ -58,6 +58,7 @@ func AtomicWriteJSON(filePath string, data interface{}) error {
 
 // timeFormats is the canonical list of time formats tried by ParseTimeFlex.
 var timeFormats = []string{
+	time.RFC3339Nano,
 	time.RFC3339,
 	"2006-01-02T15:04:05Z",
 	"2006-01-02 15:04:05",
