@@ -1,6 +1,6 @@
-# Go
-hookwise
-hookwise-go
+# Go (binary only, not cmd/hookwise/ source directory)
+/hookwise
+/hookwise-go
 
 # IDE
 .idea/

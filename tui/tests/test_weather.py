@@ -1,15 +1,10 @@
 """Tests for weather background widget and weather data bridge."""
 
-import json
-
-import pytest
-
 from hookwise_tui.widgets.weather_data import (
     WEATHER_CODE_MAP,
     VALID_CONDITIONS,
     WeatherInfo,
     read_weather_from_cache,
-    get_weather,
 )
 from hookwise_tui.widgets.weather_background import (
     WeatherBackground,
