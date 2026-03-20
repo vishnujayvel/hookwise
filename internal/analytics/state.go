@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/vishnujayvel/hookwise/internal/core"
@@ -369,23 +368,6 @@ func (d *DB) ReadAllFeedCache(ctx context.Context) (map[string]interface{}, erro
 		return nil, fmt.Errorf("analytics: feed_cache rows: %w", err)
 	}
 	return result, nil
-}
-
-// WriteFeedCacheJSON writes the feed cache data to the JSON bridge file
-// at ~/.hookwise/state/status-line-cache.json for the Python TUI (R9.1).
-//
-// The output format is: {"key1": <data>, "key2": <data>, ...}
-// This function respects ARCH-3: it is called from the dispatch process,
-// not the daemon.
-func WriteFeedCacheJSON(cacheData map[string]interface{}) error {
-	path := filepath.Join(core.GetStateDir(), "state", "status-line-cache.json")
-	return core.AtomicWriteJSON(path, cacheData)
-}
-
-// WriteFeedCacheJSONTo writes the feed cache data to a specified path.
-// This variant is used in tests to avoid writing to the real state directory.
-func WriteFeedCacheJSONTo(path string, cacheData map[string]interface{}) error {
-	return core.AtomicWriteJSON(path, cacheData)
 }
 
 // ---------------------------------------------------------------------------

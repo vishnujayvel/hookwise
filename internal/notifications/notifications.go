@@ -106,9 +106,18 @@ func (ns *NotificationService) Unsurfaced(ctx context.Context) ([]Notification, 
 
 	// Filter out expired notifications in Go (avoids Dolt SQL date math
 	// issues on TEXT-stored timestamps).
+	// Mark expired ones as surfaced so they are not rescanned on future calls.
 	var active []Notification
+	now := time.Now().UTC().Format(time.RFC3339)
 	for _, n := range all {
-		if !n.Expired {
+		if n.Expired {
+			// Best-effort: mark expired notification as surfaced so it
+			// won't be returned by future Unsurfaced() calls.
+			_, _ = ns.db.Exec(ctx,
+				`UPDATE notifications SET surfaced_at = ? WHERE id = ?`,
+				now, n.ID,
+			)
+		} else {
 			active = append(active, n)
 		}
 	}

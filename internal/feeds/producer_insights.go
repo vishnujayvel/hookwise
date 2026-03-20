@@ -30,7 +30,7 @@ func (p *InsightsProducer) SetFeedsConfig(cfg core.FeedsConfig) {
 	p.feedsCfg = cfg
 }
 
-func (p *InsightsProducer) Produce(_ context.Context) (interface{}, error) {
+func (p *InsightsProducer) Produce(ctx context.Context) (interface{}, error) {
 	p.mu.Lock()
 	cfg := p.feedsCfg.Insights
 	p.mu.Unlock()
@@ -51,6 +51,11 @@ func (p *InsightsProducer) Produce(_ context.Context) (interface{}, error) {
 
 	now := time.Now().UTC()
 	cutoff := now.Add(-time.Duration(stalenessDays) * 24 * time.Hour)
+
+	// Respect context cancellation before expensive I/O.
+	if err := ctx.Err(); err != nil {
+		return p.zeroedEnvelope(stalenessDays), nil
+	}
 
 	// Read and filter sessions within staleness window.
 	allSessions := readJSONFiles(sessionMetaDir)
@@ -133,6 +138,11 @@ func (p *InsightsProducer) Produce(_ context.Context) (interface{}, error) {
 				}
 			}
 		}
+	}
+
+	// Respect context cancellation before second I/O phase.
+	if err := ctx.Err(); err != nil {
+		return p.zeroedEnvelope(stalenessDays), nil
 	}
 
 	// Read facets for friction data.

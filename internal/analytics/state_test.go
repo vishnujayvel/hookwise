@@ -2,9 +2,6 @@ package analytics
 
 import (
 	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -439,90 +436,7 @@ func TestReadAllFeedCache_MultipleEntries(t *testing.T) {
 	assert.Equal(t, true, sessionData["active"])
 }
 
-// Test 15: WriteFeedCacheJSON creates JSON file at correct path
-func TestWriteFeedCacheJSON_CreatesFile(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "hookwise-feed-json-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
-
-	outPath := filepath.Join(tmpDir, "status-line-cache.json")
-
-	cacheData := map[string]interface{}{
-		"weather": map[string]interface{}{"temp": float64(72)},
-		"costs":   map[string]interface{}{"total": float64(5.5)},
-	}
-
-	require.NoError(t, WriteFeedCacheJSONTo(outPath, cacheData))
-
-	// Verify file exists.
-	info, err := os.Stat(outPath)
-	require.NoError(t, err)
-	assert.True(t, info.Size() > 0)
-}
-
-// Test 16: WriteFeedCacheJSON file content matches expected format
-func TestWriteFeedCacheJSON_ContentFormat(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "hookwise-feed-json-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
-
-	outPath := filepath.Join(tmpDir, "status-line-cache.json")
-
-	cacheData := map[string]interface{}{
-		"weather": map[string]interface{}{
-			"temperature": float64(72),
-			"unit":        "F",
-		},
-		"session_info": map[string]interface{}{
-			"active":   true,
-			"duration": float64(300),
-		},
-	}
-
-	require.NoError(t, WriteFeedCacheJSONTo(outPath, cacheData))
-
-	// Read the file back and verify structure.
-	raw, err := os.ReadFile(outPath)
-	require.NoError(t, err)
-
-	var parsed map[string]interface{}
-	require.NoError(t, json.Unmarshal(raw, &parsed))
-
-	// Top-level keys should be the cache keys.
-	assert.Contains(t, parsed, "weather")
-	assert.Contains(t, parsed, "session_info")
-
-	// Verify nested structure.
-	weather, ok := parsed["weather"].(map[string]interface{})
-	require.True(t, ok, "weather should be a map")
-	assert.Equal(t, float64(72), weather["temperature"])
-	assert.Equal(t, "F", weather["unit"])
-
-	session, ok := parsed["session_info"].(map[string]interface{})
-	require.True(t, ok, "session_info should be a map")
-	assert.Equal(t, true, session["active"])
-	assert.Equal(t, float64(300), session["duration"])
-}
-
-// Test 17: WriteFeedCacheJSON with empty map creates valid JSON
-func TestWriteFeedCacheJSON_EmptyMap(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "hookwise-feed-json-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
-
-	outPath := filepath.Join(tmpDir, "status-line-cache.json")
-
-	require.NoError(t, WriteFeedCacheJSONTo(outPath, map[string]interface{}{}))
-
-	raw, err := os.ReadFile(outPath)
-	require.NoError(t, err)
-
-	var parsed map[string]interface{}
-	require.NoError(t, json.Unmarshal(raw, &parsed))
-	assert.Empty(t, parsed)
-}
-
-// Test 18: Feed cache overwrite replaces existing entry
+// Test 15: Feed cache overwrite replaces existing entry
 func TestFeedCache_OverwriteReplaces(t *testing.T) {
 	db, cleanup := testOpen(t)
 	defer cleanup()

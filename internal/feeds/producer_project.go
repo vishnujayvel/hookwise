@@ -29,6 +29,10 @@ func (p *ProjectProducer) SetFeedsConfig(cfg core.FeedsConfig) {
 }
 
 func (p *ProjectProducer) Produce(ctx context.Context) (interface{}, error) {
+	// Add timeout to prevent blocking the poll cycle on slow git operations.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return p.fallbackResult()
