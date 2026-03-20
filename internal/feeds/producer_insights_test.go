@@ -51,6 +51,12 @@ func TestInsightsProducer_EnvelopeStructure(t *testing.T) {
 	assert.True(t, ok, "data must have 'staleness_days'")
 	_, ok = data["recent_session"]
 	assert.True(t, ok, "data must have 'recent_session'")
+	_, ok = data["recent_msgs_per_day"]
+	assert.True(t, ok, "data must have 'recent_msgs_per_day'")
+	_, ok = data["recent_messages"]
+	assert.True(t, ok, "data must have 'recent_messages'")
+	_, ok = data["recent_days_active"]
+	assert.True(t, ok, "data must have 'recent_days_active'")
 }
 
 func TestInsightsProducer_EnvelopeNoSourceKey(t *testing.T) {
@@ -167,7 +173,8 @@ func TestInsightsProducer_TestFixture_FieldConsistency(t *testing.T) {
 	// Compare keys against a zeroed envelope (which has all the same fields).
 	p := &InsightsProducer{}
 	zeroed := p.zeroedEnvelope(30)
-	zeroedData := zeroed["data"].(map[string]interface{})
+	zeroedData, ok := zeroed["data"].(map[string]interface{})
+	require.True(t, ok, "zeroed envelope data should be a map")
 
 	for key := range zeroedData {
 		_, ok := fixtureData[key]

@@ -31,6 +31,8 @@ func TestNewsProducer_EnvelopeStructure(t *testing.T) {
 	assert.True(t, ok, "story.title must be a string")
 	_, ok = story["url"].(string)
 	assert.True(t, ok, "story.url must be a string")
+	_, ok = story["score"]
+	assert.True(t, ok, "story should have score")
 }
 
 func TestNewsProducer_EnvelopeNoTopLevelSourceKey(t *testing.T) {

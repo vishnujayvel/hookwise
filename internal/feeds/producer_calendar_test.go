@@ -110,7 +110,10 @@ func TestCalendarProducer_TestFixture_FieldConsistency(t *testing.T) {
 	})
 	result, err := p.Produce(context.Background())
 	require.NoError(t, err)
-	realData := result.(map[string]interface{})["data"].(map[string]interface{})
+	resultMap, ok := result.(map[string]interface{})
+	require.True(t, ok, "result should be a map")
+	realData, ok := resultMap["data"].(map[string]interface{})
+	require.True(t, ok, "data should be a map")
 
 	// All keys in the real envelope must appear in the fixture.
 	for key := range realData {

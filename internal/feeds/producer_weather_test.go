@@ -260,7 +260,8 @@ func TestWeatherProducer_TestFixture_FieldConsistency(t *testing.T) {
 	// Compare keys against a real fallback (which has all the same fields).
 	p := &WeatherProducer{}
 	fallback := p.fallbackResult("test")
-	fallbackData := fallback["data"].(map[string]interface{})
+	fallbackData, ok := fallback["data"].(map[string]interface{})
+	require.True(t, ok, "fallback data should be a map")
 
 	for key := range fallbackData {
 		_, ok := fixtureData[key]
