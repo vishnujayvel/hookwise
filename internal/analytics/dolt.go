@@ -302,8 +302,13 @@ func (d *DB) initSchema(ctx context.Context) error {
 	}
 
 	// Migration: add ttl_seconds to notifications (v2).
-	// Ignore error — column may already exist.
-	_, _ = d.db.ExecContext(ctx, "ALTER TABLE notifications ADD COLUMN ttl_seconds INT DEFAULT 86400")
+	// Only ignore "duplicate column" errors (column already exists).
+	if _, err := d.db.ExecContext(ctx, "ALTER TABLE notifications ADD COLUMN ttl_seconds INT DEFAULT 86400"); err != nil {
+		errMsg := strings.ToLower(err.Error())
+		if !strings.Contains(errMsg, "duplicate column") && !strings.Contains(errMsg, "already exists") {
+			return fmt.Errorf("alter notifications add ttl_seconds: %w", err)
+		}
+	}
 
 	// Commit any schema changes so the working tree starts clean.
 	// On subsequent opens this will be a no-op (nothing to commit).
@@ -321,6 +326,48 @@ func (d *DB) initSchema(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Guard Block Summaries (Task 11.1 — SQL extraction)
+// ---------------------------------------------------------------------------
+
+// GuardBlockSummary summarizes block events for a single tool pattern.
+type GuardBlockSummary struct {
+	ToolName   string
+	BlockCount int
+}
+
+// GuardBlockSummaries queries for tools that appear frequently in PreToolUse
+// events on the given day, returning those with 5 or more occurrences.
+//
+// The today parameter should be a date prefix like "2006-01-02".
+func (d *DB) GuardBlockSummaries(ctx context.Context, today string) ([]GuardBlockSummary, error) {
+	rows, err := d.db.QueryContext(ctx,
+		`SELECT tool_name, COUNT(*) AS cnt
+		 FROM events
+		 WHERE event_type = 'PreToolUse'
+		   AND timestamp LIKE ?
+		   AND tool_name != ''
+		 GROUP BY tool_name
+		 HAVING cnt >= 5
+		 ORDER BY cnt DESC`,
+		today+"%",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: query guard blocks: %w", err)
+	}
+	defer rows.Close()
+
+	var summaries []GuardBlockSummary
+	for rows.Next() {
+		var s GuardBlockSummary
+		if err := rows.Scan(&s.ToolName, &s.BlockCount); err != nil {
+			return nil, fmt.Errorf("analytics: scan guard blocks: %w", err)
+		}
+		summaries = append(summaries, s)
+	}
+	return summaries, rows.Err()
 }
 
 // schemaDDL contains the ten table definitions from the design doc.  Each

@@ -63,12 +63,6 @@ func CheckBudget(ctx context.Context, ns *NotificationService, costState *analyt
 // Guard effectiveness notifications (R12.2)
 // ---------------------------------------------------------------------------
 
-// GuardBlockSummary summarizes block events for a single tool pattern.
-type GuardBlockSummary struct {
-	ToolName   string
-	BlockCount int
-}
-
 // CheckGuardEffectiveness queries for tools that have been blocked frequently
 // (5 or more times today) and creates a notification for each one that
 // hasn't already been notified about today.
@@ -79,10 +73,9 @@ func CheckGuardEffectiveness(ctx context.Context, ns *NotificationService, db *a
 
 	today := time.Now().UTC().Format("2006-01-02")
 
-	// Query events table for tools that were blocked today.
-	// Guard blocks are recorded as PreToolUse events. We look for events
-	// with a high count to identify frequently-blocked tools.
-	summaries, err := queryGuardBlocks(ctx, db, today)
+	// Query events table for tools that were blocked today via the
+	// analytics DB method (SQL lives in the analytics package).
+	summaries, err := db.GuardBlockSummaries(ctx, today)
 	if err != nil {
 		return fmt.Errorf("notifications: check guard effectiveness: %w", err)
 	}
@@ -113,36 +106,6 @@ func CheckGuardEffectiveness(ctx context.Context, ns *NotificationService, db *a
 	}
 
 	return nil
-}
-
-// queryGuardBlocks queries for tool names that appear frequently in PreToolUse
-// events today, which indicates repeated guard evaluation (potential blocks).
-func queryGuardBlocks(ctx context.Context, db *analytics.DB, today string) ([]GuardBlockSummary, error) {
-	rows, err := db.Query(ctx,
-		`SELECT tool_name, COUNT(*) AS cnt
-		 FROM events
-		 WHERE event_type = 'PreToolUse'
-		   AND timestamp LIKE ?
-		   AND tool_name != ''
-		 GROUP BY tool_name
-		 HAVING cnt >= 5
-		 ORDER BY cnt DESC`,
-		today+"%",
-	)
-	if err != nil {
-		return nil, fmt.Errorf("notifications: query guard blocks: %w", err)
-	}
-	defer rows.Close()
-
-	var summaries []GuardBlockSummary
-	for rows.Next() {
-		var s GuardBlockSummary
-		if err := rows.Scan(&s.ToolName, &s.BlockCount); err != nil {
-			return nil, fmt.Errorf("notifications: scan guard blocks: %w", err)
-		}
-		summaries = append(summaries, s)
-	}
-	return summaries, rows.Err()
 }
 
 // ---------------------------------------------------------------------------
