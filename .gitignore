@@ -1,6 +1,6 @@
-# Go
-hookwise
-hookwise-go
+# Go (binary only, not cmd/hookwise/ source directory)
+/hookwise
+/hookwise-go
 
 # IDE
 .idea/
@@ -17,6 +17,12 @@ Thumbs.db
 
 # Claude Code (PDLC specs, product context)
 .claude/
+
+# OpenSpec (local spec-driven dev, not shipped)
+openspec/
+
+# Loki Mode (autonomous orchestration state)
+.loki/
 
 # Python TUI
 __pycache__/

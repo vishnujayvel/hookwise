@@ -334,66 +334,11 @@ type StatsOptions struct {
 }
 
 // --- Coaching Types ---
-
-type Mode string
-
-const (
-	ModeCoding   Mode = "coding"
-	ModeTooling  Mode = "tooling"
-	ModePractice Mode = "practice"
-	ModePrep     Mode = "prep"
-	ModeNeutral  Mode = "neutral"
-)
-
-type AlertLevel string
-
-const (
-	AlertNone   AlertLevel = "none"
-	AlertYellow AlertLevel = "yellow"
-	AlertOrange AlertLevel = "orange"
-	AlertRed    AlertLevel = "red"
-)
-
-type LargeChangeRecord struct {
-	Timestamp             string `json:"timestamp"`
-	ToolName              string `json:"toolName"`
-	LinesChanged          int    `json:"linesChanged"`
-	AcceptedWithinSeconds int    `json:"acceptedWithinSeconds"`
-}
-
-type CoachingCache struct {
-	LastPromptAt   string              `json:"lastPromptAt"`
-	PromptHistory  []string            `json:"promptHistory"`
-	CurrentMode    Mode                `json:"currentMode"`
-	ModeStartedAt string              `json:"modeStartedAt"`
-	ToolingMinutes float64             `json:"toolingMinutes"`
-	AlertLevel     AlertLevel          `json:"alertLevel"`
-	TodayDate      string              `json:"todayDate"`
-	PracticeCount  int                 `json:"practiceCount"`
-	LastLargeChange *LargeChangeRecord `json:"lastLargeChange"`
-}
-
-type MetacognitionResult struct {
-	ShouldEmit  bool   `json:"shouldEmit"`
-	PromptText  string `json:"promptText,omitempty"`
-	PromptID    string `json:"promptId,omitempty"`
-	Category    string `json:"category,omitempty"`
-	TriggerType string `json:"triggerType,omitempty"` // "interval", "rapid_acceptance", "mode_change", "builder_trap"
-}
-
-type GrammarResult struct {
-	ShouldCorrect    bool           `json:"shouldCorrect"`
-	Issues           []GrammarIssue `json:"issues"`
-	CorrectedText    string         `json:"correctedText,omitempty"`
-	ImprovementScore float64        `json:"improvementScore,omitempty"`
-}
-
-type GrammarIssue struct {
-	Rule       string `json:"rule"`
-	Original   string `json:"original"`
-	Suggestion string `json:"suggestion"`
-	Position   int    `json:"position"`
-}
+//
+// Runtime coaching types (Mode, AlertLevel, CoachingCache, etc.) have been
+// extracted to internal/coaching/types.go.  Config types (CoachingConfig,
+// MetacognitionConfig, BuilderTrapConfig, etc.) remain here to avoid
+// circular imports.
 
 // --- Cost Types ---
 
