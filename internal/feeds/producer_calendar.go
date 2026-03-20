@@ -90,18 +90,10 @@ func loadCalendarOAuthClient(ctx context.Context, tokenPath string) (*http.Clien
 		TokenType:    "Bearer",
 	}
 
-	// Parse expiry if present.
+	// Parse expiry if present — use canonical flexible parser.
 	if ptf.Expiry != "" {
-		for _, layout := range []string{
-			time.RFC3339,
-			"2006-01-02T15:04:05.999999999Z07:00",
-			"2006-01-02T15:04:05Z",
-			"2006-01-02T15:04:05.999999Z",
-		} {
-			if t, err := time.Parse(layout, ptf.Expiry); err == nil {
-				tok.Expiry = t
-				break
-			}
+		if t, err := core.ParseTimeFlex(ptf.Expiry); err == nil {
+			tok.Expiry = t
 		}
 	}
 
@@ -111,6 +103,7 @@ func loadCalendarOAuthClient(ctx context.Context, tokenPath string) (*http.Clien
 
 // writeBackToken writes the refreshed token back to disk in Python google-auth format
 // so that the Python calendar-feed.py script stays compatible.
+// Uses atomic write (write-to-temp-then-rename) to prevent partial writes on crash.
 func writeBackToken(tokenPath string, tok *oauth2.Token, cfg *oauth2.Config) {
 	ptf := pythonTokenFile{
 		Token:        tok.AccessToken,
@@ -123,12 +116,7 @@ func writeBackToken(tokenPath string, tok *oauth2.Token, cfg *oauth2.Config) {
 		ptf.Expiry = tok.Expiry.UTC().Format(time.RFC3339)
 	}
 
-	data, err := json.MarshalIndent(ptf, "", "  ")
-	if err != nil {
-		core.Logger().Debug("calendar: failed to marshal token for write-back", "error", err)
-		return
-	}
-	if err := os.WriteFile(tokenPath, data, 0600); err != nil {
+	if err := core.AtomicWriteJSON(tokenPath, ptf); err != nil {
 		core.Logger().Debug("calendar: failed to write-back token", "error", err)
 	}
 }
@@ -291,14 +279,14 @@ func parseGoogleEventTime(edt *calendar.EventDateTime) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	if edt.DateTime != "" {
-		t, err := time.Parse(time.RFC3339, edt.DateTime)
+		t, err := core.ParseTimeFlex(edt.DateTime)
 		if err != nil {
 			return time.Time{}, false
 		}
 		return t, false
 	}
 	if edt.Date != "" {
-		t, err := time.Parse("2006-01-02", edt.Date)
+		t, err := core.ParseTimeFlex(edt.Date)
 		if err != nil {
 			return time.Time{}, false // Parse failed, don't claim it's all-day
 		}
