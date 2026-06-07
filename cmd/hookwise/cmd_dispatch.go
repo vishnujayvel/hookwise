@@ -165,7 +165,8 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 		}
 	}
 
-	// Commit to Dolt so data is visible across connections (ARCH-2).
+	// CommitDispatch is a no-op under SQLite: WAL makes writes immediately
+	// visible across connections, so no explicit commit is needed (ARCH-2).
 	if _, err := db.CommitDispatch(ctx, eventType, payload.SessionID); err != nil {
 		core.Logger().Error("analytics: commit", "error", err)
 	}

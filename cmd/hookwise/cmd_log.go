@@ -24,7 +24,7 @@ func newLogCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Dolt data directory (defaults to ~/.hookwise/dolt)")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to ~/.hookwise/analytics.db)")
 	cmd.Flags().IntVar(&limit, "limit", 10, "Maximum number of commits to show")
 	return cmd
 }

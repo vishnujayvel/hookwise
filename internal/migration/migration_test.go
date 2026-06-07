@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,7 +26,7 @@ func testDoltDB(t *testing.T) (*analytics.DB, func()) {
 	tmpDir, err := os.MkdirTemp("", "hookwise-migration-dolt-*")
 	require.NoError(t, err)
 
-	db, err := analytics.Open(tmpDir)
+	db, err := analytics.Open(filepath.Join(tmpDir, "analytics.db"))
 	require.NoError(t, err)
 
 	cleanup := func() {
@@ -562,10 +561,9 @@ func TestRun_LiveMigration(t *testing.T) {
 	assert.True(t, result.CostStateImported)
 	assert.True(t, result.ConfigValid)
 	assert.Empty(t, result.Errors)
-	assert.NotEmpty(t, result.DoltCommitHash)
 
 	output := buf.String()
-	assert.Contains(t, output, "Dolt commit:")
+	assert.Contains(t, output, "Data written to analytics database.")
 	assert.Contains(t, output, "hookwise upgrade")
 }
 
@@ -825,9 +823,9 @@ func TestRun_OutputCoversAllPhases(t *testing.T) {
 	assert.Contains(t, output, "cost state")
 	// Should mention config validation.
 	assert.Contains(t, output, "config")
-	// Should mention Dolt commit intention.
-	assert.True(t, strings.Contains(output, "commit") || strings.Contains(output, "Commit"),
-		"output should mention Dolt commit")
+	// Should mention writing imported data to the analytics database.
+	assert.Contains(t, output, "analytics database",
+		"output should mention writing data to the analytics database")
 	// Should have summary.
 	assert.Contains(t, output, "Migration summary")
 }

@@ -1,10 +1,10 @@
 // Package migration handles data migration from the TypeScript hookwise
-// installation (SQLite analytics.db + cost-state.json) into the Go Dolt
-// database. It implements R8.1-R8.5 from the migration requirements.
+// installation (SQLite analytics.db + cost-state.json) into the Go SQLite
+// analytics database. It implements R8.1-R8.5 from the migration requirements.
 //
 // Design principles:
 //   - ARCH-1: fail-open -- migration errors are reported, never crash
-//   - ARCH-8: batch Dolt commit after migration
+//   - Data is written directly to SQLite (durable immediately, no commit step)
 //   - Read-only access to original files (R8.4: non-destructive)
 //   - Dry-run mode prints what would happen without writing (R8.3)
 package migration
@@ -51,7 +51,6 @@ type MigrationResult struct {
 	AuthorshipImported int
 	CostStateImported bool
 	ConfigValid      bool
-	DoltCommitHash   string
 	Errors           []string
 }
 
@@ -449,7 +448,9 @@ func ValidateConfig(projectDir string, w io.Writer) (bool, []string) {
 //  2. Migrate SQLite data (sessions, events, authorship)
 //  3. Migrate cost-state.json
 //  4. Validate config parity
-//  5. Commit to Dolt (unless dry-run)
+//
+// Data is written directly to SQLite and is durable immediately; there is no
+// separate commit step.
 func Run(opts MigrationOpts) MigrationResult {
 	result := MigrationResult{}
 	ctx := context.Background()
@@ -520,20 +521,13 @@ func Run(opts MigrationOpts) MigrationResult {
 	result.ConfigValid = valid
 	result.Errors = append(result.Errors, errs...)
 
-	// Step 6: Dolt commit (unless dry-run).
+	// Step 6: Finalize. Data written to SQLite is durable immediately, so
+	// there is no separate commit step.
 	if !opts.DryRun && db != nil {
-		fmt.Fprintln(w, "\nCommitting to Dolt...")
-		hash, err := db.Commit(ctx, "migration:upgrade from-typescript")
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("Dolt commit failed: %v", err))
-		} else if hash != "" {
-			result.DoltCommitHash = hash
-			fmt.Fprintf(w, "  Dolt commit: %s\n", hash)
-		} else {
-			fmt.Fprintln(w, "  No data changes to commit.")
-		}
+		fmt.Fprintln(w, "\nFinalizing...")
+		fmt.Fprintln(w, "  Data written to analytics database.")
 	} else if opts.DryRun {
-		fmt.Fprintln(w, "\n[dry-run] Would commit to Dolt with message: \"migration:upgrade from-typescript\"")
+		fmt.Fprintln(w, "\n[dry-run] Would write imported data to the analytics database.")
 	}
 
 	// Summary.

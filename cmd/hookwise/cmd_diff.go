@@ -22,7 +22,7 @@ func newDiffCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Dolt data directory (defaults to ~/.hookwise/dolt)")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to ~/.hookwise/analytics.db)")
 	return cmd
 }
 

@@ -37,7 +37,7 @@ import (
 func openTestDolt(t *testing.T) (*analytics.DB, func()) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := analytics.Open(dir)
+	db, err := analytics.Open(filepath.Join(dir, "analytics.db"))
 	require.NoError(t, err)
 	return db, func() {
 		_ = db.Close()
@@ -274,17 +274,17 @@ func TestIntegration_FullDispatchWithDoltWrites(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 5, eventCount, "should have 5 events")
 
-	// --- Phase D: Dolt commit ---
-	hash, err := doltDB.CommitDispatch(ctx, "PostToolUse", sessionID)
-	require.NoError(t, err)
-	assert.NotEmpty(t, hash, "Dolt commit should produce a non-empty hash")
+	// --- Phase D: Commit is a documented no-op under SQLite ---
+	// Writes are durable immediately (WAL); CommitDispatch returns no error
+	// and an empty hash. It is retained only for API compatibility.
+	_, err = doltDB.CommitDispatch(ctx, "PostToolUse", sessionID)
+	require.NoError(t, err, "no-op CommitDispatch should never error")
 
-	// --- Phase E: Verify via Dolt log ---
-	logs, err := doltDB.Log(ctx, 2)
+	// --- Phase E: Verify data remains durable after the no-op commit ---
+	var sessionCountAfter int
+	err = doltDB.QueryRow(ctx, "SELECT COUNT(*) FROM sessions").Scan(&sessionCountAfter)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(logs), 1)
-	assert.Contains(t, logs[0].Message, "dispatch:PostToolUse")
-	assert.Contains(t, logs[0].Message, sessionID)
+	assert.Equal(t, 1, sessionCountAfter, "session should remain durable")
 }
 
 // =========================================================================
@@ -559,10 +559,9 @@ func TestIntegration_UpgradeFromMockTypeScript_Live(t *testing.T) {
 	assert.True(t, result.CostStateImported)
 	assert.True(t, result.ConfigValid)
 	assert.Empty(t, result.Errors)
-	assert.NotEmpty(t, result.DoltCommitHash, "live migration should produce a Dolt commit")
 
 	output := buf.String()
-	assert.Contains(t, output, "Dolt commit:")
+	assert.Contains(t, output, "Data written to analytics database.")
 	assert.Contains(t, output, "hookwise upgrade")
 }
 

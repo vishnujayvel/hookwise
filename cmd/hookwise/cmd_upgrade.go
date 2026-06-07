@@ -48,7 +48,7 @@ Original files are never modified (non-destructive).`,
 	}
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview migration without making changes")
-	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Dolt data directory (defaults to ~/.hookwise/dolt)")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to ~/.hookwise/analytics.db)")
 	cmd.Flags().StringVar(&projectDir, "project-dir", "", "Project directory for config validation (defaults to cwd)")
 
 	return cmd
