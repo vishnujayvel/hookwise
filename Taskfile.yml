@@ -17,13 +17,16 @@ vars:
     sh: git rev-parse --short HEAD 2>/dev/null || echo "none"
   DATE:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
-  LDFLAGS: -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildDate={{.DATE}}
+  # -s -w strips the symbol table + DWARF: drops the binary from ~28 MB to ~19 MB
+  # (under the 20 MB target). modernc.org/sqlite is pure-Go, so CGO is disabled.
+  LDFLAGS: -s -w -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildDate={{.DATE}}
   INSTALL_PATH:
     sh: echo "${HOOKWISE_INSTALL_PATH:-$(brew --prefix 2>/dev/null || echo /usr/local)/bin/hookwise}"
   TUI_VENV: .venv/bin
-  # M1 (retro-009): Limit test parallelism to 2 packages to prevent memory exhaustion.
-  # Each hookwise.test binary is ~149 MB (Dolt embedded). With -race, ~300 MB.
-  # 15 packages × 300 MB = 4.5 GB per `go test ./...`. -p 2 caps at ~600 MB.
+  # M1 (retro-009): Limit test parallelism to 2 packages as defense-in-depth.
+  # Post-Dolt the test binaries shrank from ~149 MB to ~12 MB (~19 MB with -race),
+  # so the 4.5 GB exhaustion scenario is largely gone — but -p 2 stays as a guard
+  # against regressions and concurrent agent runs. See the Dolt-removal decision record.
   TEST_PARALLEL: "2"
   GOMEMLIMIT: 4GiB
 
@@ -167,8 +170,10 @@ tasks:
 
   install:
     desc: "Build and install binary to PATH"
+    env:
+      CGO_ENABLED: "0"
     cmds:
-      - go build -ldflags "{{.LDFLAGS}}" -o {{.INSTALL_PATH}} ./cmd/hookwise/
+      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o {{.INSTALL_PATH}} ./cmd/hookwise/
       - echo "Installed {{.INSTALL_PATH}} ({{.VERSION}} @ {{.COMMIT}})"
     sources:
       - "**/*.go"
