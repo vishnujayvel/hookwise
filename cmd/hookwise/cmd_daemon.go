@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/core"
 	"github.com/vishnujayvel/hookwise/internal/feeds"
 )
@@ -117,6 +119,13 @@ func newDaemonRunCmd() *cobra.Command {
 				return fmt.Errorf("daemon: %w", err)
 			}
 
+			// Schedule periodic analytics snapshots from the cmd layer.
+			// This deliberately lives here (package main) rather than inside
+			// internal/feeds, because ARCH-3 forbids the feeds/daemon package
+			// from importing internal/analytics. The cmd layer may import both.
+			// The scheduler stops when the daemon's stop channel closes.
+			startSnapshotScheduler(config.Analytics, daemon.StopCh())
+
 			// Block until the daemon stops.
 			// The daemon handles SIGTERM/SIGINT and /shutdown internally.
 			<-daemon.StopCh()
@@ -127,6 +136,85 @@ func newDaemonRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&configPath, "config", "", "Config file path")
 	cmd.Flags().StringVar(&socketPath, "socket", "", "Socket file path")
 	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// Periodic analytics snapshots (dolt-to-sqlite Phase 2)
+// ---------------------------------------------------------------------------
+
+// startSnapshotScheduler launches a background goroutine that takes an
+// analytics snapshot every cfg.SnapshotIntervalMinutes and prunes older
+// snapshots beyond cfg.SnapshotRetention. It is a no-op unless both analytics
+// and snapshots are enabled.
+//
+// Architecture notes:
+//   - ARCH-3: this scheduling lives in cmd/hookwise (package main), NOT in
+//     internal/feeds, because the arch lint forbids the feeds/daemon package
+//     from importing internal/analytics. The cmd layer is permitted to import
+//     both, so the scheduler bridges them here.
+//   - ARCH-7: the side effect is non-blocking (runs in its own goroutine) and
+//     each tick is wrapped in a recover() so a snapshot panic can never crash
+//     the daemon.
+//
+// The goroutine exits when stopCh is closed (daemon shutdown).
+func startSnapshotScheduler(cfg core.AnalyticsConfig, stopCh <-chan struct{}) {
+	if !cfg.Enabled || !cfg.SnapshotEnabled {
+		return
+	}
+
+	interval := time.Duration(cfg.SnapshotIntervalMinutes) * time.Minute
+	if interval <= 0 {
+		interval = time.Duration(core.DefaultSnapshotIntervalMinutes) * time.Minute
+	}
+
+	dbPath := cfg.DBPath
+	retention := cfg.SnapshotRetention
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stopCh:
+				return
+			case <-ticker.C:
+				runScheduledSnapshot(dbPath, retention)
+			}
+		}
+	}()
+}
+
+// runScheduledSnapshot performs a single snapshot + prune cycle, recovering
+// from any panic so the daemon stays alive (ARCH-7). All failures are logged,
+// never propagated.
+func runScheduledSnapshot(dbPath string, retention int) {
+	defer func() {
+		if r := recover(); r != nil {
+			core.Logger().Error("panic in snapshot scheduler", "recovered", fmt.Sprintf("%v", r))
+		}
+	}()
+
+	db, err := analytics.Open(dbPath)
+	if err != nil {
+		core.Logger().Warn("snapshot scheduler: failed to open analytics DB", "error", err)
+		return
+	}
+	defer db.Close()
+
+	path, err := db.Snapshot(context.Background(), analytics.DefaultSnapshotsDir())
+	if err != nil {
+		core.Logger().Warn("snapshot scheduler: snapshot failed", "error", err)
+		return
+	}
+
+	pruned, err := analytics.PruneSnapshots(analytics.DefaultSnapshotsDir(), retention)
+	if err != nil {
+		core.Logger().Warn("snapshot scheduler: prune failed", "snapshot", path, "error", err)
+		return
+	}
+
+	core.Logger().Info("analytics snapshot taken", "path", path, "pruned", len(pruned))
 }
 
 // ---------------------------------------------------------------------------

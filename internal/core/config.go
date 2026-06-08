@@ -60,7 +60,12 @@ func GetDefaultConfig() HooksConfig {
 				Tone:      "gentle",
 			},
 		},
-		Analytics: AnalyticsConfig{Enabled: true},
+		Analytics: AnalyticsConfig{
+			Enabled:                 true,
+			SnapshotEnabled:         true,
+			SnapshotIntervalMinutes: DefaultSnapshotIntervalMinutes,
+			SnapshotRetention:       DefaultSnapshotRetention,
+		},
 		Greeting:  GreetingConfig{Enabled: false},
 		Sounds:    SoundsConfig{Enabled: false},
 		StatusLine: StatusLineConfig{
