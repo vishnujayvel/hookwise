@@ -11,7 +11,7 @@ import (
 )
 
 func TestPersistAcrossConnections(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "dolt-persist-*")
+	tmpDir, err := os.MkdirTemp("", "persist-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 

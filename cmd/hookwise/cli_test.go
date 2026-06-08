@@ -372,7 +372,7 @@ func TestDiffRequiresArgs(t *testing.T) {
 
 func TestLogDefaultLimit(t *testing.T) {
 	// This test verifies the log command exists and accepts --limit.
-	// We can't test actual Dolt output without a database, so we just
+	// We can't test actual analytics DB output without a database, so we just
 	// verify the flag is recognized.
 	rootCmd := newRootCmd()
 	logCmd, _, err := rootCmd.Find([]string{"log"})
@@ -876,7 +876,7 @@ func writeJSONFile(t *testing.T, path string, v interface{}) {
 }
 
 // ---------------------------------------------------------------------------
-// 23. recordAnalytics writes session data to Dolt
+// 23. recordAnalytics writes session data to the analytics DB
 // ---------------------------------------------------------------------------
 
 func TestRecordAnalytics_SessionStart(t *testing.T) {

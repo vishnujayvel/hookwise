@@ -102,7 +102,7 @@ func TestArch_PositiveControl(t *testing.T) {
 // --------------------------------------------------------------------------
 
 // TestArch_FeedsDoNotImportAnalytics enforces ARCH-3: the daemon/feeds packages
-// must never import internal/analytics (daemon writes JSON cache only, not Dolt).
+// must never import internal/analytics (daemon writes JSON cache only, not the analytics DB).
 func TestArch_FeedsDoNotImportAnalytics(t *testing.T) {
 	analyticsPath := modulePath + "/internal/analytics"
 	pkgs := loadPackages(t, modulePath+"/internal/feeds/...")

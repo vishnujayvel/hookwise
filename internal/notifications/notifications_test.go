@@ -13,7 +13,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Test helper: open a fresh Dolt DB and return a NotificationService
+// Test helper: open a fresh analytics DB and return a NotificationService
 // ---------------------------------------------------------------------------
 
 func testService(t *testing.T) (*NotificationService, *analytics.DB, func()) {

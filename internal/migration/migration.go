@@ -129,7 +129,7 @@ func MigrateSQLite(ctx context.Context, db *analytics.DB, sqlitePath string, dry
 }
 
 // migrateSessions reads sessions from the source SQLite DB and writes to the analytics DB.
-func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
+func migrateSessions(ctx context.Context, db *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
 	var errs []string
 
 	rows, err := sqliteDB.QueryContext(ctx,
@@ -146,7 +146,7 @@ func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB
 	count := 0
 	var a *analytics.Analytics
 	if !dryRun {
-		a = analytics.NewAnalytics(doltDB)
+		a = analytics.NewAnalytics(db)
 	}
 	for rows.Next() {
 		var (
@@ -210,7 +210,7 @@ func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB
 }
 
 // migrateEvents reads events from the source SQLite DB and writes to the analytics DB.
-func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
+func migrateEvents(ctx context.Context, db *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
 	var errs []string
 
 	rows, err := sqliteDB.QueryContext(ctx,
@@ -226,7 +226,7 @@ func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, 
 	count := 0
 	var a *analytics.Analytics
 	if !dryRun {
-		a = analytics.NewAnalytics(doltDB)
+		a = analytics.NewAnalytics(db)
 	}
 	for rows.Next() {
 		var (
@@ -280,7 +280,7 @@ func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, 
 }
 
 // migrateAuthorship reads the authorship_ledger from the source SQLite DB and writes to the analytics DB.
-func migrateAuthorship(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
+func migrateAuthorship(ctx context.Context, db *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
 	var errs []string
 
 	rows, err := sqliteDB.QueryContext(ctx,
@@ -295,7 +295,7 @@ func migrateAuthorship(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.
 	count := 0
 	var a *analytics.Analytics
 	if !dryRun {
-		a = analytics.NewAnalytics(doltDB)
+		a = analytics.NewAnalytics(db)
 	}
 	for rows.Next() {
 		var (
