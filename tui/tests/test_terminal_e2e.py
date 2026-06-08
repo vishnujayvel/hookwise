@@ -201,7 +201,7 @@ class TestStatusLineE2E:
         Currently xfail because some feed producers are stubs:
         - #57: ProjectProducer returns placeholder
         - #58: CalendarProducer returns placeholder
-        - #59: session/cost analytics not wired to Dolt
+        - #59: session/cost analytics not wired to SQLite analytics DB
 
         Note: InsightsProducer is fixed and tested separately via
         test_status_line_has_insights_data.

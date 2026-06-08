@@ -32,7 +32,8 @@ import (
 type MigrationOpts struct {
 	// DryRun prints what would be migrated without writing.
 	DryRun bool
-	// DoltDataDir is the Dolt data directory (empty = default).
+	// DoltDataDir is the analytics DB path (empty = default). Named for
+	// historical compatibility with callers; the actual backend is SQLite.
 	DoltDataDir string
 	// HomeDir overrides the user home directory (for testing).
 	HomeDir string
@@ -98,11 +99,11 @@ func DetectTypeScript(opts MigrationOpts) (sqlitePath, costStatePath string) {
 // SQLite migration (Task 10.1)
 // ---------------------------------------------------------------------------
 
-// MigrateSQLite reads sessions, events, and authorship data from the SQLite
-// analytics.db and writes them into the Dolt database.
+// MigrateSQLite reads sessions, events, and authorship data from a TypeScript-era
+// analytics.db and writes them into the current SQLite analytics database.
 //
-// The SQLite database is opened read-only. If dryRun is true, data is read
-// and counted but not written to Dolt.
+// The source database is opened read-only. If dryRun is true, data is read
+// and counted but not written.
 func MigrateSQLite(ctx context.Context, db *analytics.DB, sqlitePath string, dryRun bool, w io.Writer) (sessions, events, authorship int, errs []string) {
 	// Open SQLite in read-only mode using the pure-Go driver.
 	sqliteDB, err := sql.Open("sqlite", sqlitePath+"?mode=ro")
@@ -127,7 +128,7 @@ func MigrateSQLite(ctx context.Context, db *analytics.DB, sqlitePath string, dry
 	return sessions, events, authorship, errs
 }
 
-// migrateSessions reads sessions from SQLite and writes to Dolt.
+// migrateSessions reads sessions from the source SQLite DB and writes to the analytics DB.
 func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
 	var errs []string
 
@@ -208,7 +209,7 @@ func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB
 	return count, errs
 }
 
-// migrateEvents reads events from SQLite and writes to Dolt.
+// migrateEvents reads events from the source SQLite DB and writes to the analytics DB.
 func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
 	var errs []string
 
@@ -278,7 +279,7 @@ func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, 
 	return count, errs
 }
 
-// migrateAuthorship reads the authorship_ledger from SQLite and writes to Dolt.
+// migrateAuthorship reads the authorship_ledger from the source SQLite DB and writes to the analytics DB.
 func migrateAuthorship(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
 	var errs []string
 
@@ -348,7 +349,7 @@ func migrateAuthorship(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.
 // Cost state migration (Task 10.2)
 // ---------------------------------------------------------------------------
 
-// MigrateCostState reads cost-state.json and writes it into the Dolt cost_state
+// MigrateCostState reads cost-state.json and writes it into the analytics cost_state
 // table. If dryRun is true, the JSON is read and validated but not written.
 func MigrateCostState(ctx context.Context, db *analytics.DB, jsonPath string, dryRun bool, w io.Writer) (bool, []string) {
 	var errs []string
@@ -387,7 +388,7 @@ func MigrateCostState(ctx context.Context, db *analytics.DB, jsonPath string, dr
 	}
 
 	if err := db.WriteCostState(ctx, costState); err != nil {
-		errs = append(errs, fmt.Sprintf("writing cost state to Dolt: %v", err))
+		errs = append(errs, fmt.Sprintf("writing cost state to analytics DB: %v", err))
 		return false, errs
 	}
 
@@ -484,13 +485,13 @@ func Run(opts MigrationOpts) MigrationResult {
 		fmt.Fprintf(w, "  Found: %s\n", costStatePath)
 	}
 
-	// Step 2: Open Dolt DB (unless pure dry-run with no actual writes needed).
+	// Step 2: Open analytics DB (unless pure dry-run with no actual writes needed).
 	var db *analytics.DB
 	if !opts.DryRun {
 		var err error
 		db, err = analytics.Open(opts.DoltDataDir)
 		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("failed to open Dolt DB: %v", err))
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to open analytics DB: %v", err))
 			fmt.Fprintf(w, "ERROR: %v\n", err)
 			return result
 		}

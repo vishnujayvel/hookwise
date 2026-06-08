@@ -20,7 +20,7 @@ func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
 		Short: "Run system health checks",
-		Long:  "Checks hookwise.yaml validity, Dolt DB connectivity, state directory, and daemon status.",
+		Long:  "Checks hookwise.yaml validity, analytics DB connectivity, state directory, and daemon status.",
 		RunE:  runDoctor,
 	}
 }
@@ -74,13 +74,13 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "PASS  state-dir: %s\n", stateDir)
 	}
 
-	// Check 3: Dolt DB.
+	// Check 3: analytics DB.
 	doltDir := analytics.DefaultDoltDir()
 	if info, err := os.Stat(doltDir); err != nil || !info.IsDir() {
-		fmt.Fprintf(w, "WARN  dolt-db: %s not found (will be created on first dispatch)\n", doltDir)
+		fmt.Fprintf(w, "WARN  legacy-dolt: %s not found (archived or never existed; new data is in analytics.db)\n", doltDir)
 		warnings++
 	} else {
-		fmt.Fprintf(w, "PASS  dolt-db: %s\n", doltDir)
+		fmt.Fprintf(w, "PASS  legacy-dolt: %s (archived)\n", doltDir)
 	}
 
 	// Check 4: Daemon liveness via socket dial (replaces PID file check).

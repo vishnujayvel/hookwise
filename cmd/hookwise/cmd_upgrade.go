@@ -19,8 +19,8 @@ func newUpgradeCmd() *cobra.Command {
 		Use:   "upgrade",
 		Short: "Migrate data from TypeScript hookwise installation",
 		Long: `Detects an existing TypeScript hookwise installation (~/.hookwise/analytics.db
-and ~/.hookwise/state/cost-state.json), imports the data into the Go Dolt
-database, and validates config parity.
+and ~/.hookwise/state/cost-state.json), imports the data into the Go SQLite
+analytics database, and validates config parity.
 
 Use --dry-run to preview what would be migrated without making changes.
 Original files are never modified (non-destructive).`,

@@ -139,7 +139,7 @@ func newDaemonRunCmd() *cobra.Command {
 }
 
 // ---------------------------------------------------------------------------
-// Periodic analytics snapshots (dolt-to-sqlite Phase 2)
+// Periodic analytics snapshots (VACUUM INTO, hourly by default)
 // ---------------------------------------------------------------------------
 
 // startSnapshotScheduler launches a background goroutine that takes an

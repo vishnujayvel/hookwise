@@ -57,3 +57,6 @@ excalidraw.log
 # Playwright MCP logs
 .playwright-mcp/
 node_modules
+
+# go-task runner checksum cache
+.task/

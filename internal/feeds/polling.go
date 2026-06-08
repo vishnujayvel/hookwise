@@ -25,7 +25,7 @@ const defaultStaggerOffset = 2 * time.Second
 
 // pollFeed runs a single feed producer in a loop until stopCh is closed.
 // Each successful Produce() result is written to the JSON cache file
-// (ARCH-3: JSON cache only, not Dolt).
+// (ARCH-3: JSON cache only, not the analytics DB).
 func (d *Daemon) pollFeed(ctx context.Context, p Producer, interval time.Duration) {
 	defer d.wg.Done()
 
@@ -66,7 +66,7 @@ func (d *Daemon) runProducer(ctx context.Context, p Producer) {
 		return
 	}
 
-	// ARCH-3: Write to JSON cache only, NOT Dolt.
+	// ARCH-3: Write to JSON cache only, NOT the analytics DB.
 	cachePath := filepath.Join(d.cacheDir, p.Name()+".json")
 	if err := core.AtomicWriteJSON(cachePath, data); err != nil {
 		core.Logger().Error("feeds: cache write error", "producer", p.Name(), "error", err)

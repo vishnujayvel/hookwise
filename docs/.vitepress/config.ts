@@ -53,6 +53,12 @@ export default defineConfig({
             { text: 'Tech Stack', link: '/tech-stack' },
             { text: 'Philosophy', link: '/philosophy' }
           ]
+        },
+        {
+          text: 'Decisions',
+          items: [
+            { text: 'ADR-0001: Dolt → SQLite', link: '/decisions/0001-dolt-to-sqlite' }
+          ]
         }
       ]
     }

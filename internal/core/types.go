@@ -137,9 +137,9 @@ type AnalyticsConfig struct {
 	Enabled bool   `yaml:"enabled" json:"enabled"`
 	DBPath  string `yaml:"db_path,omitempty" json:"dbPath,omitempty"`
 
-	// Periodic snapshot settings (dolt-to-sqlite Phase 2). Snapshots are
-	// point-in-time VACUUM INTO copies of the analytics DB, written to a
-	// separate ~/.hookwise/snapshots/ directory and scheduled by the daemon.
+	// Periodic snapshot settings. Snapshots are point-in-time VACUUM INTO copies
+	// of the analytics DB, written to ~/.hookwise/snapshots/ and scheduled by
+	// the daemon.
 	SnapshotEnabled         bool `yaml:"snapshot_enabled" json:"snapshotEnabled"`
 	SnapshotIntervalMinutes int  `yaml:"snapshot_interval_minutes,omitempty" json:"snapshotIntervalMinutes,omitempty"`
 	SnapshotRetention       int  `yaml:"snapshot_retention,omitempty" json:"snapshotRetention,omitempty"`

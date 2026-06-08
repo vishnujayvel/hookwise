@@ -54,7 +54,7 @@ When to use what:
 
 - `cmd/hookwise/` — CLI entry point (Cobra commands)
 - `internal/core/` — Dispatch engine, guards, config, types
-- `internal/analytics/` — Dolt-based analytics
+- `internal/analytics/` — SQLite-backed analytics (modernc.org/sqlite, WAL mode)
 - `internal/feeds/` — Feed producers and daemon
 - `internal/bridge/` — Go→JSON→Python TUI bridge
 - `internal/notifications/` — Notification platform
@@ -64,7 +64,7 @@ When to use what:
 ## Architecture Constraints
 
 - **ARCH-1**: Fail-open — dispatch always exits 0 on error
-- **ARCH-2**: Serialized Dolt writes via SetMaxOpenConns(1)
+- **ARCH-2**: Single-writer SQLite connection via SetMaxOpenConns(1) — deliberate choice under WAL (not a Dolt limitation)
 - **ARCH-5**: First-match-wins guards
 - **ARCH-6**: Contract parity (byte-identical stdout per JSON fixtures in testdata/contracts/)
 - **ARCH-7**: Side effects non-blocking with per-goroutine recover()
@@ -85,7 +85,7 @@ cd tui && .venv/bin/python -m pytest tests/   # TUI tests
 
 ### Resource Safety (retro-009)
 
-**CRITICAL: Each hookwise.test binary is ~149 MB (Dolt embedded). With `-race`, ~300 MB. Uncontrolled `go test ./...` can consume 4.5 GB per invocation.**
+**CRITICAL: Uncontrolled `go test ./...` can exhaust memory. Even with the SQLite backend, parallel test binaries accumulate fast.**
 
 - **ALWAYS use `-p 2`** to limit package parallelism (2 packages, not 15)
 - **Set `GOMEMLIMIT=4GiB`** when running tests: `GOMEMLIMIT=4GiB go test -race -p 2 ./...`

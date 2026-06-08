@@ -65,7 +65,7 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	cacheDir := filepath.Join(core.GetStateDir(), "state")
 	feedCache, _ := bridge.CollectFeedCache(cacheDir)
 
-	// Load today's daily summary from Dolt for session/cost segments.
+	// Load today's daily summary from the analytics DB for session/cost segments.
 	// Fail-open: nil summary → segments fall back to "--".
 	var dailySummary *analytics.DailySummaryResult
 	if db, err := analytics.Open(config.Analytics.DBPath); err == nil {
@@ -128,7 +128,7 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	return nil
 }
 
-// renderNotificationSegment queries the Dolt DB for unsurfaced notifications
+// renderNotificationSegment queries the analytics DB for unsurfaced notifications
 // and returns a status-line segment summarising them. If the DB cannot be
 // opened or there are no pending notifications, returns "".
 func renderNotificationSegment(dbPath string) string {
@@ -204,7 +204,7 @@ func renderSegment(seg core.SegmentConfig, feedCache map[string]interface{}, sum
 }
 
 // renderBuiltinSegment renders a known builtin segment by name, reading
-// real data from the feed cache and Dolt daily summary when available.
+// real data from the feed cache and analytics DB daily summary when available.
 func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary *analytics.DailySummaryResult) string {
 	switch name {
 	case "session":

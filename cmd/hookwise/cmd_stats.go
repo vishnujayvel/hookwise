@@ -16,7 +16,7 @@ func newStatsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stats",
 		Short: "Show analytics dashboard for today",
-		Long:  "Opens the Dolt database and displays today's daily summary and tool breakdown.",
+		Long:  "Opens the analytics database and displays today's daily summary and tool breakdown.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStats(cmd, dataDir)
 		},
@@ -29,7 +29,7 @@ func newStatsCmd() *cobra.Command {
 func runStats(cmd *cobra.Command, dataDir string) error {
 	db, err := analytics.Open(dataDir)
 	if err != nil {
-		return fmt.Errorf("failed to open Dolt DB: %w", err)
+		return fmt.Errorf("failed to open analytics DB: %w", err)
 	}
 	defer db.Close()
 

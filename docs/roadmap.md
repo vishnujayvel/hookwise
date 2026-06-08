@@ -1,6 +1,6 @@
 # Hookwise Roadmap
 
-hookwise is a developer-tool framework that wraps Claude Code with composable hooks, a feed-backed status line, coaching nudges, and a Textual TUI dashboard. The core engine is written in Go with a Dolt-backed data layer; the TUI is a Python Textual application. It shipped its first public release (v1.3) on 2026-03-03. This roadmap covers the known bugs from that launch, the planned versions through v2.0, and the principles that govern what gets prioritized.
+hookwise is a developer-tool framework that wraps Claude Code with composable hooks, a feed-backed status line, coaching nudges, and a Textual TUI dashboard. The core engine is written in Go with a SQLite analytics backend (modernc.org/sqlite, WAL mode); the TUI is a Python Textual application. It shipped its first public release (v1.3) on 2026-03-03. This roadmap covers the known bugs from that launch, the planned versions through v2.0, and the principles that govern what gets prioritized.
 
 For architecture context, see [architecture.md](architecture.md). For design philosophy, see [philosophy.md](philosophy.md).
 
