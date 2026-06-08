@@ -24,16 +24,17 @@ type Hookwise struct{}
 
 // ----- private container helpers -----
 
-// goContainer returns a Go build container with CGO disabled (pure-Go after the
-// Dolt removal — modernc.org/sqlite needs no cgo), module + build caches mounted,
-// and dependencies pre-downloaded.
+// goContainer returns a Go build container with CGO enabled, module + build
+// caches mounted, and dependencies pre-downloaded. CGO stays ON here because
+// `go test -race` requires it; the analytics backend (modernc.org/sqlite) is
+// itself pure-Go. Build/Publish override CGO_ENABLED=0 for a static binary.
 func (m *Hookwise) goContainer(src *dagger.Directory) *dagger.Container {
 	goModCache := dag.CacheVolume("go-mod")
 	goBuildCache := dag.CacheVolume("go-build")
 
 	return dag.Container().
 		From("golang:1.25-bookworm").
-		WithEnvVariable("CGO_ENABLED", "0").
+		WithEnvVariable("CGO_ENABLED", "1").
 		WithMountedCache("/go/pkg/mod", goModCache).
 		WithMountedCache("/root/.cache/go-build", goBuildCache).
 		WithMountedDirectory("/src", src).
@@ -224,6 +225,8 @@ func (m *Hookwise) Build(
 	)
 
 	return m.goContainer(src).
+		// Override the container default: a release binary is CGO-free + static.
+		WithEnvVariable("CGO_ENABLED", "0").
 		WithExec([]string{
 			"go", "build",
 			"-ldflags", ldflags,
@@ -274,6 +277,8 @@ func (m *Hookwise) Publish(
 	)
 
 	return m.goContainer(src).
+		// Release binary: CGO-free + static + stripped (< 20 MB post-Dolt).
+		WithEnvVariable("CGO_ENABLED", "0").
 		WithExec([]string{
 			"go", "build",
 			"-ldflags", ldflags,
