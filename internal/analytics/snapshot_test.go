@@ -48,7 +48,7 @@ func TestSnapshot_CreatesOpenableDBWithData(t *testing.T) {
 	}
 	for _, tbl := range wantTables {
 		var name string
-		row := snap.QueryRow(
+		row := snap.QueryRowContext(ctx,
 			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, tbl)
 		require.NoError(t, row.Scan(&name), "table %q should exist in snapshot", tbl)
 		assert.Equal(t, tbl, name)
@@ -56,7 +56,7 @@ func TestSnapshot_CreatesOpenableDBWithData(t *testing.T) {
 
 	// The inserted row must survive into the snapshot.
 	var calls int
-	row := snap.QueryRow(`SELECT total_tool_calls FROM sessions WHERE id=?`, "sess-1")
+	row := snap.QueryRowContext(ctx, `SELECT total_tool_calls FROM sessions WHERE id=?`, "sess-1")
 	require.NoError(t, row.Scan(&calls))
 	assert.Equal(t, 7, calls)
 }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite" // registers the pure-Go "sqlite" sql driver
 
@@ -182,9 +183,14 @@ func (d *DB) initSchema(ctx context.Context) error {
 	}
 
 	// Migration: add ttl_seconds to notifications (v2). SQLite has no
-	// "IF NOT EXISTS" for ADD COLUMN; ignore the error if it already exists.
-	_, _ = d.db.ExecContext(ctx,
-		"ALTER TABLE notifications ADD COLUMN ttl_seconds INTEGER DEFAULT 86400")
+	// "IF NOT EXISTS" for ADD COLUMN, so tolerate the "duplicate column" error
+	// on re-open but surface any other failure (lock, corruption, permissions)
+	// instead of silently swallowing it.
+	if _, err := d.db.ExecContext(ctx,
+		"ALTER TABLE notifications ADD COLUMN ttl_seconds INTEGER DEFAULT 86400"); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate ttl_seconds: %w", err)
+	}
 
 	return nil
 }

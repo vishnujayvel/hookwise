@@ -232,6 +232,7 @@ func (m *Hookwise) Build(
 		WithEnvVariable("CGO_ENABLED", "0").
 		WithExec([]string{
 			"go", "build",
+			"-trimpath",
 			"-ldflags", ldflags,
 			"-o", "/out/hookwise",
 			"./cmd/hookwise/",
@@ -284,6 +285,7 @@ func (m *Hookwise) Publish(
 		WithEnvVariable("CGO_ENABLED", "0").
 		WithExec([]string{
 			"go", "build",
+			"-trimpath",
 			"-ldflags", ldflags,
 			"-o", "/out/hookwise",
 			"./cmd/hookwise/",
