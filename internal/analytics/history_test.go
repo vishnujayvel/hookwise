@@ -2,7 +2,6 @@ package analytics
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -46,19 +45,6 @@ func makeSnapshotFile(t *testing.T, db *DB, snapDir, name string, sessionRows, e
 	_, err := db.db.ExecContext(ctx, "VACUUM INTO "+quoted)
 	require.NoError(t, err)
 	return dest
-}
-
-// copyFile copies src to dst, creating dst if needed.
-func copyFile(t *testing.T, src, dst string) {
-	t.Helper()
-	in, err := os.Open(src)
-	require.NoError(t, err)
-	defer in.Close()
-	out, err := os.Create(dst)
-	require.NoError(t, err)
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	require.NoError(t, err)
 }
 
 // itoa converts a small int to its decimal string representation without

@@ -35,6 +35,9 @@ func (m *Hookwise) goContainer(src *dagger.Directory) *dagger.Container {
 	return dag.Container().
 		From("golang:1.25-bookworm").
 		WithEnvVariable("CGO_ENABLED", "1").
+		// retro-009: cap test memory in CI to match the Taskfile guard (the
+		// `go test` execs also pass -p 2).
+		WithEnvVariable("GOMEMLIMIT", "4GiB").
 		WithMountedCache("/go/pkg/mod", goModCache).
 		WithMountedCache("/root/.cache/go-build", goBuildCache).
 		WithMountedDirectory("/src", src).

@@ -148,8 +148,11 @@ func snapshotRowCounts(absPath string) (map[string]int64, error) {
 	counts := make(map[string]int64, len(tables))
 	for _, tbl := range tables {
 		var n int64
-		// Double-quote the identifier; table names come from sqlite_master.
-		if err := db.QueryRow(`SELECT COUNT(*) FROM "` + tbl + `"`).Scan(&n); err != nil {
+		// Double-quote the identifier and escape embedded quotes. Table names
+		// come from sqlite_master (trusted), but escape defensively so an
+		// unusual identifier can't break or inject into the query.
+		quoted := `"` + strings.ReplaceAll(tbl, `"`, `""`) + `"`
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + quoted).Scan(&n); err != nil {
 			return nil, fmt.Errorf("count %q in %s: %w", tbl, absPath, err)
 		}
 		counts[tbl] = n

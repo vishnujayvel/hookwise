@@ -13,7 +13,7 @@ import (
 func TestPersistAcrossConnections(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "persist-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	ctx := context.Background()
 	dbPath := filepath.Join(tmpDir, "analytics.db")

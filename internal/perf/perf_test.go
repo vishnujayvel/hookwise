@@ -376,7 +376,7 @@ func TestBinarySize(t *testing.T) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Logf("Build output: %s", string(output))
-		t.Skipf("Binary build failed (may need CGO): %v", err)
+		t.Skipf("Binary build failed: %v", err)
 		return
 	}
 
