@@ -122,11 +122,13 @@ tasks:
       - go test -race -p {{.TEST_PARALLEL}} ./internal/proptest/...
 
   test:tui:unit:
-    desc: "Python TUI unit tests (no snapshots)"
+    desc: "Python TUI unit tests (no snapshots, no Claude-Code E2E)"
     deps: [lint:py]
     dir: tui
     cmds:
-      - .venv/bin/python -m pytest tests/ -x --ignore=tests/test_snapshots.py
+      # Deselect terminal_e2e: those spawn a real Claude Code session in a PTY and
+      # are environment-dependent — run them separately via `pytest -m terminal_e2e`.
+      - .venv/bin/python -m pytest tests/ -x -m "not terminal_e2e" --ignore=tests/test_snapshots.py
 
   test:cross:schema:
     desc: "Cross-language schema boundary tests"
