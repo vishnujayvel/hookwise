@@ -105,7 +105,7 @@ func (m *Hookwise) Test(ctx context.Context, src *dagger.Directory) error {
 	g.Go(func() error {
 		_, err := m.goContainer(src).
 			WithExec([]string{
-				"go", "test", "-race",
+				"go", "test", "-race", "-p", "2",
 				"./internal/core/...", "./internal/feeds/...", "./internal/bridge/...",
 				"./internal/analytics/...", "./internal/notifications/...",
 				"./internal/migration/...", "./pkg/...",
@@ -117,7 +117,7 @@ func (m *Hookwise) Test(ctx context.Context, src *dagger.Directory) error {
 	// Go contract tests
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "./internal/contract/..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "./internal/contract/..."}).
 			Sync(ctx)
 		return err
 	})
@@ -125,7 +125,7 @@ func (m *Hookwise) Test(ctx context.Context, src *dagger.Directory) error {
 	// Go architecture lint
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "./internal/arch/..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "./internal/arch/..."}).
 			Sync(ctx)
 		return err
 	})
@@ -133,7 +133,7 @@ func (m *Hookwise) Test(ctx context.Context, src *dagger.Directory) error {
 	// Go property-based tests
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "./internal/proptest/..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "./internal/proptest/..."}).
 			Sync(ctx)
 		return err
 	})
@@ -177,7 +177,7 @@ func (m *Hookwise) Validate(ctx context.Context, src *dagger.Directory) error {
 	// Go integration + chaos tests
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "-tags", "integration", "./..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "-tags", "integration", "./..."}).
 			Sync(ctx)
 		return err
 	})
@@ -185,7 +185,7 @@ func (m *Hookwise) Validate(ctx context.Context, src *dagger.Directory) error {
 	// Go mutation tests
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "-tags", "mutation", "./internal/mutation/..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "-tags", "mutation", "./internal/mutation/..."}).
 			Sync(ctx)
 		return err
 	})

@@ -3,19 +3,19 @@ package core
 
 // All 13 event types supported by Claude Code hooks.
 const (
-	EventUserPromptSubmit = "UserPromptSubmit"
-	EventPreToolUse       = "PreToolUse"
-	EventPostToolUse      = "PostToolUse"
+	EventUserPromptSubmit   = "UserPromptSubmit"
+	EventPreToolUse         = "PreToolUse"
+	EventPostToolUse        = "PostToolUse"
 	EventPostToolUseFailure = "PostToolUseFailure"
-	EventNotification     = "Notification"
-	EventStop             = "Stop"
-	EventSubagentStart    = "SubagentStart"
-	EventSubagentStop     = "SubagentStop"
-	EventPreCompact       = "PreCompact"
-	EventSessionStart     = "SessionStart"
-	EventSessionEnd       = "SessionEnd"
-	EventPermissionRequest = "PermissionRequest"
-	EventSetup            = "Setup"
+	EventNotification       = "Notification"
+	EventStop               = "Stop"
+	EventSubagentStart      = "SubagentStart"
+	EventSubagentStop       = "SubagentStop"
+	EventPreCompact         = "PreCompact"
+	EventSessionStart       = "SessionStart"
+	EventSessionEnd         = "SessionEnd"
+	EventPermissionRequest  = "PermissionRequest"
+	EventSetup              = "Setup"
 )
 
 // EventTypes is the canonical list of all supported event types.
@@ -67,7 +67,7 @@ type DispatchResult struct {
 
 // HandlerResult is the output of a single handler execution.
 type HandlerResult struct {
-	Decision          *string                `json:"decision"`          // "block", "warn", "confirm", or nil
+	Decision          *string                `json:"decision"` // "block", "warn", "confirm", or nil
 	Reason            *string                `json:"reason"`
 	AdditionalContext *string                `json:"additionalContext"`
 	Output            map[string]interface{} `json:"output"`
@@ -82,22 +82,22 @@ type DispatchConfig struct {
 
 // HooksConfig is the top-level configuration structure.
 type HooksConfig struct {
-	Version          int                    `yaml:"version" json:"version"`
-	Guards           []GuardRuleConfig      `yaml:"guards" json:"guards"`
-	Coaching         CoachingConfig         `yaml:"coaching" json:"coaching"`
-	Analytics        AnalyticsConfig        `yaml:"analytics" json:"analytics"`
-	Greeting         GreetingConfig         `yaml:"greeting" json:"greeting"`
-	Sounds           SoundsConfig           `yaml:"sounds" json:"sounds"`
-	StatusLine       StatusLineConfig       `yaml:"status_line" json:"statusLine"`
-	CostTracking     CostTrackingConfig     `yaml:"cost_tracking" json:"costTracking"`
-	TranscriptBackup TranscriptConfig       `yaml:"transcript_backup" json:"transcriptBackup"`
-	Handlers         []CustomHandlerConfig  `yaml:"handlers" json:"handlers"`
-	Settings         SettingsConfig         `yaml:"settings" json:"settings"`
-	Includes         []string               `yaml:"includes" json:"includes"`
-	Feeds            FeedsConfig            `yaml:"feeds" json:"feeds"`
-	Daemon           DaemonConfig           `yaml:"daemon" json:"daemon"`
-	TUI              TUIConfig              `yaml:"tui" json:"tui"`
-	Dispatch         DispatchConfig         `yaml:"dispatch" json:"dispatch"`
+	Version          int                   `yaml:"version" json:"version"`
+	Guards           []GuardRuleConfig     `yaml:"guards" json:"guards"`
+	Coaching         CoachingConfig        `yaml:"coaching" json:"coaching"`
+	Analytics        AnalyticsConfig       `yaml:"analytics" json:"analytics"`
+	Greeting         GreetingConfig        `yaml:"greeting" json:"greeting"`
+	Sounds           SoundsConfig          `yaml:"sounds" json:"sounds"`
+	StatusLine       StatusLineConfig      `yaml:"status_line" json:"statusLine"`
+	CostTracking     CostTrackingConfig    `yaml:"cost_tracking" json:"costTracking"`
+	TranscriptBackup TranscriptConfig      `yaml:"transcript_backup" json:"transcriptBackup"`
+	Handlers         []CustomHandlerConfig `yaml:"handlers" json:"handlers"`
+	Settings         SettingsConfig        `yaml:"settings" json:"settings"`
+	Includes         []string              `yaml:"includes" json:"includes"`
+	Feeds            FeedsConfig           `yaml:"feeds" json:"feeds"`
+	Daemon           DaemonConfig          `yaml:"daemon" json:"daemon"`
+	TUI              TUIConfig             `yaml:"tui" json:"tui"`
+	Dispatch         DispatchConfig        `yaml:"dispatch" json:"dispatch"`
 }
 
 type CoachingConfig struct {
@@ -113,10 +113,10 @@ type MetacognitionConfig struct {
 }
 
 type BuilderTrapConfig struct {
-	Enabled         bool                `yaml:"enabled" json:"enabled"`
+	Enabled         bool                  `yaml:"enabled" json:"enabled"`
 	Thresholds      BuilderTrapThresholds `yaml:"thresholds" json:"thresholds"`
-	ToolingPatterns []string            `yaml:"tooling_patterns" json:"toolingPatterns"`
-	PracticeTools   []string            `yaml:"practice_tools" json:"practiceTools"`
+	ToolingPatterns []string              `yaml:"tooling_patterns" json:"toolingPatterns"`
+	PracticeTools   []string              `yaml:"practice_tools" json:"practiceTools"`
 }
 
 type BuilderTrapThresholds struct {
@@ -140,14 +140,16 @@ type AnalyticsConfig struct {
 	// Periodic snapshot settings. Snapshots are point-in-time VACUUM INTO copies
 	// of the analytics DB, written to ~/.hookwise/snapshots/ and scheduled by
 	// the daemon.
+	// No omitempty on the ints: an explicit 0 is meaningful (retention 0 = "keep
+	// all"), and omitempty would drop it when a config is marshalled back out.
 	SnapshotEnabled         bool `yaml:"snapshot_enabled" json:"snapshotEnabled"`
-	SnapshotIntervalMinutes int  `yaml:"snapshot_interval_minutes,omitempty" json:"snapshotIntervalMinutes,omitempty"`
-	SnapshotRetention       int  `yaml:"snapshot_retention,omitempty" json:"snapshotRetention,omitempty"`
+	SnapshotIntervalMinutes int  `yaml:"snapshot_interval_minutes" json:"snapshotIntervalMinutes"`
+	SnapshotRetention       int  `yaml:"snapshot_retention" json:"snapshotRetention"`
 }
 
 type GreetingConfig struct {
-	Enabled    bool                         `yaml:"enabled" json:"enabled"`
-	QuotesFile string                       `yaml:"quotes_file,omitempty" json:"quotesFile,omitempty"`
+	Enabled    bool                           `yaml:"enabled" json:"enabled"`
+	QuotesFile string                         `yaml:"quotes_file,omitempty" json:"quotesFile,omitempty"`
 	Categories map[string]QuoteCategoryConfig `yaml:"categories,omitempty" json:"categories,omitempty"`
 }
 
@@ -188,7 +190,7 @@ type TranscriptConfig struct {
 }
 
 type SettingsConfig struct {
-	LogLevel              string `yaml:"log_level" json:"logLevel"`       // "debug", "info", "warn", "error"
+	LogLevel              string `yaml:"log_level" json:"logLevel"` // "debug", "info", "warn", "error"
 	HandlerTimeoutSeconds int    `yaml:"handler_timeout_seconds" json:"handlerTimeoutSeconds"`
 	StateDir              string `yaml:"state_dir" json:"stateDir"`
 }
@@ -240,20 +242,20 @@ func (h *ResolvedHandler) HasEvent(eventType string) bool {
 }
 
 type CustomHandlerConfig struct {
-	Name    string   `yaml:"name" json:"name"`
-	Type    string   `yaml:"type" json:"type"` // "builtin", "script", "inline"
-	Events  []string `yaml:"events" json:"events"`
-	Phase   string   `yaml:"phase,omitempty" json:"phase,omitempty"`
-	Timeout int      `yaml:"timeout,omitempty" json:"timeout,omitempty"`
-	Module  string   `yaml:"module,omitempty" json:"module,omitempty"`
-	Command string   `yaml:"command,omitempty" json:"command,omitempty"`
+	Name    string                 `yaml:"name" json:"name"`
+	Type    string                 `yaml:"type" json:"type"` // "builtin", "script", "inline"
+	Events  []string               `yaml:"events" json:"events"`
+	Phase   string                 `yaml:"phase,omitempty" json:"phase,omitempty"`
+	Timeout int                    `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Module  string                 `yaml:"module,omitempty" json:"module,omitempty"`
+	Command string                 `yaml:"command,omitempty" json:"command,omitempty"`
 	Action  map[string]interface{} `yaml:"action,omitempty" json:"action,omitempty"`
 }
 
 // --- Segment Config ---
 
 type SegmentConfig struct {
-	Builtin string              `yaml:"builtin,omitempty" json:"builtin,omitempty"`
+	Builtin string               `yaml:"builtin,omitempty" json:"builtin,omitempty"`
 	Custom  *CustomSegmentConfig `yaml:"custom,omitempty" json:"custom,omitempty"`
 }
 
@@ -296,9 +298,9 @@ type AIClassification string
 
 const (
 	AIClassHighProbability AIClassification = "high_probability_ai"
-	AIClassLikelyAI       AIClassification = "likely_ai"
-	AIClassMixedVerified  AIClassification = "mixed_verified"
-	AIClassHumanAuthored  AIClassification = "human_authored"
+	AIClassLikelyAI        AIClassification = "likely_ai"
+	AIClassMixedVerified   AIClassification = "mixed_verified"
+	AIClassHumanAuthored   AIClassification = "human_authored"
 )
 
 type AIConfidenceScore struct {
@@ -307,13 +309,13 @@ type AIConfidenceScore struct {
 }
 
 type AnalyticsEvent struct {
-	SessionID       string  `json:"sessionId"`
-	EventType       string  `json:"eventType"`
-	ToolName        string  `json:"toolName,omitempty"`
-	Timestamp       string  `json:"timestamp"`
-	FilePath        string  `json:"filePath,omitempty"`
-	LinesAdded      int     `json:"linesAdded,omitempty"`
-	LinesRemoved    int     `json:"linesRemoved,omitempty"`
+	SessionID         string   `json:"sessionId"`
+	EventType         string   `json:"eventType"`
+	ToolName          string   `json:"toolName,omitempty"`
+	Timestamp         string   `json:"timestamp"`
+	FilePath          string   `json:"filePath,omitempty"`
+	LinesAdded        int      `json:"linesAdded,omitempty"`
+	LinesRemoved      int      `json:"linesRemoved,omitempty"`
 	AIConfidenceScore *float64 `json:"aiConfidenceScore,omitempty"`
 }
 
@@ -327,10 +329,10 @@ type SessionSummary struct {
 }
 
 type AuthorshipSummary struct {
-	TotalEntries            int                        `json:"totalEntries"`
-	TotalLinesChanged       int                        `json:"totalLinesChanged"`
-	WeightedAIScore         float64                    `json:"weightedAIScore"`
-	ClassificationBreakdown map[AIClassification]int   `json:"classificationBreakdown"`
+	TotalEntries            int                      `json:"totalEntries"`
+	TotalLinesChanged       int                      `json:"totalLinesChanged"`
+	WeightedAIScore         float64                  `json:"weightedAIScore"`
+	ClassificationBreakdown map[AIClassification]int `json:"classificationBreakdown"`
 }
 
 type StatsOptions struct {
@@ -350,9 +352,9 @@ type StatsOptions struct {
 // --- Cost Types ---
 
 type CostEstimate struct {
-	EstimatedTokens int     `json:"estimatedTokens"`
+	EstimatedTokens  int     `json:"estimatedTokens"`
 	EstimatedCostUSD float64 `json:"estimatedCostUsd"`
-	Model           string  `json:"model"`
+	Model            string  `json:"model"`
 }
 
 // --- Agent Types ---
@@ -394,10 +396,10 @@ type FeedDefinition struct {
 }
 
 type ProjectFeedConfig struct {
-	Enabled         bool   `yaml:"enabled" json:"enabled"`
-	IntervalSeconds int    `yaml:"interval_seconds" json:"intervalSeconds"`
-	ShowBranch      bool   `yaml:"show_branch" json:"showBranch"`
-	ShowLastCommit  bool   `yaml:"show_last_commit" json:"showLastCommit"`
+	Enabled         bool `yaml:"enabled" json:"enabled"`
+	IntervalSeconds int  `yaml:"interval_seconds" json:"intervalSeconds"`
+	ShowBranch      bool `yaml:"show_branch" json:"showBranch"`
+	ShowLastCommit  bool `yaml:"show_last_commit" json:"showLastCommit"`
 }
 
 type CalendarFeedConfig struct {
@@ -410,12 +412,12 @@ type CalendarFeedConfig struct {
 }
 
 type NewsFeedConfig struct {
-	Enabled          bool   `yaml:"enabled" json:"enabled"`
-	Source           string `yaml:"source" json:"source"` // "hackernews" or "rss"
-	RSSUrl           string `yaml:"rss_url" json:"rssUrl"`
-	IntervalSeconds  int    `yaml:"interval_seconds" json:"intervalSeconds"`
-	MaxStories       int    `yaml:"max_stories" json:"maxStories"`
-	RotationMinutes  int    `yaml:"rotation_minutes" json:"rotationMinutes"`
+	Enabled         bool   `yaml:"enabled" json:"enabled"`
+	Source          string `yaml:"source" json:"source"` // "hackernews" or "rss"
+	RSSUrl          string `yaml:"rss_url" json:"rssUrl"`
+	IntervalSeconds int    `yaml:"interval_seconds" json:"intervalSeconds"`
+	MaxStories      int    `yaml:"max_stories" json:"maxStories"`
+	RotationMinutes int    `yaml:"rotation_minutes" json:"rotationMinutes"`
 }
 
 type CustomFeedConfig struct {

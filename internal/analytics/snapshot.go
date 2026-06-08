@@ -19,8 +19,10 @@ const snapshotTimeFormat = "20060102T150405Z"
 
 // snapshotFileRe matches snapshot filenames produced by Snapshot. Only files
 // matching this pattern are enumerated or pruned, so unrelated files in the
-// snapshots directory are never touched.
-var snapshotFileRe = regexp.MustCompile(`^\d{8}T\d{6}Z\.db$`)
+// snapshots directory are never touched. The optional "-N" group matches the
+// same-second collision suffix Snapshot appends, so collision files stay
+// visible to ListSnapshots/PruneSnapshots/log/diff (and are pruned normally).
+var snapshotFileRe = regexp.MustCompile(`^\d{8}T\d{6}Z(-\d+)?\.db$`)
 
 // DefaultSnapshotsDir returns the conventional directory for analytics snapshots
 // (~/.hookwise/snapshots), mirroring DefaultDBPath.

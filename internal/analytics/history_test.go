@@ -449,3 +449,60 @@ func TestDiffSnapshots_UnknownRef(t *testing.T) {
 	_, err := DiffSnapshots(snapDir, "latest", "99991231")
 	require.Error(t, err)
 }
+
+// ---------------------------------------------------------------------------
+// Robustness fixes (code-review)
+// ---------------------------------------------------------------------------
+
+// TestListSnapshotInfos_CollisionSuffixVisible verifies that same-second
+// collision snapshots ("<ts>-N.db") are enumerated, parsed (Time from the
+// timestamp prefix), and pruned — not silently invisible.
+func TestListSnapshotInfos_CollisionSuffixVisible(t *testing.T) {
+	db, cleanup := testOpen(t)
+	defer cleanup()
+
+	snapDir := t.TempDir()
+	// A base snapshot and a same-second collision sibling.
+	makeSnapshotFile(t, db, snapDir, "20260101T000000Z", 1, 0)
+	makeSnapshotFile(t, db, snapDir, "20260101T000000Z-1", 1, 0)
+
+	// Both are listed (the regex matches the "-1" suffix).
+	paths, err := ListSnapshots(snapDir)
+	require.NoError(t, err)
+	require.Len(t, paths, 2, "collision-suffixed snapshot must be visible to ListSnapshots")
+
+	// Both parse, and the collision file's Time comes from the timestamp prefix.
+	infos, err := ListSnapshotInfos(snapDir, 0)
+	require.NoError(t, err)
+	require.Len(t, infos, 2)
+	wantTime, _ := time.ParseInLocation(snapshotTimeFormat, "20260101T000000Z", time.UTC)
+	for _, info := range infos {
+		assert.Equal(t, wantTime, info.Time, "collision file Time should parse from the timestamp prefix")
+	}
+
+	// Both are prunable (keep=1 removes one of the two).
+	pruned, err := PruneSnapshots(snapDir, 1)
+	require.NoError(t, err)
+	assert.Len(t, pruned, 1, "collision-suffixed snapshot must be prunable")
+}
+
+// TestListSnapshotInfos_SkipsCorruptSnapshot verifies that one unreadable
+// snapshot does not abort the whole listing — `hookwise log` stays usable.
+func TestListSnapshotInfos_SkipsCorruptSnapshot(t *testing.T) {
+	db, cleanup := testOpen(t)
+	defer cleanup()
+
+	snapDir := t.TempDir()
+	makeSnapshotFile(t, db, snapDir, "20260101T000000Z", 2, 0)
+
+	// A file with a valid snapshot name but garbage contents (e.g. a
+	// crash-truncated VACUUM INTO target). It matches the regex, so ListSnapshots
+	// returns it, but it cannot be opened/queried.
+	corrupt := filepath.Join(snapDir, "20260102T000000Z.db")
+	require.NoError(t, os.WriteFile(corrupt, []byte("not a sqlite database"), 0o600))
+
+	infos, err := ListSnapshotInfos(snapDir, 0)
+	require.NoError(t, err, "one corrupt snapshot must not fail the whole listing")
+	require.Len(t, infos, 1, "the corrupt snapshot should be skipped, the good one kept")
+	assert.Equal(t, "20260101T000000Z", infos[0].Name)
+}

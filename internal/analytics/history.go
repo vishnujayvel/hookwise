@@ -6,7 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
+
+	"github.com/vishnujayvel/hookwise/internal/core"
 )
 
 // ---------------------------------------------------------------------------
@@ -63,7 +66,11 @@ func ListSnapshotInfos(snapshotsDir string, limit int) ([]SnapshotInfo, error) {
 	for _, p := range paths {
 		info, err := snapshotInfoFromPath(p)
 		if err != nil {
-			return nil, err
+			// Skip a corrupt/unreadable snapshot rather than failing the whole
+			// listing — e.g. a crash-truncated VACUUM INTO target. One bad file
+			// must not break `hookwise log`.
+			core.Logger().Warn("skipping unreadable snapshot", "path", p, "error", err)
+			continue
 		}
 		infos = append(infos, info)
 	}
@@ -72,14 +79,15 @@ func ListSnapshotInfos(snapshotsDir string, limit int) ([]SnapshotInfo, error) {
 
 // snapshotInfoFromPath builds a SnapshotInfo for the given absolute path.
 func snapshotInfoFromPath(absPath string) (SnapshotInfo, error) {
-	base := filepath.Base(absPath)
-	// Strip ".db" suffix to get the name.
-	name := base
-	if len(name) > 3 && name[len(name)-3:] == ".db" {
-		name = name[:len(name)-3]
-	}
+	name := strings.TrimSuffix(filepath.Base(absPath), ".db")
 
-	t, err := time.ParseInLocation(snapshotTimeFormat, name, time.UTC)
+	// The timestamp is the part before any same-second collision suffix
+	// ("20060102T150405Z" in "20060102T150405Z-1"). Parse just that.
+	tsPart := name
+	if i := strings.IndexByte(tsPart, '-'); i >= 0 {
+		tsPart = tsPart[:i]
+	}
+	t, err := time.ParseInLocation(snapshotTimeFormat, tsPart, time.UTC)
 	if err != nil {
 		return SnapshotInfo{}, fmt.Errorf("analytics: parse snapshot time %q: %w", name, err)
 	}
@@ -185,12 +193,7 @@ func ResolveSnapshot(snapshotsDir, ref string) (SnapshotInfo, error) {
 	// Build names list (same order, oldest → newest).
 	names := make([]string, n)
 	for i, p := range paths {
-		base := filepath.Base(p)
-		if len(base) > 3 && base[len(base)-3:] == ".db" {
-			names[i] = base[:len(base)-3]
-		} else {
-			names[i] = base
-		}
+		names[i] = strings.TrimSuffix(filepath.Base(p), ".db")
 	}
 
 	// Exact match first.

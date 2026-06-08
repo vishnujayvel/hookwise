@@ -64,5 +64,6 @@ Any pre-existing Dolt data directory (`~/.hookwise/dolt/`) is archived to `~/.ho
 
 - retro-009: `.claude/specs/retro/retro-009-system-crash-memory-exhaustion.md`
 - retro-010: `.claude/specs/retro/retro-010-dolt-tax.md` (if present)
-- Implementation branch: `feat/dolt-to-sqlite`
-- Phase 1 commit: `2183342` (swap Dolt backend for modernc SQLite)
+- Implementation: branch `feat/dolt-to-sqlite` / PR #74 (five phases — backend
+  swap, snapshots, diff/log, de-Dolt build, verify). See the PR for the commit
+  series; specific SHAs are intentionally not cited here (they shift on rebase).

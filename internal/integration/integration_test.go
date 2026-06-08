@@ -713,10 +713,22 @@ func TestIntegration_DaemonWritesCacheNotAnalyticsDB(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &parsed))
 	assert.NotEmpty(t, parsed, "cache file should contain data")
 
-	// No analytics DB should have been created by the daemon
-	analyticsDBDir := filepath.Join(tmpDir, "dolt")
-	_, err = os.Stat(analyticsDBDir)
-	assert.True(t, os.IsNotExist(err), "ARCH-3: daemon should not create an analytics DB")
+	// ARCH-3: the daemon must not create/write the analytics DB. The primary
+	// guard is the compile-time arch lint (TestArch_FeedsDoNotImportAnalytics);
+	// this is a runtime backstop. The old check looked for a "dolt" dir, which
+	// became vacuous after the SQLite migration. Walk the test-scoped state dir
+	// (HOOKWISE_STATE_DIR=tmpDir) and assert no analytics.db was written there.
+	var foundAnalyticsDB string
+	_ = filepath.WalkDir(tmpDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if !d.IsDir() && d.Name() == "analytics.db" {
+			foundAnalyticsDB = path
+		}
+		return nil
+	})
+	assert.Empty(t, foundAnalyticsDB, "ARCH-3: daemon should not create the analytics DB")
 }
 
 // =========================================================================
@@ -789,10 +801,10 @@ func TestIntegration_AnalyticsRoundtrip(t *testing.T) {
 	assert.Equal(t, "Write", breakdown[0].ToolName)
 	assert.Equal(t, 3, breakdown[0].Count)
 
-	// Commit
-	hash, err := db.CommitDispatch(ctx, "PostToolUse", sessionID)
-	require.NoError(t, err)
-	assert.NotEmpty(t, hash)
+	// CommitDispatch is a documented no-op under SQLite (writes are durable
+	// immediately via WAL); it returns an empty hash and never errors.
+	_, err = db.CommitDispatch(ctx, "PostToolUse", sessionID)
+	require.NoError(t, err, "no-op CommitDispatch should never error")
 
 	// Verify authorship classification
 	var classification string
