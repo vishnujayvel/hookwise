@@ -9,50 +9,14 @@ package analytics
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"time"
 
 	_ "modernc.org/sqlite" // registers the pure-Go "sqlite" sql driver
 
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
-
-// validDoltRef matches valid snapshot/ref identifiers (kept for signature
-// compatibility with Diff/Log, which are reimplemented over snapshots in
-// Phase 3). Only alphanumeric, dots, hyphens, underscores, slashes, tildes,
-// and carets.
-var validDoltRef = regexp.MustCompile(`^[a-zA-Z0-9._/~^-]+$`)
-
-// errNotReimplemented is returned by Diff/Log until the snapshot-based
-// implementation lands in Phase 3.
-var errNotReimplemented = errors.New(
-	"diff/log not yet reimplemented on snapshots — see openspec/changes/dolt-to-sqlite Phase 3")
-
-// ---------------------------------------------------------------------------
-// Diff / log result types (signatures preserved for cmd_diff.go / cmd_log.go)
-// ---------------------------------------------------------------------------
-
-// DiffEntry represents a single table-level diff entry.
-type DiffEntry struct {
-	TableName  string
-	DiffType   string // "added", "modified", "removed"
-	FromCommit string
-	ToCommit   string
-	RowData    map[string]interface{} // remaining columns keyed by name
-}
-
-// LogEntry represents a single history entry.
-type LogEntry struct {
-	CommitHash string
-	Committer  string
-	Email      string
-	Date       time.Time
-	Message    string
-}
 
 // ---------------------------------------------------------------------------
 // DB – the SQLite database wrapper
@@ -202,26 +166,6 @@ func (d *DB) Commit(_ context.Context, _ string) (string, error) {
 // no-op under the SQLite backend (see Commit).
 func (d *DB) CommitDispatch(_ context.Context, _, _ string) (string, error) {
 	return "", nil
-}
-
-// ---------------------------------------------------------------------------
-// Diff and Log — reimplemented over snapshots in Phase 3
-// ---------------------------------------------------------------------------
-
-// Diff returns table-level diffs between two refs.
-//
-// Phase 3 will reimplement this over snapshot files. The signature is
-// preserved so cmd_diff.go continues to compile.
-func (d *DB) Diff(_ context.Context, _, _ string) ([]DiffEntry, error) {
-	return nil, errNotReimplemented
-}
-
-// Log returns the most recent history entries, up to limit.
-//
-// Phase 3 will reimplement this over snapshot files. The signature is
-// preserved so cmd_log.go continues to compile.
-func (d *DB) Log(_ context.Context, _ int) ([]LogEntry, error) {
-	return nil, errNotReimplemented
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -10,59 +9,62 @@ import (
 )
 
 func newDiffCmd() *cobra.Command {
-	var dataDir string
+	var snapshotsDir string
 
 	cmd := &cobra.Command{
 		Use:   "diff <from-ref> <to-ref>",
-		Short: "Show Dolt data changes between commits",
-		Long:  "Compares two Dolt refs (commit hashes, branches, tags) and shows table-level differences.",
-		Args:  cobra.ExactArgs(2),
+		Short: "Show row-count changes between two analytics snapshots",
+		Long: `Compares two analytics snapshots and shows per-table row-count deltas.
+
+Refs accept:
+  latest          — the newest snapshot
+  prev            — the second-newest snapshot
+  20060102T150405Z — exact snapshot name (without .db extension)
+  20060102        — prefix match; if multiple match, picks the newest
+
+Examples:
+  hookwise diff prev latest
+  hookwise diff 20060101 20060102`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDiff(cmd, args[0], args[1], dataDir)
+			return runDiff(cmd, args[0], args[1], snapshotsDir)
 		},
 	}
 
-	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to ~/.hookwise/analytics.db)")
+	cmd.Flags().StringVar(&snapshotsDir, "snapshots-dir", "", "Path to snapshots directory (defaults to ~/.hookwise/snapshots)")
 	return cmd
 }
 
-func runDiff(cmd *cobra.Command, fromRef, toRef, dataDir string) error {
-	db, err := analytics.Open(dataDir)
-	if err != nil {
-		return fmt.Errorf("failed to open Dolt DB: %w", err)
+func runDiff(cmd *cobra.Command, fromRef, toRef, snapshotsDir string) error {
+	if snapshotsDir == "" {
+		snapshotsDir = analytics.DefaultSnapshotsDir()
 	}
-	defer db.Close()
 
-	ctx := context.Background()
-	entries, err := db.Diff(ctx, fromRef, toRef)
+	diff, err := analytics.DiffSnapshots(snapshotsDir, fromRef, toRef)
 	if err != nil {
-		return fmt.Errorf("diff failed: %w", err)
+		return fmt.Errorf("diff: %w", err)
 	}
 
 	w := cmd.OutOrStdout()
-	fmt.Fprintf(w, "hookwise diff %s..%s\n", fromRef, toRef)
+	fmt.Fprintf(w, "hookwise diff %s..%s\n", diff.From.Name, diff.To.Name)
 	fmt.Fprintln(w, strings.Repeat("-", 40))
 
-	if len(entries) == 0 {
-		fmt.Fprintln(w, "No differences found.")
-		return nil
+	changed := false
+	for _, td := range diff.Tables {
+		if td.Delta == 0 {
+			continue
+		}
+		changed = true
+		sign := "+"
+		if td.Delta < 0 {
+			sign = ""
+		}
+		fmt.Fprintf(w, "  %-30s  %d -> %d  (%s%d)\n",
+			td.Table, td.FromRows, td.ToRows, sign, td.Delta)
 	}
 
-	for _, e := range entries {
-		dataChange, _ := e.RowData["data_change"].(bool)
-		schemaChange, _ := e.RowData["schema_change"].(bool)
-		var changes []string
-		if dataChange {
-			changes = append(changes, "data")
-		}
-		if schemaChange {
-			changes = append(changes, "schema")
-		}
-		changeStr := strings.Join(changes, ", ")
-		if changeStr == "" {
-			changeStr = "-"
-		}
-		fmt.Fprintf(w, "  %-8s  %-25s  changes: %s\n", e.DiffType, e.TableName, changeStr)
+	if !changed {
+		fmt.Fprintln(w, "No row-count changes.")
 	}
 
 	return nil
