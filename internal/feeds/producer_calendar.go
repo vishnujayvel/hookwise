@@ -55,7 +55,9 @@ type pythonTokenFile struct {
 
 // loadCalendarOAuthClient reads a Python google-auth token file and returns
 // an HTTP client with automatic token refresh.
-func loadCalendarOAuthClient(ctx context.Context, tokenPath string) (*http.Client, *oauth2.Token, *oauth2.Config, error) {
+// The oauth2 token source is bound to context.Background() so it survives
+// across multiple per-poll contexts (fixes context-canceled on every poll after the first).
+func loadCalendarOAuthClient(tokenPath string) (*http.Client, *oauth2.Token, *oauth2.Config, error) {
 	data, err := os.ReadFile(tokenPath)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("read token: %w", err)
@@ -105,7 +107,8 @@ func loadCalendarOAuthClient(ctx context.Context, tokenPath string) (*http.Clien
 		}
 	}
 
-	client := cfg.Client(ctx, tok)
+	// Use Background so the token source survives across per-poll context lifetimes.
+	client := cfg.Client(context.Background(), tok)
 	return client, tok, cfg, nil
 }
 
@@ -135,12 +138,14 @@ func writeBackToken(tokenPath string, tok *oauth2.Token, cfg *oauth2.Config) {
 
 // ensureClient initializes the OAuth client and Calendar service on first use.
 // Subsequent calls reuse the cached client (oauth2 handles token refresh internally).
-func (p *CalendarProducer) ensureClient(ctx context.Context, tokenPath string) error {
+// Both the oauth2 token source and the calendar.Service are bound to Background
+// so they survive across per-poll contexts (fixes post-first-poll context cancellation).
+func (p *CalendarProducer) ensureClient(tokenPath string) error {
 	if p.svc != nil {
 		return nil
 	}
 
-	client, tok, cfg, err := loadCalendarOAuthClient(ctx, tokenPath)
+	client, tok, cfg, err := loadCalendarOAuthClient(tokenPath)
 	if err != nil {
 		return err
 	}
@@ -149,7 +154,8 @@ func (p *CalendarProducer) ensureClient(ctx context.Context, tokenPath string) e
 	if p.baseURL != "" {
 		opts = append(opts, option.WithEndpoint(p.baseURL))
 	}
-	svc, err := calendar.NewService(ctx, opts...)
+	// Use Background so the service is not tied to any transient per-poll context.
+	svc, err := calendar.NewService(context.Background(), opts...)
 	if err != nil {
 		return err
 	}
@@ -182,7 +188,8 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 	}
 
 	// Initialize OAuth client and service on first call; reuse thereafter.
-	if err := p.ensureClient(ctx, tokenPath); err != nil {
+	// ensureClient uses Background internally — per-poll ctx only bounds the fetch below.
+	if err := p.ensureClient(tokenPath); err != nil {
 		core.Logger().Debug("calendar: token load failed, returning empty", "error", err)
 		return p.fallbackResult("no token"), nil
 	}
@@ -204,7 +211,9 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 		OrderBy("startTime").
 		MaxResults(20)
 
-	events, err := eventsCall.Do()
+	// Bind the actual HTTP fetch to the per-poll context so timeouts and
+	// daemon shutdown cancel in-flight requests while the token source remains alive.
+	events, err := eventsCall.Context(ctx).Do()
 	if err != nil {
 		core.Logger().Warn("calendar: API request failed", "error", err)
 		return p.fallbackResult("api error"), nil
