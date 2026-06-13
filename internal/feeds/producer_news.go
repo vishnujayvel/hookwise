@@ -89,16 +89,34 @@ func (p *NewsProducer) Produce(ctx context.Context) (interface{}, error) {
 		ids = ids[:maxStories]
 	}
 
+	// Fetch all items concurrently, preserving topstories order.
+	// results[i] holds the fetched item for ids[i]; ok[i] == false means skip.
+	type result struct {
+		item hnItem
+		ok   bool
+	}
+	results := make([]result, len(ids))
+
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		wg.Add(1)
+		go func(idx, storyID int) {
+			defer wg.Done()
+			item, ok := p.fetchItem(ctx, storyID)
+			results[idx] = result{item: item, ok: ok}
+		}(i, id)
+	}
+	wg.Wait()
+
 	stories := make([]interface{}, 0, len(ids))
-	for _, id := range ids {
-		item, ok := p.fetchItem(ctx, id)
-		if !ok {
+	for _, r := range results {
+		if !r.ok {
 			continue
 		}
 		stories = append(stories, map[string]interface{}{
-			"title": item.Title,
-			"url":   item.URL,
-			"score": item.Score,
+			"title": r.item.Title,
+			"url":   r.item.URL,
+			"score": r.item.Score,
 		})
 	}
 
