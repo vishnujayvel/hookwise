@@ -20,6 +20,74 @@ func inv(pairs ...[2]string) *Inventory {
 	return i
 }
 
+// invM builds an Inventory from {event, matcher, command} triples so tests can
+// distinguish always-fire ("" / "*") from matcher-scoped hooks.
+func invM(triples ...[3]string) *Inventory {
+	i := &Inventory{}
+	for _, t := range triples {
+		i.Entries = append(i.Entries, HookEntry{
+			Event: t[0], Matcher: t[1], Command: t[2], Type: "command", SourceFile: "settings.json",
+		})
+	}
+	return i
+}
+
+// --- matcher-awareness (real-config false positives) ---
+
+// TestSprawlFindings_MatcherScopedDoNotAlarm: many hooks on an event, but each
+// is scoped to a distinct tool matcher → none fire on a generic call → no alarm.
+func TestSprawlFindings_MatcherScopedDoNotAlarm(t *testing.T) {
+	var triples [][3]string
+	for i := 0; i < 12; i++ { // 12 PreToolUse hooks, each a different specific matcher
+		triples = append(triples, [3]string{"PreToolUse", "mcp__tool__op" + string(rune('a'+i)), "guard.py"})
+	}
+	assert.Empty(t, SprawlFindings(invM(triples...)),
+		"matcher-scoped hooks must not trigger sprawl — only one fires per matching call")
+}
+
+// TestSprawlFindings_AlwaysFireAlarms: hooks with empty/'*' matcher fire on every
+// call, so they count toward the threshold.
+func TestSprawlFindings_AlwaysFireAlarms(t *testing.T) {
+	var triples [][3]string
+	for i := 0; i < 6; i++ { // 6 always-fire PreToolUse hooks → WARN (>5)
+		triples = append(triples, [3]string{"PreToolUse", "", "guard.py"})
+	}
+	fs := SprawlFindings(invM(triples...))
+	require.Len(t, fs, 1)
+	assert.Equal(t, LevelWarn, fs[0].Level)
+}
+
+// TestDuplicateFindings_DifferentMatchersNotDuplicate: the same command under
+// different matchers is intentional per-tool protection, NOT a duplicate.
+func TestDuplicateFindings_DifferentMatchersNotDuplicate(t *testing.T) {
+	i := invM(
+		[3]string{"PreToolUse", "mcp__cal__create", "calendar_guard.py"},
+		[3]string{"PreToolUse", "mcp__cal__delete", "calendar_guard.py"},
+		[3]string{"PreToolUse", "mcp__cal__update", "calendar_guard.py"},
+	)
+	for _, f := range DuplicateFindings(i) {
+		assert.NotEqual(t, "hook-duplicate", f.Code,
+			"same command under different matchers is not a duplicate")
+	}
+}
+
+// TestDuplicateFindings_SameMatcherIsDuplicate: same command AND same matcher
+// repeated is a true copy-paste duplicate.
+func TestDuplicateFindings_SameMatcherIsDuplicate(t *testing.T) {
+	i := invM(
+		[3]string{"PreToolUse", "Bash", "guard.py"},
+		[3]string{"PreToolUse", "Bash", "guard.py"},
+	)
+	var dup *Finding
+	for idx := range DuplicateFindings(i) {
+		if DuplicateFindings(i)[idx].Code == "hook-duplicate" {
+			dup = &DuplicateFindings(i)[idx]
+		}
+	}
+	require.NotNil(t, dup)
+	assert.Contains(t, dup.Message, "2 times")
+}
+
 // --- #34 inventory + sprawl ---
 
 func TestInventoryFinding_TotalsAndPerEvent(t *testing.T) {
@@ -48,7 +116,7 @@ func TestSprawlFindings_HotPathThresholds(t *testing.T) {
 	require.Len(t, fs, 1)
 	assert.Equal(t, LevelWarn, fs[0].Level)
 	assert.Equal(t, "hook-sprawl", fs[0].Code)
-	assert.Contains(t, fs[0].Message, "PreToolUse has 6 hooks")
+	assert.Contains(t, fs[0].Message, "PreToolUse has 6 always-on hooks")
 }
 
 func TestSprawlFindings_HotPathFail(t *testing.T) {

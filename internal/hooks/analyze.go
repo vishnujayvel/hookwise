@@ -88,18 +88,56 @@ func sprawlThreshold(event string) (warn, fail int) {
 	return 3, 8
 }
 
-// SprawlFindings flags events whose hook count exceeds the WARN/FAIL threshold
-// (issue #34 F1.2).
+// firesEveryCall reports whether a matcher causes its hook to run on every event
+// of that type. An empty or "*" matcher is unconditional; a specific tool
+// matcher (e.g. "mcp__cal__create") only fires when that tool is used.
+func firesEveryCall(matcher string) bool {
+	m := strings.TrimSpace(matcher)
+	return m == "" || m == "*"
+}
+
+// alwaysFireByEvent counts, per event, the hooks that fire on every call
+// (unconditional matcher). Matcher-scoped hooks are excluded — they are the
+// real per-call process cost, so they drive the sprawl alarm.
+func alwaysFireByEvent(inv *Inventory) map[string]int {
+	counts := map[string]int{}
+	for _, e := range inv.Entries {
+		if firesEveryCall(e.Matcher) {
+			counts[e.Event]++
+		}
+	}
+	return counts
+}
+
+// SprawlFindings flags events with too many ALWAYS-FIRE hooks (issue #34 F1.2).
+// Severity is driven by hooks that run on every call (unconditional matcher),
+// not by matcher-scoped hooks: a hook bound to one specific tool does not fork a
+// process on unrelated calls, so counting it toward per-call sprawl is wrong.
 func SprawlFindings(inv *Inventory) []Finding {
+	alwaysFire := alwaysFireByEvent(inv)
+
+	// Deterministic order: by count desc, then event name.
+	events := make([]string, 0, len(alwaysFire))
+	for ev := range alwaysFire {
+		events = append(events, ev)
+	}
+	sort.Slice(events, func(i, j int) bool {
+		if alwaysFire[events[i]] != alwaysFire[events[j]] {
+			return alwaysFire[events[i]] > alwaysFire[events[j]]
+		}
+		return events[i] < events[j]
+	})
+
 	var out []Finding
-	for _, ec := range sortedEventCounts(inv) {
-		warn, fail := sprawlThreshold(ec.Event)
+	for _, ev := range events {
+		count := alwaysFire[ev]
+		warn, fail := sprawlThreshold(ev)
 		level := ""
 		threshold := warn
 		switch {
-		case ec.Count > fail:
+		case count > fail:
 			level, threshold = LevelFail, fail
-		case ec.Count > warn:
+		case count > warn:
 			level, threshold = LevelWarn, warn
 		}
 		if level == "" {
@@ -108,8 +146,8 @@ func SprawlFindings(inv *Inventory) []Finding {
 		out = append(out, Finding{
 			Level:   level,
 			Code:    "hook-sprawl",
-			Message: fmt.Sprintf("%s has %d hooks (threshold: %d)", ec.Event, ec.Count, threshold),
-			Details: []string{"Every matching event spawns these processes. Consider consolidating."},
+			Message: fmt.Sprintf("%s has %d always-on hooks (threshold: %d)", ev, count, threshold),
+			Details: []string{"These hooks fork a process on every call. Consider consolidating."},
 		})
 	}
 	return out
@@ -261,21 +299,26 @@ func DuplicateFindings(inv *Inventory) []Finding {
 	for _, event := range eventOrder {
 		entries := byEvent[event]
 
-		// Exact duplicates: same command string appearing >1 times.
-		cmdCount := map[string]int{}
-		cmdOrder := []string{}
+		// Exact duplicates: same (matcher, command) appearing >1 times. The same
+		// command under DIFFERENT matchers is intentional per-tool protection,
+		// not a duplicate, so the matcher is part of the dedup key.
+		type key struct{ matcher, command string }
+		cmdCount := map[key]int{}
+		cmdOrder := []key{}
 		for _, e := range entries {
-			if _, ok := cmdCount[e.Command]; !ok {
-				cmdOrder = append(cmdOrder, e.Command)
+			k := key{e.Matcher, e.Command}
+			if _, ok := cmdCount[k]; !ok {
+				cmdOrder = append(cmdOrder, k)
 			}
-			cmdCount[e.Command]++
+			cmdCount[k]++
 		}
-		for _, cmd := range cmdOrder {
-			if cmdCount[cmd] > 1 {
+		for _, k := range cmdOrder {
+			cmd := k.command
+			if cmdCount[k] > 1 {
 				out = append(out, Finding{
 					Level:   LevelWarn,
 					Code:    "hook-duplicate",
-					Message: fmt.Sprintf("%q appears %d times on %s", cmd, cmdCount[cmd], event),
+					Message: fmt.Sprintf("%q appears %d times on %s", cmd, cmdCount[k], event),
 					Details: []string{"Identical hooks waste resources. Remove the duplicates."},
 				})
 			}
