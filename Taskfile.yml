@@ -98,7 +98,7 @@ tasks:
       # the install target) doesn't break the race detector build.
       CGO_ENABLED: "1"
     cmds:
-      - go test -race -p {{.TEST_PARALLEL}} ./internal/core/... ./internal/feeds/... ./internal/bridge/... ./internal/analytics/... ./internal/notifications/... ./internal/migration/... ./pkg/...
+      - go test -race -p {{.TEST_PARALLEL}} ./internal/core/... ./internal/feeds/... ./internal/bridge/... ./internal/analytics/... ./internal/notifications/... ./internal/migration/... ./internal/hooks/... ./pkg/...
 
   test:go:contract:
     desc: "Contract parity tests (33 JSON fixtures)"
