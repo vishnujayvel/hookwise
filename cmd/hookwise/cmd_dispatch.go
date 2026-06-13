@@ -81,9 +81,25 @@ func newDispatchCmd() *cobra.Command {
 					wc.Add("dispatch", fmt.Sprintf("timeout after %dms (limit %dms)", elapsed.Milliseconds(), timeoutMs))
 				}
 
-				// Analytics recording (non-blocking, ARCH-7).
+				// Analytics recording. This MUST complete before the process
+				// exits: dispatch calls os.Exit() shortly after, which kills any
+				// still-running goroutine — so a fire-and-forget
+				// `go recordAnalytics(...)` almost never persists its SQLite write
+				// (the open+insert loses the race with os.Exit). Run it in a
+				// goroutine so a hung DB can't block the hook forever, but WAIT up
+				// to analyticsRecordTimeout for it. Fail-open (ARCH-1) on timeout.
 				if config.Analytics.Enabled && payload.SessionID != "" {
-					go recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath)
+					done := make(chan struct{})
+					go func() {
+						defer close(done)
+						recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath)
+					}()
+					select {
+					case <-done:
+					case <-time.After(analyticsRecordTimeout):
+						core.Logger().Warn("analytics: recording did not finish in time",
+							"timeout", analyticsRecordTimeout)
+					}
 				}
 
 				// Signal TUI launch intent (executed synchronously after SafeDispatch)
@@ -120,7 +136,14 @@ func newDispatchCmd() *cobra.Command {
 	return cmd
 }
 
-// recordAnalytics writes session/event data to the SQLite analytics DB in a background goroutine.
+// analyticsRecordTimeout bounds how long dispatch waits for the analytics write
+// before exiting fail-open. A SQLite WAL insert is single-digit ms; this ceiling
+// only trips if the DB is locked/slow, and prevents a stuck write from hanging
+// the hook (and thus the tool call) indefinitely.
+const analyticsRecordTimeout = 2 * time.Second
+
+// recordAnalytics writes session/event data to the SQLite analytics DB. The
+// caller waits for it (bounded) before os.Exit so the write actually persists.
 // Fail-open: any error is logged but never surfaces to the user (ARCH-1).
 func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string) {
 	defer func() {
