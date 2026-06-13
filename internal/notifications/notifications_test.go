@@ -608,3 +608,83 @@ func TestNotification_ExpiredComputed(t *testing.T) {
 	assert.True(t, expiredNotif.Expired, "notification with TTL=1s and created 10s ago should be expired")
 	assert.False(t, activeNotif.Expired, "notification with TTL=86400s just created should not be expired")
 }
+
+// ---------------------------------------------------------------------------
+// Test 22: RunAll creates a budget notification when cost exceeds threshold
+// ---------------------------------------------------------------------------
+
+func TestRunAll_CreatesBudgetNotification(t *testing.T) {
+	ns, db, cleanup := testService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Write a cost state with TotalToday above the threshold.
+	costState := &analytics.CostState{
+		DailyCosts:   map[string]float64{},
+		SessionCosts: map[string]float64{},
+		Today:        time.Now().Format("2006-01-02"),
+		TotalToday:   15.00,
+	}
+	require.NoError(t, db.WriteCostState(ctx, costState))
+
+	// Read it back (as the dispatch path would).
+	cs, err := db.ReadCostState(ctx)
+	require.NoError(t, err)
+
+	err = RunAll(ctx, ns, db, cs, nil, 10.00)
+	require.NoError(t, err)
+
+	notifs, err := ns.List(ctx, 20)
+	require.NoError(t, err)
+
+	found := false
+	for _, n := range notifs {
+		if n.Producer == ProducerBudget {
+			found = true
+			assert.Equal(t, TypeBudgetThreshold, n.Type)
+			assert.Contains(t, n.Content, "$15.00")
+			assert.Contains(t, n.Content, "$10.00")
+		}
+	}
+	assert.True(t, found, "expected at least one budget notification")
+}
+
+// ---------------------------------------------------------------------------
+// Test 23: RunAll with nil states and zero threshold does not panic
+// ---------------------------------------------------------------------------
+
+func TestRunAll_NilStatesNoPanic(t *testing.T) {
+	ns, db, cleanup := testService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	err := RunAll(ctx, ns, db, nil, nil, 0)
+	require.NoError(t, err)
+
+	notifs, err := ns.List(ctx, 20)
+	require.NoError(t, err)
+	assert.Empty(t, notifs, "nil states + zero threshold should produce no notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Test 24: RunAll continues past a single producer error (fail-soft)
+// ---------------------------------------------------------------------------
+
+func TestRunAll_FailSoft(t *testing.T) {
+	ns, db, cleanup := testService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Close the DB to make all producers that touch it return errors.
+	require.NoError(t, db.Close())
+
+	// RunAll should return a non-nil joined error but must not panic.
+	err := RunAll(ctx, ns, db, nil, nil, 0)
+	// With all nil/zero inputs, producers that check nil first return nil,
+	// so at most guard-effectiveness errors propagate (it queries the DB).
+	// The key invariant: no panic.
+	_ = err // may be nil or non-nil depending on which producers short-circuit
+}

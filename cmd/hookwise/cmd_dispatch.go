@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/core"
+	"github.com/vishnujayvel/hookwise/internal/notifications"
 )
 
 // newDispatchCmd handles "hookwise dispatch <EventType>".
@@ -92,7 +93,7 @@ func newDispatchCmd() *cobra.Command {
 					done := make(chan struct{})
 					go func() {
 						defer close(done)
-						recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath)
+						recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath, config.CostTracking.DailyBudget)
 					}()
 					select {
 					case <-done:
@@ -145,7 +146,7 @@ const analyticsRecordTimeout = 2 * time.Second
 // recordAnalytics writes session/event data to the SQLite analytics DB. The
 // caller waits for it (bounded) before os.Exit so the write actually persists.
 // Fail-open: any error is logged but never surfaces to the user (ARCH-1).
-func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string) {
+func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string, budgetThreshold float64) {
 	defer func() {
 		if r := recover(); r != nil {
 			core.Logger().Error("panic in analytics recording", "recovered", fmt.Sprintf("%v", r))
@@ -180,6 +181,15 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 		}
 		if err := a.RecordEvent(ctx, payload.SessionID, event); err != nil {
 			core.Logger().Error("analytics: record event", "error", err)
+		}
+
+		// Best-effort notification generation (fail-open, ARCH-1). Producers dedup
+		// per day, so repeated calls don't spam.
+		costState, _ := db.ReadCostState(ctx)
+		coachState, _ := db.ReadCoachingState(ctx)
+		ns := notifications.NewNotificationService(db)
+		if err := notifications.RunAll(ctx, ns, db, costState, coachState, budgetThreshold); err != nil {
+			core.Logger().Warn("notifications: generation had errors", "error", err)
 		}
 
 	case core.EventSessionEnd, core.EventStop:
