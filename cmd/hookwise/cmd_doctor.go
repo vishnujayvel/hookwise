@@ -14,6 +14,7 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/core"
 	"github.com/vishnujayvel/hookwise/internal/feeds"
+	"github.com/vishnujayvel/hookwise/internal/hooks"
 	"gopkg.in/yaml.v3"
 )
 
@@ -125,6 +126,15 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 	warnings += checkFeedHealth(w, filepath.Join(stateDir, "state"), feedCfg)
 
+	// Check 7: Hook safety — scan Claude Code settings for hook sprawl, missing
+	// binaries, network-dependent hot-path hooks, and duplicate/overlapping
+	// guards (issues #33-36).
+	hookWarnings, hookFails := checkHookSafety(w)
+	warnings += hookWarnings
+	if hookFails > 0 {
+		allOK = false
+	}
+
 	// Check 6: Recent warnings.
 	recentWarnings := core.ReadWarnings(stateDir)
 	if len(recentWarnings) == 0 {
@@ -149,6 +159,55 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// checkHookSafety scans Claude Code settings for hook-safety issues (sprawl,
+// missing binaries, network-dependent hot-path hooks, duplicate/overlapping
+// guards) and renders the findings. Returns (warnings, fails) so the caller can
+// fold them into the doctor summary.
+func checkHookSafety(w io.Writer) (warnings, fails int) {
+	inv, err := hooks.Scan(hooks.DefaultSettingsPaths())
+	if err != nil {
+		// Scan currently never returns a non-nil error (malformed files are
+		// recorded in inv.ParseErrors), but handle it defensively.
+		fmt.Fprintf(w, "WARN  hooks: settings scan failed: %v\n", err)
+		warnings++
+	}
+	// Surface any settings files that could not be parsed.
+	for _, pe := range inv.ParseErrors {
+		fmt.Fprintf(w, "WARN  hook-settings: %s could not be parsed: %v\n", pe.File, pe.Err)
+		warnings++
+	}
+	for _, f := range hooks.AllFindings(inv, nil) {
+		renderHookFinding(w, f)
+		switch f.Level {
+		case hooks.LevelWarn, hooks.LevelInfo:
+			warnings++
+		case hooks.LevelFail:
+			fails++
+		}
+	}
+	return warnings, fails
+}
+
+// renderHookFinding prints a finding in the doctor's house style:
+//
+//	LEVEL  code: message
+//	        <8-space breakdown for SCAN>
+//	       → <remediation for WARN/FAIL/INFO>
+//	       • <bullet detail>
+func renderHookFinding(w io.Writer, f hooks.Finding) {
+	fmt.Fprintf(w, "%-5s %s: %s\n", f.Level, f.Code, f.Message)
+	for _, d := range f.Details {
+		switch {
+		case f.Level == hooks.LevelScan:
+			fmt.Fprintf(w, "        %s\n", d)
+		case strings.HasPrefix(d, "• "):
+			fmt.Fprintf(w, "       %s\n", d)
+		default:
+			fmt.Fprintf(w, "       → %s\n", d)
+		}
+	}
 }
 
 // checkFeedHealth reads feed cache files and reports placeholder/stale feeds.
