@@ -123,6 +123,9 @@ tasks:
       # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
       # the install target) doesn't break the race detector build.
       CGO_ENABLED: "1"
+      # Isolate from the developer's real ~/.hookwise state/log (#91).
+      HOOKWISE_STATE_DIR:
+        sh: mktemp -d
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} ./internal/contract/...
 
@@ -134,6 +137,9 @@ tasks:
       # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
       # the install target) doesn't break the race detector build.
       CGO_ENABLED: "1"
+      # Isolate from the developer's real ~/.hookwise state/log (#91).
+      HOOKWISE_STATE_DIR:
+        sh: mktemp -d
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} ./internal/arch/...
 
@@ -145,6 +151,9 @@ tasks:
       # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
       # the install target) doesn't break the race detector build.
       CGO_ENABLED: "1"
+      # Isolate from the developer's real ~/.hookwise state/log (#91).
+      HOOKWISE_STATE_DIR:
+        sh: mktemp -d
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} ./internal/proptest/...
 
@@ -182,6 +191,9 @@ tasks:
       # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
       # the install target) doesn't break the race detector build.
       CGO_ENABLED: "1"
+      # Isolate from the developer's real ~/.hookwise state/log (#91).
+      HOOKWISE_STATE_DIR:
+        sh: mktemp -d
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} -tags integration ./...
 
@@ -193,6 +205,9 @@ tasks:
       # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
       # the install target) doesn't break the race detector build.
       CGO_ENABLED: "1"
+      # Isolate from the developer's real ~/.hookwise state/log (#91).
+      HOOKWISE_STATE_DIR:
+        sh: mktemp -d
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} -tags mutation ./internal/mutation/...
 
