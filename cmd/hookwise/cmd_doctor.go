@@ -166,7 +166,18 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 // guards) and renders the findings. Returns (warnings, fails) so the caller can
 // fold them into the doctor summary.
 func checkHookSafety(w io.Writer) (warnings, fails int) {
-	inv, _ := hooks.Scan(hooks.DefaultSettingsPaths())
+	inv, err := hooks.Scan(hooks.DefaultSettingsPaths())
+	if err != nil {
+		// Scan currently never returns a non-nil error (malformed files are
+		// recorded in inv.ParseErrors), but handle it defensively.
+		fmt.Fprintf(w, "WARN  hooks: settings scan failed: %v\n", err)
+		warnings++
+	}
+	// Surface any settings files that could not be parsed.
+	for _, pe := range inv.ParseErrors {
+		fmt.Fprintf(w, "WARN  hook-settings: %s could not be parsed: %v\n", pe.File, pe.Err)
+		warnings++
+	}
 	for _, f := range hooks.AllFindings(inv, nil) {
 		renderHookFinding(w, f)
 		switch f.Level {

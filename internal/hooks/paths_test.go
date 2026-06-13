@@ -16,7 +16,7 @@ func TestSettingsPaths_GlobalAndProjects(t *testing.T) {
 	// Two project settings.local.json files.
 	for _, proj := range []string{"projA", "projB"} {
 		dir := filepath.Join(claude, "projects", proj)
-		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.MkdirAll(dir, 0o750))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "settings.local.json"), []byte("{}"), 0o600))
 	}
 
