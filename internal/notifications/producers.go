@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,6 +23,27 @@ const (
 	TypeGuardEffectiveness  = "guard_effectiveness"
 	TypeCoachingPrompt      = "coaching_prompt"
 )
+
+// ---------------------------------------------------------------------------
+// Orchestrator
+// ---------------------------------------------------------------------------
+
+// RunAll runs every notification producer best-effort. A failure in one does
+// NOT stop the others; all errors are joined and returned (callers log + ignore
+// per ARCH-1). costState/coachState may be nil (producers no-op on nil).
+func RunAll(ctx context.Context, ns *NotificationService, db *analytics.DB, costState *analytics.CostState, coachState *analytics.CoachingState, budgetThreshold float64) error {
+	var errs []error
+	if err := CheckBudget(ctx, ns, costState, budgetThreshold); err != nil {
+		errs = append(errs, err)
+	}
+	if err := CheckGuardEffectiveness(ctx, ns, db); err != nil {
+		errs = append(errs, err)
+	}
+	if err := CheckCoaching(ctx, ns, coachState); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
 
 // ---------------------------------------------------------------------------
 // Budget threshold notifications (R12.1)
