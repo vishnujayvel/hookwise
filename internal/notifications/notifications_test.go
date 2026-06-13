@@ -3,6 +3,7 @@ package notifications
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Test helper: open a fresh Dolt DB and return a NotificationService
+// Test helper: open a fresh analytics DB and return a NotificationService
 // ---------------------------------------------------------------------------
 
 func testService(t *testing.T) (*NotificationService, *analytics.DB, func()) {
@@ -20,7 +21,7 @@ func testService(t *testing.T) (*NotificationService, *analytics.DB, func()) {
 	tmpDir, err := os.MkdirTemp("", "hookwise-notif-test-*")
 	require.NoError(t, err)
 
-	db, err := analytics.Open(tmpDir)
+	db, err := analytics.Open(filepath.Join(tmpDir, "analytics.db"))
 	require.NoError(t, err)
 
 	ns := NewNotificationService(db)

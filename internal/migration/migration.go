@@ -1,10 +1,10 @@
 // Package migration handles data migration from the TypeScript hookwise
-// installation (SQLite analytics.db + cost-state.json) into the Go Dolt
-// database. It implements R8.1-R8.5 from the migration requirements.
+// installation (SQLite analytics.db + cost-state.json) into the Go SQLite
+// analytics database. It implements R8.1-R8.5 from the migration requirements.
 //
 // Design principles:
 //   - ARCH-1: fail-open -- migration errors are reported, never crash
-//   - ARCH-8: batch Dolt commit after migration
+//   - Data is written directly to SQLite (durable immediately, no commit step)
 //   - Read-only access to original files (R8.4: non-destructive)
 //   - Dry-run mode prints what would happen without writing (R8.3)
 package migration
@@ -32,7 +32,8 @@ import (
 type MigrationOpts struct {
 	// DryRun prints what would be migrated without writing.
 	DryRun bool
-	// DoltDataDir is the Dolt data directory (empty = default).
+	// DoltDataDir is the analytics DB path (empty = default). Named for
+	// historical compatibility with callers; the actual backend is SQLite.
 	DoltDataDir string
 	// HomeDir overrides the user home directory (for testing).
 	HomeDir string
@@ -51,7 +52,6 @@ type MigrationResult struct {
 	AuthorshipImported int
 	CostStateImported bool
 	ConfigValid      bool
-	DoltCommitHash   string
 	Errors           []string
 }
 
@@ -99,11 +99,11 @@ func DetectTypeScript(opts MigrationOpts) (sqlitePath, costStatePath string) {
 // SQLite migration (Task 10.1)
 // ---------------------------------------------------------------------------
 
-// MigrateSQLite reads sessions, events, and authorship data from the SQLite
-// analytics.db and writes them into the Dolt database.
+// MigrateSQLite reads sessions, events, and authorship data from a TypeScript-era
+// analytics.db and writes them into the current SQLite analytics database.
 //
-// The SQLite database is opened read-only. If dryRun is true, data is read
-// and counted but not written to Dolt.
+// The source database is opened read-only. If dryRun is true, data is read
+// and counted but not written.
 func MigrateSQLite(ctx context.Context, db *analytics.DB, sqlitePath string, dryRun bool, w io.Writer) (sessions, events, authorship int, errs []string) {
 	// Open SQLite in read-only mode using the pure-Go driver.
 	sqliteDB, err := sql.Open("sqlite", sqlitePath+"?mode=ro")
@@ -128,8 +128,8 @@ func MigrateSQLite(ctx context.Context, db *analytics.DB, sqlitePath string, dry
 	return sessions, events, authorship, errs
 }
 
-// migrateSessions reads sessions from SQLite and writes to Dolt.
-func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
+// migrateSessions reads sessions from the source SQLite DB and writes to the analytics DB.
+func migrateSessions(ctx context.Context, db *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
 	var errs []string
 
 	rows, err := sqliteDB.QueryContext(ctx,
@@ -146,7 +146,7 @@ func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB
 	count := 0
 	var a *analytics.Analytics
 	if !dryRun {
-		a = analytics.NewAnalytics(doltDB)
+		a = analytics.NewAnalytics(db)
 	}
 	for rows.Next() {
 		var (
@@ -209,8 +209,8 @@ func migrateSessions(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB
 	return count, errs
 }
 
-// migrateEvents reads events from SQLite and writes to Dolt.
-func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
+// migrateEvents reads events from the source SQLite DB and writes to the analytics DB.
+func migrateEvents(ctx context.Context, db *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
 	var errs []string
 
 	rows, err := sqliteDB.QueryContext(ctx,
@@ -226,7 +226,7 @@ func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, 
 	count := 0
 	var a *analytics.Analytics
 	if !dryRun {
-		a = analytics.NewAnalytics(doltDB)
+		a = analytics.NewAnalytics(db)
 	}
 	for rows.Next() {
 		var (
@@ -279,8 +279,8 @@ func migrateEvents(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, 
 	return count, errs
 }
 
-// migrateAuthorship reads the authorship_ledger from SQLite and writes to Dolt.
-func migrateAuthorship(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
+// migrateAuthorship reads the authorship_ledger from the source SQLite DB and writes to the analytics DB.
+func migrateAuthorship(ctx context.Context, db *analytics.DB, sqliteDB *sql.DB, dryRun bool, w io.Writer) (int, []string) {
 	var errs []string
 
 	rows, err := sqliteDB.QueryContext(ctx,
@@ -295,7 +295,7 @@ func migrateAuthorship(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.
 	count := 0
 	var a *analytics.Analytics
 	if !dryRun {
-		a = analytics.NewAnalytics(doltDB)
+		a = analytics.NewAnalytics(db)
 	}
 	for rows.Next() {
 		var (
@@ -349,7 +349,7 @@ func migrateAuthorship(ctx context.Context, doltDB *analytics.DB, sqliteDB *sql.
 // Cost state migration (Task 10.2)
 // ---------------------------------------------------------------------------
 
-// MigrateCostState reads cost-state.json and writes it into the Dolt cost_state
+// MigrateCostState reads cost-state.json and writes it into the analytics cost_state
 // table. If dryRun is true, the JSON is read and validated but not written.
 func MigrateCostState(ctx context.Context, db *analytics.DB, jsonPath string, dryRun bool, w io.Writer) (bool, []string) {
 	var errs []string
@@ -388,7 +388,7 @@ func MigrateCostState(ctx context.Context, db *analytics.DB, jsonPath string, dr
 	}
 
 	if err := db.WriteCostState(ctx, costState); err != nil {
-		errs = append(errs, fmt.Sprintf("writing cost state to Dolt: %v", err))
+		errs = append(errs, fmt.Sprintf("writing cost state to analytics DB: %v", err))
 		return false, errs
 	}
 
@@ -449,7 +449,9 @@ func ValidateConfig(projectDir string, w io.Writer) (bool, []string) {
 //  2. Migrate SQLite data (sessions, events, authorship)
 //  3. Migrate cost-state.json
 //  4. Validate config parity
-//  5. Commit to Dolt (unless dry-run)
+//
+// Data is written directly to SQLite and is durable immediately; there is no
+// separate commit step.
 func Run(opts MigrationOpts) MigrationResult {
 	result := MigrationResult{}
 	ctx := context.Background()
@@ -483,13 +485,13 @@ func Run(opts MigrationOpts) MigrationResult {
 		fmt.Fprintf(w, "  Found: %s\n", costStatePath)
 	}
 
-	// Step 2: Open Dolt DB (unless pure dry-run with no actual writes needed).
+	// Step 2: Open analytics DB (unless pure dry-run with no actual writes needed).
 	var db *analytics.DB
 	if !opts.DryRun {
 		var err error
 		db, err = analytics.Open(opts.DoltDataDir)
 		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("failed to open Dolt DB: %v", err))
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to open analytics DB: %v", err))
 			fmt.Fprintf(w, "ERROR: %v\n", err)
 			return result
 		}
@@ -520,20 +522,13 @@ func Run(opts MigrationOpts) MigrationResult {
 	result.ConfigValid = valid
 	result.Errors = append(result.Errors, errs...)
 
-	// Step 6: Dolt commit (unless dry-run).
+	// Step 6: Finalize. Data written to SQLite is durable immediately, so
+	// there is no separate commit step.
 	if !opts.DryRun && db != nil {
-		fmt.Fprintln(w, "\nCommitting to Dolt...")
-		hash, err := db.Commit(ctx, "migration:upgrade from-typescript")
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("Dolt commit failed: %v", err))
-		} else if hash != "" {
-			result.DoltCommitHash = hash
-			fmt.Fprintf(w, "  Dolt commit: %s\n", hash)
-		} else {
-			fmt.Fprintln(w, "  No data changes to commit.")
-		}
+		fmt.Fprintln(w, "\nFinalizing...")
+		fmt.Fprintln(w, "  Data written to analytics database.")
 	} else if opts.DryRun {
-		fmt.Fprintln(w, "\n[dry-run] Would commit to Dolt with message: \"migration:upgrade from-typescript\"")
+		fmt.Fprintln(w, "\n[dry-run] Would write imported data to the analytics database.")
 	}
 
 	// Summary.

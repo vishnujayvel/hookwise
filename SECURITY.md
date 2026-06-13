@@ -66,7 +66,8 @@ The codebase enforces the following security practices by design:
 
 hookwise maintains a minimal dependency footprint:
 
-- **Runtime** (Go): `dolt`, `cobra`, `yaml.v3`, `testify` — compiled into a single static binary
+- **Runtime** (Go): `modernc.org/sqlite`, `cobra`, `yaml.v3` — compiled into a single static binary (CGO-free, ~19 MB stripped release)
+- **Test-only** (Go): `testify` — not compiled into the shipped binary
 - **Runtime** (Python TUI): `textual`, `pyyaml`, `rich`, `anthropic`
 - **No native HTTP server dependencies** -- External data is fetched via Go's `net/http` or Python `urllib`
 - **Binary releases** -- Go binaries are published via GitHub Releases with Dagger-based CI builds

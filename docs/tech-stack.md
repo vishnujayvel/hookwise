@@ -18,8 +18,7 @@ They communicate via a **shared filesystem cache** (JSON file), not HTTP or IPC.
 | **Go** | 1.25 | Runtime and compiler for the core engine | Single binary, fast startup, static typing built-in |
 | **gopkg.in/yaml.v3** | v3 | Parses `hookwise.yaml` config files | Standard Go YAML parser |
 | **gobwas/glob** | -- | Glob pattern matching for guard file filters | Lightweight glob matcher for Go |
-| **dolthub/driver** | -- | Embedded Dolt database (version-controlled SQL data layer) | Git-like versioning for analytics and event data |
-| **modernc.org/sqlite** | -- | Pure-Go SQLite reader for migration from v1 | Reads legacy SQLite analytics DB during upgrade |
+| **modernc.org/sqlite** | -- | Pure-Go SQLite analytics database (WAL mode, periodic VACUUM INTO snapshots) | CGO-free, ~19 MB stripped binary; Dolt removed in v2 (retro-009/010) |
 | **github.com/spf13/cobra** | -- | CLI framework for all hookwise commands | Industry standard Go CLI framework |
 | **github.com/stretchr/testify** | -- | Test assertions and requirements | Expressive assertions (`assert`, `require`) for Go tests |
 
@@ -28,7 +27,7 @@ They communicate via a **shared filesystem cache** (JSON file), not HTTP or IPC.
 - Single compiled binary -- no runtime dependencies, no npm
 - Internal packages (`internal/`) enforce encapsulation at the compiler level
 - `-ldflags` version injection at build time
-- `SetMaxOpenConns(1)` for serialized Dolt writes (ARCH-2)
+- `SetMaxOpenConns(1)` — deliberate single-writer choice under SQLite WAL (ARCH-2); WAL allows concurrent readers + one writer
 
 ## Layer 2: Python TUI (Runtime)
 
@@ -152,7 +151,7 @@ Tools used to build hookwise (not in package dependencies):
 |-----------|-----------------|
 | **Filesystem JSON cache** (`~/.hookwise/cache.json`) | Daemon, Status Line, TUI |
 | **YAML config** (`hookwise.yaml`) | User config to all components |
-| **Dolt DB** (`~/.hookwise/dolt/`) | Dispatcher to Analytics to Stats CLI (version-controlled SQL) |
+| **SQLite analytics DB** (`~/.hookwise/analytics.db`) | Dispatcher to Analytics to Stats CLI; WAL mode, periodic VACUUM INTO snapshots to `~/.hookwise/snapshots/` |
 | **PID files** (`~/.hookwise/daemon.pid`, `tui.pid`) | Process lifecycle management |
 | **os/exec with SysProcAttr** | Core to TUI launcher, Core to Daemon (detached subprocess) |
 | **stdin pipe** | Claude Code to `hookwise status-line` (context_window, cost data) |

@@ -372,7 +372,7 @@ func TestDiffRequiresArgs(t *testing.T) {
 
 func TestLogDefaultLimit(t *testing.T) {
 	// This test verifies the log command exists and accepts --limit.
-	// We can't test actual Dolt output without a database, so we just
+	// We can't test actual analytics DB output without a database, so we just
 	// verify the flag is recognized.
 	rootCmd := newRootCmd()
 	logCmd, _, err := rootCmd.Find([]string{"log"})
@@ -876,17 +876,18 @@ func writeJSONFile(t *testing.T, path string, v interface{}) {
 }
 
 // ---------------------------------------------------------------------------
-// 23. recordAnalytics writes session data to Dolt
+// 23. recordAnalytics writes session data to the analytics DB
 // ---------------------------------------------------------------------------
 
 func TestRecordAnalytics_SessionStart(t *testing.T) {
 	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "analytics.db")
 
 	payload := core.HookPayload{SessionID: "test-session-001"}
-	recordAnalytics(context.Background(), core.EventSessionStart, payload, tmpDir)
+	recordAnalytics(context.Background(), core.EventSessionStart, payload, dbPath)
 
 	// Verify session was recorded.
-	db, err := analytics.Open(tmpDir)
+	db, err := analytics.Open(dbPath)
 	if err != nil {
 		t.Fatalf("failed to open analytics DB: %v", err)
 	}
@@ -905,16 +906,17 @@ func TestRecordAnalytics_SessionStart(t *testing.T) {
 
 func TestRecordAnalytics_PostToolUse(t *testing.T) {
 	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "analytics.db")
 
 	// First create a session.
 	payload := core.HookPayload{SessionID: "test-session-002"}
-	recordAnalytics(context.Background(), core.EventSessionStart, payload, tmpDir)
+	recordAnalytics(context.Background(), core.EventSessionStart, payload, dbPath)
 
 	// Record a tool use event.
 	payload.ToolName = "Bash"
-	recordAnalytics(context.Background(), core.EventPostToolUse, payload, tmpDir)
+	recordAnalytics(context.Background(), core.EventPostToolUse, payload, dbPath)
 
-	db, err := analytics.Open(tmpDir)
+	db, err := analytics.Open(dbPath)
 	if err != nil {
 		t.Fatalf("failed to open analytics DB: %v", err)
 	}

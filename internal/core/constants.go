@@ -71,6 +71,14 @@ const (
 
 	// DefaultDispatchTimeoutMs is the total dispatch pipeline timeout in milliseconds.
 	DefaultDispatchTimeoutMs = 500
+
+	// DefaultSnapshotIntervalMinutes is how often the daemon takes a VACUUM INTO
+	// analytics snapshot. Default hourly.
+	DefaultSnapshotIntervalMinutes = 60
+
+	// DefaultSnapshotRetention is the number of analytics snapshots kept before
+	// the oldest are pruned.
+	DefaultSnapshotRetention = 24
 )
 
 // HomeDir returns the user's home directory, falling back to the system

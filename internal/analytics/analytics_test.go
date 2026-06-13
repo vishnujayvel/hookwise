@@ -14,7 +14,7 @@ import (
 // Helpers
 // ---------------------------------------------------------------------------
 
-// testAnalytics opens a fresh Dolt DB and returns an Analytics instance.
+// testAnalytics opens a fresh analytics DB and returns an Analytics instance.
 func testAnalytics(t *testing.T) (*Analytics, func()) {
 	t.Helper()
 	db, cleanup := testOpen(t)

@@ -1,7 +1,7 @@
 // Package notifications provides a notification service for hookwise.
 //
 // Notifications are created by producers (budget, guard effectiveness,
-// coaching) and stored in the Dolt notifications table. They can be
+// coaching) and stored in the SQLite notifications table. They can be
 // queried for display via the CLI or surfaced in the status line.
 package notifications
 
@@ -15,7 +15,7 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
 
-// Notification represents a single notification row from the Dolt table.
+// Notification represents a single notification row from the SQLite notifications table.
 type Notification struct {
 	ID         int        `json:"id"`
 	Producer   string     `json:"producer"`
@@ -29,7 +29,7 @@ type Notification struct {
 	Expired    bool       `json:"expired"`
 }
 
-// NotificationService manages creating and querying notifications via Dolt.
+// NotificationService manages creating and querying notifications via the analytics DB.
 type NotificationService struct {
 	db *analytics.DB
 }
@@ -104,8 +104,8 @@ func (ns *NotificationService) Unsurfaced(ctx context.Context) ([]Notification, 
 		return nil, err
 	}
 
-	// Filter out expired notifications in Go (avoids Dolt SQL date math
-	// issues on TEXT-stored timestamps).
+	// Filter out expired notifications in Go (avoids SQLite date math
+	// quirks on TEXT-stored timestamps).
 	var active []Notification
 	for _, n := range all {
 		if !n.Expired {

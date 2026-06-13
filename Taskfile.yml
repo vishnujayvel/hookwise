@@ -17,13 +17,16 @@ vars:
     sh: git rev-parse --short HEAD 2>/dev/null || echo "none"
   DATE:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
-  LDFLAGS: -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildDate={{.DATE}}
+  # -s -w strips the symbol table + DWARF: drops the binary from ~28 MB to ~19 MB
+  # (under the 20 MB target). modernc.org/sqlite is pure-Go, so CGO is disabled.
+  LDFLAGS: -s -w -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildDate={{.DATE}}
   INSTALL_PATH:
     sh: echo "${HOOKWISE_INSTALL_PATH:-$(brew --prefix 2>/dev/null || echo /usr/local)/bin/hookwise}"
   TUI_VENV: .venv/bin
-  # M1 (retro-009): Limit test parallelism to 2 packages to prevent memory exhaustion.
-  # Each hookwise.test binary is ~149 MB (Dolt embedded). With -race, ~300 MB.
-  # 15 packages × 300 MB = 4.5 GB per `go test ./...`. -p 2 caps at ~600 MB.
+  # M1 (retro-009): Limit test parallelism to 2 packages as defense-in-depth.
+  # Post-Dolt the test binaries shrank from ~149 MB to ~12 MB (~19 MB with -race),
+  # so the 4.5 GB exhaustion scenario is largely gone — but -p 2 stays as a guard
+  # against regressions and concurrent agent runs. See the Dolt-removal decision record.
   TEST_PARALLEL: "2"
   GOMEMLIMIT: 4GiB
 
@@ -91,6 +94,9 @@ tasks:
     deps: [vet, compile, test:guard]
     env:
       GOMEMLIMIT: "{{.GOMEMLIMIT}}"
+      # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
+      # the install target) doesn't break the race detector build.
+      CGO_ENABLED: "1"
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} ./internal/core/... ./internal/feeds/... ./internal/bridge/... ./internal/analytics/... ./internal/notifications/... ./internal/migration/... ./pkg/...
 
@@ -99,6 +105,9 @@ tasks:
     deps: [vet, compile, test:guard]
     env:
       GOMEMLIMIT: "{{.GOMEMLIMIT}}"
+      # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
+      # the install target) doesn't break the race detector build.
+      CGO_ENABLED: "1"
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} ./internal/contract/...
 
@@ -107,6 +116,9 @@ tasks:
     deps: [vet, test:guard]
     env:
       GOMEMLIMIT: "{{.GOMEMLIMIT}}"
+      # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
+      # the install target) doesn't break the race detector build.
+      CGO_ENABLED: "1"
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} ./internal/arch/...
 
@@ -115,15 +127,20 @@ tasks:
     deps: [vet, test:guard]
     env:
       GOMEMLIMIT: "{{.GOMEMLIMIT}}"
+      # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
+      # the install target) doesn't break the race detector build.
+      CGO_ENABLED: "1"
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} ./internal/proptest/...
 
   test:tui:unit:
-    desc: "Python TUI unit tests (no snapshots)"
+    desc: "Python TUI unit tests (no snapshots, no Claude-Code E2E)"
     deps: [lint:py]
     dir: tui
     cmds:
-      - .venv/bin/python -m pytest tests/ -x --ignore=tests/test_snapshots.py
+      # Deselect terminal_e2e: those spawn a real Claude Code session in a PTY and
+      # are environment-dependent — run them separately via `pytest -m terminal_e2e`.
+      - .venv/bin/python -m pytest tests/ -x -m "not terminal_e2e" --ignore=tests/test_snapshots.py
 
   test:cross:schema:
     desc: "Cross-language schema boundary tests"
@@ -147,6 +164,9 @@ tasks:
     deps: [test:go:unit, test:go:contract, test:guard]
     env:
       GOMEMLIMIT: "{{.GOMEMLIMIT}}"
+      # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
+      # the install target) doesn't break the race detector build.
+      CGO_ENABLED: "1"
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} -tags integration ./...
 
@@ -155,6 +175,9 @@ tasks:
     deps: [test:go:unit, test:guard]
     env:
       GOMEMLIMIT: "{{.GOMEMLIMIT}}"
+      # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
+      # the install target) doesn't break the race detector build.
+      CGO_ENABLED: "1"
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} -tags mutation ./internal/mutation/...
 
@@ -167,8 +190,10 @@ tasks:
 
   install:
     desc: "Build and install binary to PATH"
+    env:
+      CGO_ENABLED: "0"
     cmds:
-      - go build -ldflags "{{.LDFLAGS}}" -o {{.INSTALL_PATH}} ./cmd/hookwise/
+      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o {{.INSTALL_PATH}} ./cmd/hookwise/
       - echo "Installed {{.INSTALL_PATH}} ({{.VERSION}} @ {{.COMMIT}})"
     sources:
       - "**/*.go"

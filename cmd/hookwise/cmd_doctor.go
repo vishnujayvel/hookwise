@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +21,7 @@ func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
 		Short: "Run system health checks",
-		Long:  "Checks hookwise.yaml validity, Dolt DB connectivity, state directory, and daemon status.",
+		Long:  "Checks hookwise.yaml validity, analytics DB connectivity, state directory, and daemon status.",
 		RunE:  runDoctor,
 	}
 }
@@ -74,13 +75,31 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "PASS  state-dir: %s\n", stateDir)
 	}
 
-	// Check 3: Dolt DB.
-	doltDir := analytics.DefaultDoltDir()
-	if info, err := os.Stat(doltDir); err != nil || !info.IsDir() {
-		fmt.Fprintf(w, "WARN  dolt-db: %s not found (will be created on first dispatch)\n", doltDir)
+	// Check 3: analytics DB health. Open the SQLite DB and run a trivial query
+	// so a corrupt or unwritable analytics.db surfaces here — ARCH-1 fail-open
+	// hides analytics write failures everywhere else.
+	dbPath := analytics.DefaultDBPath()
+	if _, statErr := os.Stat(dbPath); os.IsNotExist(statErr) {
+		fmt.Fprintf(w, "WARN  analytics: %s not yet created (created on first dispatch)\n", dbPath)
 		warnings++
+	} else if db, err := analytics.Open(dbPath); err != nil {
+		fmt.Fprintf(w, "FAIL  analytics: cannot open %s: %v\n", dbPath, err)
+		allOK = false
 	} else {
-		fmt.Fprintf(w, "PASS  dolt-db: %s\n", doltDir)
+		var one int
+		if qErr := db.QueryRow(context.Background(), "SELECT 1").Scan(&one); qErr != nil {
+			fmt.Fprintf(w, "FAIL  analytics: %s not queryable: %v\n", dbPath, qErr)
+			allOK = false
+		} else {
+			fmt.Fprintf(w, "PASS  analytics: %s\n", dbPath)
+		}
+		_ = db.Close()
+	}
+
+	// Legacy Dolt archive note (informational; safe to delete once confirmed).
+	doltDir := analytics.DefaultDoltDir()
+	if info, e := os.Stat(doltDir); e == nil && info.IsDir() {
+		fmt.Fprintf(w, "INFO  legacy-dolt: %s present (archived; safe to remove)\n", doltDir)
 	}
 
 	// Check 4: Daemon liveness via socket dial (replaces PID file check).

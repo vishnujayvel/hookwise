@@ -16,7 +16,7 @@ import (
 // ---------------------------------------------------------------------------
 
 // CoachingState represents the singleton coaching state stored in the
-// coaching_state Dolt table (id=1).
+// coaching_state SQLite table (id=1).
 type CoachingState struct {
 	LastPromptAt    *time.Time             `json:"lastPromptAt,omitempty"`
 	PromptHistory   []string               `json:"promptHistory,omitempty"`
@@ -39,7 +39,7 @@ func defaultCoachingState() *CoachingState {
 	}
 }
 
-// ReadCoachingState loads the singleton coaching state from Dolt.
+// ReadCoachingState loads the singleton coaching state from SQLite.
 // If no row exists, it returns a default state.
 func (d *DB) ReadCoachingState(ctx context.Context) (*CoachingState, error) {
 	row := d.QueryRow(ctx,
@@ -148,7 +148,7 @@ func (d *DB) WriteCoachingState(ctx context.Context, state *CoachingState) error
 // ---------------------------------------------------------------------------
 
 // CostState represents the singleton cost state stored in the
-// cost_state Dolt table (id=1).
+// cost_state SQLite table (id=1).
 type CostState struct {
 	DailyCosts   map[string]float64 `json:"dailyCosts"`
 	SessionCosts map[string]float64 `json:"sessionCosts"`
@@ -166,7 +166,7 @@ func defaultCostState() *CostState {
 	}
 }
 
-// ReadCostState loads the singleton cost state from Dolt.
+// ReadCostState loads the singleton cost state from SQLite.
 // If no row exists, it returns a default state with today's date.
 // If the stored date differs from today, TotalToday is reset to 0.
 func (d *DB) ReadCostState(ctx context.Context) (*CostState, error) {
@@ -251,7 +251,7 @@ func (d *DB) WriteCostState(ctx context.Context, state *CostState) error {
 // Feed Cache (R4.7, R9.1)
 // ---------------------------------------------------------------------------
 
-// FeedCacheEntry represents a single entry in the feed_cache Dolt table.
+// FeedCacheEntry represents a single entry in the feed_cache SQLite table.
 type FeedCacheEntry struct {
 	Key        string      `json:"key"`
 	Data       interface{} `json:"data"`

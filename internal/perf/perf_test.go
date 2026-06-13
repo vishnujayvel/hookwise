@@ -357,9 +357,9 @@ func BenchmarkDispatch_UnrecognizedEvent(b *testing.B) {
 // Test: Binary size check
 // =========================================================================
 //
-// Builds the hookwise binary and checks its size. Due to the embedded Dolt
-// database, the binary is expected to be large (>100MB). This test documents
-// the current size rather than enforcing a strict limit.
+// Builds the hookwise binary and checks its size. Post-Dolt removal the binary
+// is ~28 MB unstripped (~19 MB stripped release), CGO-free. This test documents
+// the current size and guards against regressions.
 
 func TestBinarySize(t *testing.T) {
 	if testing.Short() {
@@ -376,7 +376,7 @@ func TestBinarySize(t *testing.T) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Logf("Build output: %s", string(output))
-		t.Skipf("Binary build failed (may need CGO or Dolt driver): %v", err)
+		t.Skipf("Binary build failed: %v", err)
 		return
 	}
 
@@ -386,7 +386,6 @@ func TestBinarySize(t *testing.T) {
 	sizeMB := float64(info.Size()) / (1024 * 1024)
 	t.Logf("Binary size: %.1f MB (%d bytes)", sizeMB, info.Size())
 
-	// Due to Dolt embedded driver, the binary is expected to be large.
 	// We set a generous upper bound to catch regressions.
 	const maxSizeMB = 250.0
 	assert.Less(t, sizeMB, maxSizeMB,
@@ -394,7 +393,7 @@ func TestBinarySize(t *testing.T) {
 
 	// Log a note about the size for tracking
 	if sizeMB > 30 {
-		t.Logf("NOTE: Binary exceeds 30MB due to Dolt embedded driver (known gap)")
+		t.Logf("NOTE: Binary exceeds 30MB (unstripped debug build; stripped release is ~19 MB)")
 	}
 }
 

@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,14 +11,15 @@ import (
 )
 
 func TestPersistAcrossConnections(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "dolt-persist-*")
+	tmpDir, err := os.MkdirTemp("", "persist-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	ctx := context.Background()
+	dbPath := filepath.Join(tmpDir, "analytics.db")
 
 	// Connection 1: write + commit + close
-	db1, err := Open(tmpDir)
+	db1, err := Open(dbPath)
 	require.NoError(t, err)
 	a1 := NewAnalytics(db1)
 	require.NoError(t, a1.StartSession(ctx, "persist-001", time.Now()))
@@ -36,7 +38,7 @@ func TestPersistAcrossConnections(t *testing.T) {
 	db1.Close()
 
 	// Connection 2: read
-	db2, err := Open(tmpDir)
+	db2, err := Open(dbPath)
 	require.NoError(t, err)
 	defer db2.Close()
 	a2 := NewAnalytics(db2)

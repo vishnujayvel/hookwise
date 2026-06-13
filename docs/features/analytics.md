@@ -30,6 +30,30 @@ View your stats with:
 hookwise stats
 ```
 
+## Snapshots
+
+The daemon takes periodic point-in-time snapshots of the analytics database using SQLite `VACUUM INTO`, stored in `~/.hookwise/snapshots/`. Snapshot settings:
+
+```yaml
+analytics:
+  snapshot_enabled: true
+  snapshot_interval_minutes: 60   # default: hourly
+  snapshot_retention: 24          # keep last 24 snapshots
+```
+
+List snapshots (newest-first):
+
+```bash
+hookwise log
+```
+
+Diff two snapshots by row-count deltas per table:
+
+```bash
+hookwise diff latest prev
+hookwise diff <timestamp-prefix-a> <timestamp-prefix-b>
+```
+
 ---
 
 ← [Back to Home](/)

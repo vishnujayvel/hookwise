@@ -54,6 +54,7 @@ func newRootCmd() *cobra.Command {
 		newUpgradeCmd(),
 		newNotificationsCmd(),
 		newDaemonCmd(),
+		newSnapshotCmd(),
 	)
 
 	return rootCmd

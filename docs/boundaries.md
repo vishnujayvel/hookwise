@@ -40,14 +40,14 @@ This document defines what hookwise controls and what it does not. It exists for
 
 | Component | Source Files | Description |
 |-----------|-------------|-------------|
-| Analytics Dolt DB | `internal/analytics/db.go` | Session tracking, tool call logging, authorship ledger (`~/.hookwise/dolt/`) |
+| Analytics SQLite DB | `internal/analytics/sqlite.go` | Session tracking, tool call logging, authorship ledger (`~/.hookwise/analytics.db`); WAL mode, periodic VACUUM INTO snapshots |
 | Analytics engine | `internal/analytics/session.go` | Session start/end lifecycle, event recording |
 | Stats queries | `internal/analytics/stats.go` | Daily summaries, tool breakdowns, authorship summaries |
 | Coaching state | `internal/core/` | JSON-based session state for metacognition intervals and builder's trap mode tracking |
 | Cache bus | `internal/feeds/cache_bus.go` | Filesystem-based inter-process communication via atomic JSON reads/writes with per-key TTL |
 | Transcript backup | `internal/core/transcript.go` | Timestamped JSON files of hook payloads with max directory size enforcement |
 | Cost state | `internal/core/cost.go` | Per-session and daily cost accumulation with budget enforcement |
-| Agent spans | `internal/core/agents.go` | Multi-agent lifecycle tracking in Dolt, file conflict detection, Mermaid diagram generation |
+| Agent spans | `internal/core/agents.go` | Multi-agent lifecycle tracking in the analytics DB, file conflict detection, Mermaid diagram generation |
 
 ### Display Layer
 
@@ -154,7 +154,7 @@ This document defines what hookwise controls and what it does not. It exists for
   |  Phase 1  Phase 2  Phase 3                                                |
   |  GUARDS   CONTEXT  SIDE EFFECTS                                           |
   |     |      |      |                                                       |
-  |     |      |      +---> Analytics DB  (~/.hookwise/dolt/)                 |
+  |     |      |      +---> Analytics DB  (~/.hookwise/analytics.db)                 |
   |     |      |      +---> Coaching State (JSON in ~/.hookwise/)             |
   |     |      |      +---> Transcript Backup (JSON files)                    |
   |     |      |      +---> Cost Accumulation                                 |
@@ -224,7 +224,7 @@ This document defines what hookwise controls and what it does not. It exists for
 |-----------|--------------|----------------|----------------------|
 | `hookwise.yaml` | Creates, validates, migrates, writes back | -- | -- |
 | `.claude/settings.json` | Writes `hooks` entries and `statusLine.instructions` | Reads to detect existing config | Schema definition (Anthropic owns) |
-| `~/.hookwise/dolt/` | Creates, writes sessions/events/authorship | Queries for stats/TUI display | -- |
+| `~/.hookwise/analytics.db` | Creates, writes sessions/events/authorship (SQLite WAL) | Queries for stats/TUI display | -- |
 | `~/.hookwise/status-cache.json` | Creates, writes (cache bus atomic merges) | Reads for status line rendering | -- |
 | `~/.hookwise/daemon.pid` | Creates, writes, removes (lifecycle management) | Reads for liveness checks | -- |
 | `~/.hookwise/tui.pid` | Creates, writes, removes (lifecycle management) | Reads for duplicate prevention | -- |

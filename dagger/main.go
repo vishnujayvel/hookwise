@@ -24,8 +24,10 @@ type Hookwise struct{}
 
 // ----- private container helpers -----
 
-// goContainer returns a Go build container with CGO enabled (required for Dolt's gozstd),
-// module + build caches mounted, and dependencies pre-downloaded.
+// goContainer returns a Go build container with CGO enabled, module + build
+// caches mounted, and dependencies pre-downloaded. CGO stays ON here because
+// `go test -race` requires it; the analytics backend (modernc.org/sqlite) is
+// itself pure-Go. Build/Publish override CGO_ENABLED=0 for a static binary.
 func (m *Hookwise) goContainer(src *dagger.Directory) *dagger.Container {
 	goModCache := dag.CacheVolume("go-mod")
 	goBuildCache := dag.CacheVolume("go-build")
@@ -33,6 +35,9 @@ func (m *Hookwise) goContainer(src *dagger.Directory) *dagger.Container {
 	return dag.Container().
 		From("golang:1.25-bookworm").
 		WithEnvVariable("CGO_ENABLED", "1").
+		// retro-009: cap test memory in CI to match the Taskfile guard (the
+		// `go test` execs also pass -p 2).
+		WithEnvVariable("GOMEMLIMIT", "4GiB").
 		WithMountedCache("/go/pkg/mod", goModCache).
 		WithMountedCache("/root/.cache/go-build", goBuildCache).
 		WithMountedDirectory("/src", src).
@@ -103,7 +108,7 @@ func (m *Hookwise) Test(ctx context.Context, src *dagger.Directory) error {
 	g.Go(func() error {
 		_, err := m.goContainer(src).
 			WithExec([]string{
-				"go", "test", "-race",
+				"go", "test", "-race", "-p", "2",
 				"./internal/core/...", "./internal/feeds/...", "./internal/bridge/...",
 				"./internal/analytics/...", "./internal/notifications/...",
 				"./internal/migration/...", "./pkg/...",
@@ -115,7 +120,7 @@ func (m *Hookwise) Test(ctx context.Context, src *dagger.Directory) error {
 	// Go contract tests
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "./internal/contract/..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "./internal/contract/..."}).
 			Sync(ctx)
 		return err
 	})
@@ -123,7 +128,7 @@ func (m *Hookwise) Test(ctx context.Context, src *dagger.Directory) error {
 	// Go architecture lint
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "./internal/arch/..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "./internal/arch/..."}).
 			Sync(ctx)
 		return err
 	})
@@ -131,7 +136,7 @@ func (m *Hookwise) Test(ctx context.Context, src *dagger.Directory) error {
 	// Go property-based tests
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "./internal/proptest/..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "./internal/proptest/..."}).
 			Sync(ctx)
 		return err
 	})
@@ -175,7 +180,7 @@ func (m *Hookwise) Validate(ctx context.Context, src *dagger.Directory) error {
 	// Go integration + chaos tests
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "-tags", "integration", "./..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "-tags", "integration", "./..."}).
 			Sync(ctx)
 		return err
 	})
@@ -183,7 +188,7 @@ func (m *Hookwise) Validate(ctx context.Context, src *dagger.Directory) error {
 	// Go mutation tests
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "test", "-race", "-tags", "mutation", "./internal/mutation/..."}).
+			WithExec([]string{"go", "test", "-race", "-p", "2", "-tags", "mutation", "./internal/mutation/..."}).
 			Sync(ctx)
 		return err
 	})
@@ -223,8 +228,11 @@ func (m *Hookwise) Build(
 	)
 
 	return m.goContainer(src).
+		// Override the container default: a release binary is CGO-free + static.
+		WithEnvVariable("CGO_ENABLED", "0").
 		WithExec([]string{
 			"go", "build",
+			"-trimpath",
 			"-ldflags", ldflags,
 			"-o", "/out/hookwise",
 			"./cmd/hookwise/",
@@ -273,8 +281,11 @@ func (m *Hookwise) Publish(
 	)
 
 	return m.goContainer(src).
+		// Release binary: CGO-free + static + stripped (< 20 MB post-Dolt).
+		WithEnvVariable("CGO_ENABLED", "0").
 		WithExec([]string{
 			"go", "build",
+			"-trimpath",
 			"-ldflags", ldflags,
 			"-o", "/out/hookwise",
 			"./cmd/hookwise/",

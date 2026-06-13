@@ -33,11 +33,11 @@ import (
 // Helpers
 // =========================================================================
 
-// openTestDolt creates a fresh Dolt database in a temp directory.
-func openTestDolt(t *testing.T) (*analytics.DB, func()) {
+// openTestDB creates a fresh SQLite analytics database in a temp directory.
+func openTestDB(t *testing.T) (*analytics.DB, func()) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := analytics.Open(dir)
+	db, err := analytics.Open(filepath.Join(dir, "analytics.db"))
 	require.NoError(t, err)
 	return db, func() {
 		_ = db.Close()
@@ -169,24 +169,24 @@ func writeFeedFile(t *testing.T, dir, name string, data interface{}) {
 }
 
 // =========================================================================
-// Test 1: Full dispatch flow — guards + config + Dolt writes
+// Test 1: Full dispatch flow — guards + config + analytics writes
 // =========================================================================
 //
 // This test exercises the full dispatch pipeline:
 // - Load a config with guards
 // - Dispatch a PreToolUse event
 // - Verify guards evaluate correctly
-// - Write analytics data to Dolt
-// - Verify Dolt tables have the expected rows
-// - Commit and verify the Dolt commit hash
+// - Write analytics data to the SQLite analytics DB
+// - Verify analytics tables have the expected rows
+// - Commit (no-op under SQLite) and verify durability
 
-func TestIntegration_FullDispatchWithDoltWrites(t *testing.T) {
+func TestIntegration_FullDispatchWithAnalyticsWrites(t *testing.T) {
 	// Isolate state directory
 	tmpDir := t.TempDir()
 	t.Setenv("HOOKWISE_STATE_DIR", tmpDir)
 
-	// Open a fresh Dolt DB
-	doltDB, cleanup := openTestDolt(t)
+	// Open a fresh analytics DB
+	db, cleanup := openTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -198,7 +198,7 @@ func TestIntegration_FullDispatchWithDoltWrites(t *testing.T) {
 		{Match: "Write", Action: "warn", Reason: "Write operations are warned"},
 		{Match: "mcp__*", Action: "confirm", Reason: "MCP tools require confirmation"},
 	}
-	config.Analytics.Enabled = false // we control Dolt writes manually
+	config.Analytics.Enabled = false // we control analytics writes manually
 
 	// Dispatch 1: blocked tool
 	payload := core.HookPayload{
@@ -233,8 +233,8 @@ func TestIntegration_FullDispatchWithDoltWrites(t *testing.T) {
 	require.NotNil(t, result.Stdout)
 	assert.Contains(t, *result.Stdout, "ask", "confirm should produce ask decision")
 
-	// --- Phase B: Analytics writes to Dolt ---
-	a := analytics.NewAnalytics(doltDB)
+	// --- Phase B: Analytics writes ---
+	a := analytics.NewAnalytics(db)
 	sessionID := "integ-session-001"
 	startTime := time.Date(2025, 12, 1, 10, 0, 0, 0, time.UTC)
 
@@ -263,28 +263,28 @@ func TestIntegration_FullDispatchWithDoltWrites(t *testing.T) {
 		EstimatedCostUSD:   0.75,
 	}))
 
-	// --- Phase C: Verify Dolt tables ---
+	// --- Phase C: Verify analytics tables ---
 	var sessionCount int
-	err := doltDB.QueryRow(ctx, "SELECT COUNT(*) FROM sessions").Scan(&sessionCount)
+	err := db.QueryRow(ctx, "SELECT COUNT(*) FROM sessions").Scan(&sessionCount)
 	require.NoError(t, err)
 	assert.Equal(t, 1, sessionCount, "should have exactly 1 session")
 
 	var eventCount int
-	err = doltDB.QueryRow(ctx, "SELECT COUNT(*) FROM events WHERE session_id = ?", sessionID).Scan(&eventCount)
+	err = db.QueryRow(ctx, "SELECT COUNT(*) FROM events WHERE session_id = ?", sessionID).Scan(&eventCount)
 	require.NoError(t, err)
 	assert.Equal(t, 5, eventCount, "should have 5 events")
 
-	// --- Phase D: Dolt commit ---
-	hash, err := doltDB.CommitDispatch(ctx, "PostToolUse", sessionID)
-	require.NoError(t, err)
-	assert.NotEmpty(t, hash, "Dolt commit should produce a non-empty hash")
+	// --- Phase D: Commit is a documented no-op under SQLite ---
+	// Writes are durable immediately (WAL); CommitDispatch returns no error
+	// and an empty hash. It is retained only for API compatibility.
+	_, err = db.CommitDispatch(ctx, "PostToolUse", sessionID)
+	require.NoError(t, err, "no-op CommitDispatch should never error")
 
-	// --- Phase E: Verify via Dolt log ---
-	logs, err := doltDB.Log(ctx, 2)
+	// --- Phase E: Verify data remains durable after the no-op commit ---
+	var sessionCountAfter int
+	err = db.QueryRow(ctx, "SELECT COUNT(*) FROM sessions").Scan(&sessionCountAfter)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(logs), 1)
-	assert.Contains(t, logs[0].Message, "dispatch:PostToolUse")
-	assert.Contains(t, logs[0].Message, sessionID)
+	assert.Equal(t, 1, sessionCountAfter, "session should remain durable")
 }
 
 // =========================================================================
@@ -508,11 +508,11 @@ func TestIntegration_UpgradeFromMockTypeScript_DryRun(t *testing.T) {
 }
 
 // =========================================================================
-// Test 5: Upgrade from mock TypeScript data (live migration with Dolt)
+// Test 5: Upgrade from mock TypeScript data (live migration)
 // =========================================================================
 //
-// This test runs a full live migration from mock TypeScript data into Dolt,
-// then verifies the data was written correctly and a Dolt commit was made.
+// This test runs a full live migration from mock TypeScript data into the
+// SQLite analytics DB, then verifies the data was written correctly.
 
 func TestIntegration_UpgradeFromMockTypeScript_Live(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -540,13 +540,13 @@ func TestIntegration_UpgradeFromMockTypeScript_Live(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "hookwise.yaml"),
 		[]byte("version: 1\nguards: []\n"), 0o644))
 
-	doltDir := filepath.Join(tmpDir, "dolt-data")
+	dataDir := filepath.Join(tmpDir, "data")
 
 	var buf bytes.Buffer
 	result := migration.Run(migration.MigrationOpts{
 		HomeDir:     tmpDir,
 		DryRun:      false,
-		DoltDataDir: doltDir,
+		DoltDataDir: dataDir,
 		ProjectDir:  tmpDir,
 		Writer:      &buf,
 	})
@@ -559,10 +559,9 @@ func TestIntegration_UpgradeFromMockTypeScript_Live(t *testing.T) {
 	assert.True(t, result.CostStateImported)
 	assert.True(t, result.ConfigValid)
 	assert.Empty(t, result.Errors)
-	assert.NotEmpty(t, result.DoltCommitHash, "live migration should produce a Dolt commit")
 
 	output := buf.String()
-	assert.Contains(t, output, "Dolt commit:")
+	assert.Contains(t, output, "Data written to analytics database.")
 	assert.Contains(t, output, "hookwise upgrade")
 }
 
@@ -672,13 +671,13 @@ func TestIntegration_GuardsAndInlineHandlers(t *testing.T) {
 }
 
 // =========================================================================
-// Test 8: Daemon ARCH-3 compliance — writes JSON cache only, NOT Dolt
+// Test 8: Daemon ARCH-3 compliance — writes JSON cache only, NOT the analytics DB
 // =========================================================================
 //
 // Validates that the daemon writes JSON cache files but does NOT write to
-// any Dolt database. This is the fundamental ARCH-3 constraint.
+// the SQLite analytics DB. This is the fundamental ARCH-3 constraint.
 
-func TestIntegration_DaemonWritesCacheNotDolt(t *testing.T) {
+func TestIntegration_DaemonWritesCacheNotAnalyticsDB(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOOKWISE_STATE_DIR", tmpDir)
 
@@ -714,10 +713,22 @@ func TestIntegration_DaemonWritesCacheNotDolt(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &parsed))
 	assert.NotEmpty(t, parsed, "cache file should contain data")
 
-	// No Dolt database should have been created by the daemon
-	doltDir := filepath.Join(tmpDir, "dolt")
-	_, err = os.Stat(doltDir)
-	assert.True(t, os.IsNotExist(err), "ARCH-3: daemon should not create a Dolt database")
+	// ARCH-3: the daemon must not create/write the analytics DB. The primary
+	// guard is the compile-time arch lint (TestArch_FeedsDoNotImportAnalytics);
+	// this is a runtime backstop. The old check looked for a "dolt" dir, which
+	// became vacuous after the SQLite migration. Walk the test-scoped state dir
+	// (HOOKWISE_STATE_DIR=tmpDir) and assert no analytics.db was written there.
+	var foundAnalyticsDB string
+	_ = filepath.WalkDir(tmpDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if !d.IsDir() && d.Name() == "analytics.db" {
+			foundAnalyticsDB = path
+		}
+		return nil
+	})
+	assert.Empty(t, foundAnalyticsDB, "ARCH-3: daemon should not create the analytics DB")
 }
 
 // =========================================================================
@@ -728,11 +739,11 @@ func TestIntegration_DaemonWritesCacheNotDolt(t *testing.T) {
 // record authorship, end session, query daily summary and tool breakdown.
 
 func TestIntegration_AnalyticsRoundtrip(t *testing.T) {
-	doltDB, cleanup := openTestDolt(t)
+	db, cleanup := openTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	a := analytics.NewAnalytics(doltDB)
+	a := analytics.NewAnalytics(db)
 	sessionID := "analytics-roundtrip-001"
 	baseTime := time.Date(2025, 12, 15, 10, 0, 0, 0, time.UTC)
 
@@ -790,14 +801,14 @@ func TestIntegration_AnalyticsRoundtrip(t *testing.T) {
 	assert.Equal(t, "Write", breakdown[0].ToolName)
 	assert.Equal(t, 3, breakdown[0].Count)
 
-	// Commit
-	hash, err := doltDB.CommitDispatch(ctx, "PostToolUse", sessionID)
-	require.NoError(t, err)
-	assert.NotEmpty(t, hash)
+	// CommitDispatch is a documented no-op under SQLite (writes are durable
+	// immediately via WAL); it returns an empty hash and never errors.
+	_, err = db.CommitDispatch(ctx, "PostToolUse", sessionID)
+	require.NoError(t, err, "no-op CommitDispatch should never error")
 
 	// Verify authorship classification
 	var classification string
-	err = doltDB.QueryRow(ctx,
+	err = db.QueryRow(ctx,
 		"SELECT classification FROM authorship_ledger WHERE session_id = ?", sessionID,
 	).Scan(&classification)
 	require.NoError(t, err)

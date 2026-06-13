@@ -14,7 +14,7 @@ This guide walks you through migrating from the original Python hookwise (v0.1.0
 | TUI | Textual | Python Textual (unchanged) |
 | Recipes | 7 built-in | 12 built-in |
 | Event support | 7 events | All 13 Claude Code events |
-| Analytics | SQLite | Dolt (version-controlled SQL) |
+| Analytics | SQLite (TypeScript-era) | SQLite (modernc.org/sqlite, WAL mode, ~19 MB binary) |
 | Distribution | pip/PyPI | Go binary via GitHub Releases |
 
 ## What Stayed the Same

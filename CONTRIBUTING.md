@@ -20,7 +20,7 @@ Requires: Go 1.25+, Python 3.11+ (for TUI), Docker (for Dagger pipeline).
 cmd/hookwise/     # CLI entry point (Cobra commands)
 internal/
   core/           # Dispatch engine, guards, config, types
-  analytics/      # Dolt-based analytics
+  analytics/      # SQLite-backed analytics (modernc.org/sqlite, WAL mode)
   feeds/          # Feed producers and daemon
   bridge/         # Go→JSON→Python TUI bridge
   contract/       # Contract parity tests (33 JSON fixtures)

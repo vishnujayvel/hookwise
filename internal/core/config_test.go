@@ -445,6 +445,27 @@ func TestValidateConfig_NegativeVersion(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_NegativeSnapshotSettings(t *testing.T) {
+	for _, key := range []string{"snapshot_interval_minutes", "snapshot_retention"} {
+		raw := map[string]interface{}{
+			"analytics": map[string]interface{}{key: -1},
+		}
+		if ValidateConfig(raw).Valid {
+			t.Errorf("expected invalid config for negative %s", key)
+		}
+	}
+	// 0 is valid: interval 0 = use default, retention 0 = keep all.
+	raw := map[string]interface{}{
+		"analytics": map[string]interface{}{
+			"snapshot_interval_minutes": 0,
+			"snapshot_retention":        0,
+		},
+	}
+	if !ValidateConfig(raw).Valid {
+		t.Error("expected zero snapshot settings to be valid (sentinel values)")
+	}
+}
+
 func TestValidateConfig_InvalidGuards(t *testing.T) {
 	raw := map[string]interface{}{
 		"guards": "not-an-array",

@@ -39,8 +39,8 @@ var knownSections = map[string]bool{
 func GetDefaultConfig() HooksConfig {
 	home := HomeDir()
 	return HooksConfig{
-		Version:  1,
-		Guards:   []GuardRuleConfig{},
+		Version: 1,
+		Guards:  []GuardRuleConfig{},
 		Coaching: CoachingConfig{
 			Metacognition: MetacognitionConfig{
 				Enabled:         false,
@@ -60,9 +60,14 @@ func GetDefaultConfig() HooksConfig {
 				Tone:      "gentle",
 			},
 		},
-		Analytics: AnalyticsConfig{Enabled: true},
-		Greeting:  GreetingConfig{Enabled: false},
-		Sounds:    SoundsConfig{Enabled: false},
+		Analytics: AnalyticsConfig{
+			Enabled:                 true,
+			SnapshotEnabled:         true,
+			SnapshotIntervalMinutes: DefaultSnapshotIntervalMinutes,
+			SnapshotRetention:       DefaultSnapshotRetention,
+		},
+		Greeting: GreetingConfig{Enabled: false},
+		Sounds:   SoundsConfig{Enabled: false},
 		StatusLine: StatusLineConfig{
 			Enabled:   false,
 			Segments:  []SegmentConfig{},
@@ -582,6 +587,26 @@ func ValidateConfig(raw map[string]interface{}) ValidationResult {
 	if f, ok := raw["feeds"]; ok {
 		if feeds, isMap := f.(map[string]interface{}); isMap {
 			validateFeeds(feeds, &errors)
+		}
+	}
+
+	// Validate analytics snapshot settings
+	if a, ok := raw["analytics"]; ok {
+		if analytics, isMap := a.(map[string]interface{}); isMap {
+			if iv, ok := analytics["snapshot_interval_minutes"]; ok && !isPositiveOrZeroNumber(iv) {
+				errors = append(errors, ValidationError{
+					Path:       "analytics.snapshot_interval_minutes",
+					Message:    "snapshot_interval_minutes must be a non-negative number",
+					Suggestion: "Set snapshot_interval_minutes: 60 (hourly); 0 uses the default",
+				})
+			}
+			if ret, ok := analytics["snapshot_retention"]; ok && !isPositiveOrZeroNumber(ret) {
+				errors = append(errors, ValidationError{
+					Path:       "analytics.snapshot_retention",
+					Message:    "snapshot_retention must be a non-negative number",
+					Suggestion: "Set snapshot_retention: 24; 0 keeps all snapshots",
+				})
+			}
 		}
 	}
 

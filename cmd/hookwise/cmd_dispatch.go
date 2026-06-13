@@ -120,7 +120,7 @@ func newDispatchCmd() *cobra.Command {
 	return cmd
 }
 
-// recordAnalytics writes session/event data to Dolt in a background goroutine.
+// recordAnalytics writes session/event data to the SQLite analytics DB in a background goroutine.
 // Fail-open: any error is logged but never surfaces to the user (ARCH-1).
 func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string) {
 	defer func() {
@@ -165,7 +165,8 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 		}
 	}
 
-	// Commit to Dolt so data is visible across connections (ARCH-2).
+	// CommitDispatch is a no-op under SQLite: WAL makes writes immediately
+	// visible across connections, so no explicit commit is needed (ARCH-2).
 	if _, err := db.CommitDispatch(ctx, eventType, payload.SessionID); err != nil {
 		core.Logger().Error("analytics: commit", "error", err)
 	}

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,13 +20,13 @@ import (
 // Helpers
 // ---------------------------------------------------------------------------
 
-// testDoltDB opens a fresh Dolt DB in a temp directory for testing.
-func testDoltDB(t *testing.T) (*analytics.DB, func()) {
+// testDB opens a fresh SQLite analytics DB in a temp directory for testing.
+func testDB(t *testing.T) (*analytics.DB, func()) {
 	t.Helper()
-	tmpDir, err := os.MkdirTemp("", "hookwise-migration-dolt-*")
+	tmpDir, err := os.MkdirTemp("", "hookwise-migration-*")
 	require.NoError(t, err)
 
-	db, err := analytics.Open(tmpDir)
+	db, err := analytics.Open(filepath.Join(tmpDir, "analytics.db"))
 	require.NoError(t, err)
 
 	cleanup := func() {
@@ -228,7 +227,7 @@ func TestDetectTypeScript_OnlySQLite(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMigrateSQLite_ImportsSessions(t *testing.T) {
-	doltDB, cleanup := testDoltDB(t)
+	db, cleanup := testDB(t)
 	defer cleanup()
 
 	tmpDir := t.TempDir()
@@ -239,16 +238,16 @@ func TestMigrateSQLite_ImportsSessions(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	sessions, events, authorship, errs := MigrateSQLite(ctx, doltDB, sqlitePath, false, &buf)
+	sessions, events, authorship, errs := MigrateSQLite(ctx, db, sqlitePath, false, &buf)
 
 	assert.Empty(t, errs)
 	assert.Equal(t, 3, sessions)
 	assert.Equal(t, 0, events)
 	assert.Equal(t, 0, authorship)
 
-	// Verify data in Dolt.
+	// Verify data in the analytics DB.
 	var count int
-	err := doltDB.QueryRow(ctx, "SELECT COUNT(*) FROM sessions").Scan(&count)
+	err := db.QueryRow(ctx, "SELECT COUNT(*) FROM sessions").Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 3, count)
 
@@ -260,7 +259,7 @@ func TestMigrateSQLite_ImportsSessions(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMigrateSQLite_ImportsEvents(t *testing.T) {
-	doltDB, cleanup := testDoltDB(t)
+	db, cleanup := testDB(t)
 	defer cleanup()
 
 	tmpDir := t.TempDir()
@@ -271,15 +270,15 @@ func TestMigrateSQLite_ImportsEvents(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	sessions, events, _, errs := MigrateSQLite(ctx, doltDB, sqlitePath, false, &buf)
+	sessions, events, _, errs := MigrateSQLite(ctx, db, sqlitePath, false, &buf)
 
 	assert.Empty(t, errs)
 	assert.Equal(t, 2, sessions)
 	assert.Equal(t, 5, events)
 
-	// Verify event count in Dolt.
+	// Verify event count in the analytics DB.
 	var count int
-	err := doltDB.QueryRow(ctx, "SELECT COUNT(*) FROM events").Scan(&count)
+	err := db.QueryRow(ctx, "SELECT COUNT(*) FROM events").Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 5, count)
 }
@@ -289,7 +288,7 @@ func TestMigrateSQLite_ImportsEvents(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMigrateSQLite_ImportsAuthorship(t *testing.T) {
-	doltDB, cleanup := testDoltDB(t)
+	db, cleanup := testDB(t)
 	defer cleanup()
 
 	tmpDir := t.TempDir()
@@ -300,14 +299,14 @@ func TestMigrateSQLite_ImportsAuthorship(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	_, _, authorship, errs := MigrateSQLite(ctx, doltDB, sqlitePath, false, &buf)
+	_, _, authorship, errs := MigrateSQLite(ctx, db, sqlitePath, false, &buf)
 
 	assert.Empty(t, errs)
 	assert.Equal(t, 4, authorship)
 
-	// Verify in Dolt.
+	// Verify in the analytics DB.
 	var count int
-	err := doltDB.QueryRow(ctx, "SELECT COUNT(*) FROM authorship_ledger").Scan(&count)
+	err := db.QueryRow(ctx, "SELECT COUNT(*) FROM authorship_ledger").Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 4, count)
 }
@@ -325,7 +324,7 @@ func TestMigrateSQLite_DryRunDoesNotWrite(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	// Pass nil for Dolt DB -- dry-run should not attempt writes.
+	// Pass nil for analytics DB -- dry-run should not attempt writes.
 	sessions, events, authorship, errs := MigrateSQLite(ctx, nil, sqlitePath, true, &buf)
 
 	assert.Empty(t, errs)
@@ -345,7 +344,7 @@ func TestMigrateSQLite_DryRunDoesNotWrite(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMigrateCostState_ImportsData(t *testing.T) {
-	doltDB, cleanup := testDoltDB(t)
+	db, cleanup := testDB(t)
 	defer cleanup()
 
 	tmpDir := t.TempDir()
@@ -353,13 +352,13 @@ func TestMigrateCostState_ImportsData(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	imported, errs := MigrateCostState(ctx, doltDB, costPath, false, &buf)
+	imported, errs := MigrateCostState(ctx, db, costPath, false, &buf)
 
 	assert.Empty(t, errs)
 	assert.True(t, imported)
 
-	// Verify in Dolt.
-	state, err := doltDB.ReadCostState(ctx)
+	// Verify in the analytics DB.
+	state, err := db.ReadCostState(ctx)
 	require.NoError(t, err)
 	assert.InDelta(t, 1.25, state.DailyCosts["2025-03-05"], 0.01)
 	assert.InDelta(t, 3.50, state.DailyCosts["2025-03-06"], 0.01)
@@ -520,7 +519,7 @@ func TestRun_DryRunFull(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 16: Run live migration with Dolt commit
+// Test 16: Run live migration
 // ---------------------------------------------------------------------------
 
 func TestRun_LiveMigration(t *testing.T) {
@@ -543,13 +542,13 @@ func TestRun_LiveMigration(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "hookwise.yaml"),
 		[]byte("version: 1\nguards: []\n"), 0o644))
 
-	doltDir := filepath.Join(tmpDir, "dolt-data")
+	dataDir := filepath.Join(tmpDir, "data")
 
 	var buf bytes.Buffer
 	result := Run(MigrationOpts{
 		HomeDir:     tmpDir,
 		DryRun:      false,
-		DoltDataDir: doltDir,
+		DoltDataDir: dataDir,
 		ProjectDir:  tmpDir,
 		Writer:      &buf,
 	})
@@ -562,10 +561,9 @@ func TestRun_LiveMigration(t *testing.T) {
 	assert.True(t, result.CostStateImported)
 	assert.True(t, result.ConfigValid)
 	assert.Empty(t, result.Errors)
-	assert.NotEmpty(t, result.DoltCommitHash)
 
 	output := buf.String()
-	assert.Contains(t, output, "Dolt commit:")
+	assert.Contains(t, output, "Data written to analytics database.")
 	assert.Contains(t, output, "hookwise upgrade")
 }
 
@@ -574,7 +572,7 @@ func TestRun_LiveMigration(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMigrateSQLite_OriginalUntouched(t *testing.T) {
-	doltDB, cleanup := testDoltDB(t)
+	db, cleanup := testDB(t)
 	defer cleanup()
 
 	tmpDir := t.TempDir()
@@ -591,7 +589,7 @@ func TestMigrateSQLite_OriginalUntouched(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	_, _, _, errs := MigrateSQLite(ctx, doltDB, sqlitePath, false, &buf)
+	_, _, _, errs := MigrateSQLite(ctx, db, sqlitePath, false, &buf)
 	assert.Empty(t, errs)
 
 	// File should not have been modified.
@@ -606,7 +604,7 @@ func TestMigrateSQLite_OriginalUntouched(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMigrateCostState_OriginalUntouched(t *testing.T) {
-	doltDB, cleanup := testDoltDB(t)
+	db, cleanup := testDB(t)
 	defer cleanup()
 
 	tmpDir := t.TempDir()
@@ -618,7 +616,7 @@ func TestMigrateCostState_OriginalUntouched(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	_, errs := MigrateCostState(ctx, doltDB, costPath, false, &buf)
+	_, errs := MigrateCostState(ctx, db, costPath, false, &buf)
 	assert.Empty(t, errs)
 
 	// File should be identical.
@@ -680,7 +678,7 @@ func TestParseTimeFlexible(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMigrateCostState_NilMapsInJSON(t *testing.T) {
-	doltDB, cleanup := testDoltDB(t)
+	db, cleanup := testDB(t)
 	defer cleanup()
 
 	tmpDir := t.TempDir()
@@ -692,24 +690,24 @@ func TestMigrateCostState_NilMapsInJSON(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	imported, errs := MigrateCostState(ctx, doltDB, jsonPath, false, &buf)
+	imported, errs := MigrateCostState(ctx, db, jsonPath, false, &buf)
 
 	assert.Empty(t, errs)
 	assert.True(t, imported)
 
 	// Verify maps are initialized to empty (not nil).
-	state, err := doltDB.ReadCostState(ctx)
+	state, err := db.ReadCostState(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, state.DailyCosts)
 	assert.NotNil(t, state.SessionCosts)
 }
 
 // ---------------------------------------------------------------------------
-// Test 22: Validate row counts match between SQLite and Dolt
+// Test 22: Validate row counts match between SQLite source and analytics DB
 // ---------------------------------------------------------------------------
 
 func TestMigrateSQLite_RowCountsMatch(t *testing.T) {
-	doltDB, cleanup := testDoltDB(t)
+	db, cleanup := testDB(t)
 	defer cleanup()
 
 	tmpDir := t.TempDir()
@@ -720,7 +718,7 @@ func TestMigrateSQLite_RowCountsMatch(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	sessions, events, authorship, errs := MigrateSQLite(ctx, doltDB, sqlitePath, false, &buf)
+	sessions, events, authorship, errs := MigrateSQLite(ctx, db, sqlitePath, false, &buf)
 	assert.Empty(t, errs)
 
 	// Verify counts match what was seeded.
@@ -728,15 +726,15 @@ func TestMigrateSQLite_RowCountsMatch(t *testing.T) {
 	assert.Equal(t, 10, events)
 	assert.Equal(t, 8, authorship)
 
-	// Cross-check with Dolt.
-	var doltSessions, doltEvents, doltAuthorship int
-	require.NoError(t, doltDB.QueryRow(ctx, "SELECT COUNT(*) FROM sessions").Scan(&doltSessions))
-	require.NoError(t, doltDB.QueryRow(ctx, "SELECT COUNT(*) FROM events").Scan(&doltEvents))
-	require.NoError(t, doltDB.QueryRow(ctx, "SELECT COUNT(*) FROM authorship_ledger").Scan(&doltAuthorship))
+	// Cross-check with the analytics DB.
+	var gotSessions, gotEvents, gotAuthorship int
+	require.NoError(t, db.QueryRow(ctx, "SELECT COUNT(*) FROM sessions").Scan(&gotSessions))
+	require.NoError(t, db.QueryRow(ctx, "SELECT COUNT(*) FROM events").Scan(&gotEvents))
+	require.NoError(t, db.QueryRow(ctx, "SELECT COUNT(*) FROM authorship_ledger").Scan(&gotAuthorship))
 
-	assert.Equal(t, sessions, doltSessions, "session row counts should match")
-	assert.Equal(t, events, doltEvents, "event row counts should match")
-	assert.Equal(t, authorship, doltAuthorship, "authorship row counts should match")
+	assert.Equal(t, sessions, gotSessions, "session row counts should match")
+	assert.Equal(t, events, gotEvents, "event row counts should match")
+	assert.Equal(t, authorship, gotAuthorship, "authorship row counts should match")
 }
 
 // ---------------------------------------------------------------------------
@@ -744,7 +742,7 @@ func TestMigrateSQLite_RowCountsMatch(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMigrateSQLite_SessionDataFidelity(t *testing.T) {
-	doltDB, cleanup := testDoltDB(t)
+	db, cleanup := testDB(t)
 	defer cleanup()
 
 	tmpDir := t.TempDir()
@@ -764,16 +762,16 @@ func TestMigrateSQLite_SessionDataFidelity(t *testing.T) {
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	_, _, _, errs := MigrateSQLite(ctx, doltDB, sqlitePath, false, &buf)
+	_, _, _, errs := MigrateSQLite(ctx, db, sqlitePath, false, &buf)
 	assert.Empty(t, errs)
 
-	// Read back from Dolt and verify field values.
+	// Read back from the analytics DB and verify field values.
 	var (
 		id, startedAt, endedAt                          string
 		toolCalls, fileEdits, aiLines, humanLines int
 		cost                                            float64
 	)
-	err = doltDB.QueryRow(ctx,
+	err = db.QueryRow(ctx,
 		`SELECT id, started_at, ended_at, total_tool_calls, file_edits_count,
 		        ai_authored_lines, human_verified_lines, estimated_cost_usd
 		 FROM sessions WHERE id = ?`, "fidelity-sess").
@@ -825,9 +823,9 @@ func TestRun_OutputCoversAllPhases(t *testing.T) {
 	assert.Contains(t, output, "cost state")
 	// Should mention config validation.
 	assert.Contains(t, output, "config")
-	// Should mention Dolt commit intention.
-	assert.True(t, strings.Contains(output, "commit") || strings.Contains(output, "Commit"),
-		"output should mention Dolt commit")
+	// Should mention writing imported data to the analytics database.
+	assert.Contains(t, output, "analytics database",
+		"output should mention writing data to the analytics database")
 	// Should have summary.
 	assert.Contains(t, output, "Migration summary")
 }

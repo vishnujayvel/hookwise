@@ -20,14 +20,14 @@ func newNotificationsCmd() *cobra.Command {
 		Use:   "notifications",
 		Short: "Display notification history",
 		Long: `Shows recent notifications from budget, guard effectiveness, and coaching
-producers. Notifications are stored in the Dolt analytics database and
+producers. Notifications are stored in the SQLite analytics database and
 surfaced via the status line or this command.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runNotifications(cmd, dataDir, limit)
 		},
 	}
 
-	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Dolt data directory (defaults to ~/.hookwise/dolt)")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to ~/.hookwise/analytics.db)")
 	cmd.Flags().IntVar(&limit, "limit", 20, "Maximum number of notifications to show")
 
 	return cmd
@@ -36,7 +36,7 @@ surfaced via the status line or this command.`,
 func runNotifications(cmd *cobra.Command, dataDir string, limit int) error {
 	db, err := analytics.Open(dataDir)
 	if err != nil {
-		return fmt.Errorf("failed to open Dolt DB: %w", err)
+		return fmt.Errorf("failed to open analytics DB: %w", err)
 	}
 	defer db.Close()
 

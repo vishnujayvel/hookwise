@@ -89,7 +89,7 @@ errors=0
 test_proc_count=$(count_test_procs)
 if [ "$test_proc_count" -gt "$MAX_TEST_PROCS" ]; then
     echo -e "${RED}BLOCKED (retro-009): $test_proc_count hookwise.test process(es) already running${NC}"
-    echo "Each test binary is ~149 MB (Dolt embedded). With -race, ~300 MB."
+    echo "Each test binary may be ~12 MB (SQLite). With -race, ~19 MB. Many parallel binaries still exhaust memory."
     echo "Run: pkill -f hookwise.test"
     echo "See: .claude/specs/retro/retro-009-system-crash-memory-exhaustion.md"
     errors=$((errors + 1))

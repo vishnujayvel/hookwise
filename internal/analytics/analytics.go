@@ -61,7 +61,7 @@ type ToolBreakdownEntry struct {
 }
 
 // ---------------------------------------------------------------------------
-// Analytics – high-level operations on the Dolt DB
+// Analytics – high-level operations on the SQLite analytics DB
 // ---------------------------------------------------------------------------
 
 // Analytics wraps *DB and provides high-level session, event, authorship,

@@ -19,8 +19,8 @@ func newUpgradeCmd() *cobra.Command {
 		Use:   "upgrade",
 		Short: "Migrate data from TypeScript hookwise installation",
 		Long: `Detects an existing TypeScript hookwise installation (~/.hookwise/analytics.db
-and ~/.hookwise/state/cost-state.json), imports the data into the Go Dolt
-database, and validates config parity.
+and ~/.hookwise/state/cost-state.json), imports the data into the Go SQLite
+analytics database, and validates config parity.
 
 Use --dry-run to preview what would be migrated without making changes.
 Original files are never modified (non-destructive).`,
@@ -48,7 +48,7 @@ Original files are never modified (non-destructive).`,
 	}
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview migration without making changes")
-	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Dolt data directory (defaults to ~/.hookwise/dolt)")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to ~/.hookwise/analytics.db)")
 	cmd.Flags().StringVar(&projectDir, "project-dir", "", "Project directory for config validation (defaults to cwd)")
 
 	return cmd

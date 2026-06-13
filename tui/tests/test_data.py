@@ -3,6 +3,7 @@
 import json
 import os
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -319,9 +320,14 @@ class TestReadInsights:
         facets_dir = tmp_dir / "facets"
         facets_dir.mkdir()
 
+        # Use a recent timestamp so the session stays within staleness_days=30
+        # regardless of when the suite runs (a hardcoded date silently goes stale).
+        recent = (datetime.now(timezone.utc) - timedelta(days=1)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         session = {
             "session_id": "test-1",
-            "start_time": "2026-02-20T10:00:00Z",
+            "start_time": recent,
             "user_message_count": 5,
             "lines_added": 100,
             "duration_minutes": 30,

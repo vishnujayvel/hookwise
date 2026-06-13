@@ -30,7 +30,7 @@ func TestChaos_DispatchFailOpen_AnalyticsEnabled(t *testing.T) {
 	t.Setenv("HOOKWISE_STATE_DIR", tmpDir)
 
 	config := core.GetDefaultConfig()
-	// Enable analytics — but we provide no valid Dolt DB path.
+	// Enable analytics — but we provide no valid analytics DB path.
 	// The side effects will attempt analytics and fail gracefully.
 	config.Analytics.Enabled = true
 

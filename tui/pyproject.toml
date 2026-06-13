@@ -26,3 +26,6 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "terminal_e2e: end-to-end tests that spawn a real Claude Code session in a PTY (run with -m terminal_e2e; deselected by default)",
+]
