@@ -777,6 +777,109 @@ func TestStatusLineCalendarSegmentStringEvent(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// 17c. News segment renders from cache
+// ---------------------------------------------------------------------------
+
+func TestStatusLineNewsSegment(t *testing.T) {
+	feedCache := map[string]interface{}{
+		"news": map[string]interface{}{
+			"type":      "news",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"data": map[string]interface{}{
+				"source": "hackernews",
+				"stories": []interface{}{
+					map[string]interface{}{
+						"title": "Go 1.24 Released With New Features",
+						"url":   "https://go.dev/blog/go1.24",
+						"score": float64(500),
+					},
+					map[string]interface{}{
+						"title": "Second Story",
+						"url":   "https://example.com",
+						"score": float64(200),
+					},
+				},
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("news", feedCache, nil)
+	stripped := stripANSI(result)
+
+	if !strings.Contains(stripped, "\U0001f4f0") {
+		t.Errorf("news should show 📰 emoji, got: %s", stripped)
+	}
+	if !strings.Contains(stripped, "Go 1.24 Released With New Features") {
+		t.Errorf("news should show top story title, got: %s", stripped)
+	}
+	// Should show top story, not second
+	if strings.Contains(stripped, "Second Story") {
+		t.Errorf("news should show only top story, got: %s", stripped)
+	}
+}
+
+func TestStatusLineNewsSegmentEmpty(t *testing.T) {
+	// Empty stories list should return "".
+	feedCache := map[string]interface{}{
+		"news": map[string]interface{}{
+			"type":      "news",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"data": map[string]interface{}{
+				"source":  "unavailable",
+				"stories": []interface{}{},
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("news", feedCache, nil)
+	if result != "" {
+		t.Errorf("news with empty stories should return empty, got: %s", stripANSI(result))
+	}
+}
+
+func TestStatusLineNewsSegmentMissingFeed(t *testing.T) {
+	// No news key at all should return "".
+	result := renderBuiltinSegment("news", map[string]interface{}{}, nil)
+	if result != "" {
+		t.Errorf("news with no feed data should return empty, got: %s", stripANSI(result))
+	}
+}
+
+func TestStatusLineNewsSegmentTruncation(t *testing.T) {
+	// Title longer than 40 runes should be truncated with ellipsis.
+	longTitle := "This Is A Very Long Headline That Exceeds Forty Runes And Should Be Truncated By The Renderer"
+	feedCache := map[string]interface{}{
+		"news": map[string]interface{}{
+			"type":      "news",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"data": map[string]interface{}{
+				"source": "hackernews",
+				"stories": []interface{}{
+					map[string]interface{}{
+						"title": longTitle,
+						"url":   "https://example.com",
+						"score": float64(100),
+					},
+				},
+			},
+		},
+	}
+
+	result := renderBuiltinSegment("news", feedCache, nil)
+	stripped := stripANSI(result)
+
+	if !strings.Contains(stripped, "…") {
+		t.Errorf("long title should be truncated with '…', got: %s", stripped)
+	}
+	// Rune-count of the title portion (after emoji+space) must not exceed 40+1 (for "…")
+	// Strip the emoji prefix and check length bound.
+	titlePart := strings.TrimPrefix(stripped, "\U0001f4f0 ")
+	if len([]rune(titlePart)) > 41 {
+		t.Errorf("truncated title should be ≤41 runes (40 + ellipsis), got %d runes: %s", len([]rune(titlePart)), titlePart)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // 18. Placeholder fallback renders "--" not "0"
 // ---------------------------------------------------------------------------
 
