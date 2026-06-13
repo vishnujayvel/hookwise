@@ -1,0 +1,16 @@
+# Optional local pre-commit hooks — the first line of the secret-scanning
+# defense-in-depth chain (pre-commit → GitHub push protection → CI gate).
+#
+# Opt in once per clone:
+#   pipx install pre-commit   # or: brew install pre-commit
+#   pre-commit install
+#
+# Thereafter `git commit` scans staged changes with gitleaks before the commit
+# is created, so a secret never reaches local git history.
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        args: ["--config", ".gitleaks.toml"]
