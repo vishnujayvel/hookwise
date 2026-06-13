@@ -107,6 +107,11 @@ tasks:
       # -race requires cgo; pin it so a shell with CGO_ENABLED=0 (e.g. mirroring
       # the install target) doesn't break the race detector build.
       CGO_ENABLED: "1"
+      # Isolate the run from the developer's real ~/.hookwise: core.Logger() and
+      # GetStateDir() honor HOOKWISE_STATE_DIR, so a fresh temp dir keeps tests
+      # from writing to the live log/state (issue #91, machine-level pollution).
+      HOOKWISE_STATE_DIR:
+        sh: mktemp -d
     cmds:
       - go test -race -p {{.TEST_PARALLEL}} ./internal/core/... ./internal/feeds/... ./internal/bridge/... ./internal/analytics/... ./internal/notifications/... ./internal/migration/... ./internal/hooks/... ./pkg/...
 
