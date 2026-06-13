@@ -182,29 +182,22 @@ class TestStatusLineE2E:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    @pytest.mark.xfail(
-        reason=(
-            "Some feed producers still return placeholder data. "
-            "Tracked by: #57 (project), #58 (calendar), #59 (session/cost). "
-            "Insights producer is fixed — see test_status_line_has_insights_data."
-        ),
-        strict=True,
-    )
     def test_status_line_has_real_data(self, terminal_session):
-        """E2E: ALL status line segments must show real data, not '--' placeholders.
+        """E2E: the asserted status line segments must show real data, not '--'.
 
         This test validates the feature end-to-end: from feed producers
         through the cache pipeline to the rendered status line inside
         Claude Code. It fails when producers return placeholder data,
         because from the user's perspective the feature is broken.
 
-        Currently xfail because some feed producers are stubs:
-        - #57: ProjectProducer returns placeholder
-        - #58: CalendarProducer returns placeholder
-        - #59: session/cost analytics not wired to SQLite analytics DB
+        The previously-tracked blockers are resolved:
+        - #57: ProjectProducer now reads real git data
+        - #58: CalendarProducer now integrates the calendar
+        - #59: session/cost now wired to the SQLite analytics DB
 
-        Note: InsightsProducer is fixed and tested separately via
-        test_status_line_has_insights_data.
+        The strict xfail was removed once those producers became real. This
+        test is gated by skipif_no_claude/skipif_no_hookwise, so it only runs
+        with a live Claude Code session present (never in headless CI).
         """
         session = terminal_session.create_session(
             "claude",
