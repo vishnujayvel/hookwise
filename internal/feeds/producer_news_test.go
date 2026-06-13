@@ -244,6 +244,169 @@ func (p *panicTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 }
 
 // ---------------------------------------------------------------------------
+// Test F: Concurrent fetch preserves topstories order
+// ---------------------------------------------------------------------------
+
+// orderedFakeTransport serves items but deliberately introduces artificial
+// ordering skew: it is safe for concurrent use (all fields are read-only after
+// construction, no mutable state).
+type orderedFakeTransport struct {
+	topStoriesIDs []int
+	items         map[int]map[string]interface{}
+}
+
+func (f *orderedFakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	status := http.StatusOK
+	var body string
+
+	switch {
+	case strings.HasSuffix(req.URL.Path, "topstories.json"):
+		data, _ := json.Marshal(f.topStoriesIDs)
+		body = string(data)
+	default:
+		var id int
+		_, err := fmt.Sscanf(req.URL.Path, "/v0/item/%d.json", &id)
+		if err != nil {
+			status = http.StatusNotFound
+			body = `{}`
+		} else if item, ok := f.items[id]; ok {
+			data, _ := json.Marshal(item)
+			body = string(data)
+		} else {
+			status = http.StatusNotFound
+			body = `{}`
+		}
+	}
+
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+	}, nil
+}
+
+func TestNewsProducer_ConcurrentFetch_PreservesTopStoriesOrder(t *testing.T) {
+	// IDs 10, 20, 30 — output must appear in exactly this order regardless of
+	// goroutine scheduling.
+	transport := &orderedFakeTransport{
+		topStoriesIDs: []int{10, 20, 30},
+		items: map[int]map[string]interface{}{
+			10: {"title": "Story-Ten", "url": "https://example.com/10", "score": 100},
+			20: {"title": "Story-Twenty", "url": "https://example.com/20", "score": 200},
+			30: {"title": "Story-Thirty", "url": "https://example.com/30", "score": 300},
+		},
+	}
+
+	cfg := core.FeedsConfig{
+		News: core.NewsFeedConfig{Source: "hackernews", MaxStories: 3},
+	}
+	p := newNewsProducerWithTransport(t, transport, cfg)
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	assert.Equal(t, "hackernews", data["source"])
+
+	stories, ok := data["stories"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, stories, 3, "all three items must be returned")
+
+	titles := []string{
+		stories[0].(map[string]interface{})["title"].(string),
+		stories[1].(map[string]interface{})["title"].(string),
+		stories[2].(map[string]interface{})["title"].(string),
+	}
+	assert.Equal(t, []string{"Story-Ten", "Story-Twenty", "Story-Thirty"}, titles,
+		"stories must appear in topstories ID order (10→20→30), not completion order")
+}
+
+// ---------------------------------------------------------------------------
+// Test G: One item fetch fails → that story skipped, rest present, source=="hackernews"
+// ---------------------------------------------------------------------------
+
+// partialFailTransport makes item 20 return a non-200; others succeed.
+// All fields are read-only — safe for concurrent RoundTrip calls.
+type partialFailTransport struct {
+	topStoriesIDs []int
+	items         map[int]map[string]interface{}
+	failID        int
+}
+
+func (f *partialFailTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.HasSuffix(req.URL.Path, "topstories.json") {
+		data, _ := json.Marshal(f.topStoriesIDs)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(string(data))),
+			Header:     make(http.Header),
+		}, nil
+	}
+
+	var id int
+	fmt.Sscanf(req.URL.Path, "/v0/item/%d.json", &id) //nolint:errcheck
+
+	if id == f.failID {
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Body:       io.NopCloser(strings.NewReader(`{}`)),
+			Header:     make(http.Header),
+		}, nil
+	}
+
+	if item, ok := f.items[id]; ok {
+		data, _ := json.Marshal(item)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(string(data))),
+			Header:     make(http.Header),
+		}, nil
+	}
+
+	return &http.Response{
+		StatusCode: http.StatusNotFound,
+		Body:       io.NopCloser(strings.NewReader(`{}`)),
+		Header:     make(http.Header),
+	}, nil
+}
+
+func TestNewsProducer_OneItemFails_OthersPresent_SourceHackernews(t *testing.T) {
+	// Item 20 will return 500; items 10 and 30 succeed.
+	transport := &partialFailTransport{
+		topStoriesIDs: []int{10, 20, 30},
+		items: map[int]map[string]interface{}{
+			10: {"title": "Story-Ten", "url": "https://example.com/10", "score": 10},
+			30: {"title": "Story-Thirty", "url": "https://example.com/30", "score": 30},
+		},
+		failID: 20,
+	}
+
+	cfg := core.FeedsConfig{
+		News: core.NewsFeedConfig{Source: "hackernews", MaxStories: 3},
+	}
+	p := newNewsProducerWithTransport(t, transport, cfg)
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err, "ARCH-1: partial item failure must not return an error")
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	// Source must still be "hackernews" — the topstories call succeeded.
+	assert.Equal(t, "hackernews", data["source"],
+		"source must be 'hackernews' on partial item failure, not 'unavailable'")
+
+	stories, ok := data["stories"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, stories, 2, "failed item 20 must be skipped; items 10 and 30 must be present")
+
+	titles := []string{
+		stories[0].(map[string]interface{})["title"].(string),
+		stories[1].(map[string]interface{})["title"].(string),
+	}
+	assert.Equal(t, []string{"Story-Ten", "Story-Thirty"}, titles,
+		"surviving stories must preserve topstories order (10 before 30)")
+}
+
+// ---------------------------------------------------------------------------
 // Test E: Fallback envelope never contains source:"placeholder"
 // ---------------------------------------------------------------------------
 
