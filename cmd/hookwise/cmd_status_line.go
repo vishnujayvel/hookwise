@@ -223,6 +223,8 @@ func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary
 		return renderCalendarSegment(feedCache)
 	case "weather":
 		return renderWeatherSegment(feedCache)
+	case "news":
+		return renderNewsSegment(feedCache)
 	case "insights":
 		return renderInsightsSegment(feedCache)
 	case "insights_friction":
@@ -314,6 +316,45 @@ func renderWeatherSegment(feedCache map[string]interface{}) string {
 	}
 
 	return ansiCyan + emoji + tempStr + "\u00b0" + unit + desc + ansiReset
+}
+
+// truncateRunes returns s truncated to maxRunes runes, appending "…" if it was longer.
+func truncateRunes(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "…"
+}
+
+// renderNewsSegment renders the news segment from feed cache data.
+// It displays the top story title prefixed with a 📰 emoji, truncated to 40 runes.
+func renderNewsSegment(feedCache map[string]interface{}) string {
+	data := feedData(feedCache, "news")
+	if data == nil {
+		return ""
+	}
+
+	storiesRaw, ok := data["stories"]
+	if !ok {
+		return ""
+	}
+	stories, ok := storiesRaw.([]interface{})
+	if !ok || len(stories) == 0 {
+		return ""
+	}
+
+	topStory, ok := stories[0].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	title, _ := topStory["title"].(string)
+	if title == "" {
+		return ""
+	}
+
+	return ansiCyan + "\U0001f4f0 " + truncateRunes(title, 40) + ansiReset
 }
 
 // renderProjectSegment renders the project segment from feed cache data.
