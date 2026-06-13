@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/vishnujayvel/hookwise/internal/core"
+	"github.com/vishnujayvel/hookwise/internal/hooks"
 )
 
 // defaultYAMLTemplate is the minimal hookwise.yaml created by `hookwise init`.
@@ -36,12 +38,146 @@ tui:
 `
 
 func newInitCmd() *cobra.Command {
-	return &cobra.Command{
+	var (
+		wire         bool
+		unwire       bool
+		dryRun       bool
+		events       []string
+		noStatusLine bool
+		settingsPath string
+		force        bool
+	)
+
+	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize hookwise configuration",
-		Long:  "Creates a default hookwise.yaml in the current directory and ensures the ~/.hookwise/ state directory exists.",
-		RunE:  runInit,
+		Long: `Creates a default hookwise.yaml in the current directory and ensures the
+~/.hookwise/ state directory exists.
+
+With --wire: wires hookwise dispatch and status-line into Claude Code
+settings.json idempotently and safely. With --unwire: removes hookwise's
+own hooks from settings.json without touching other hooks.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if wire || unwire {
+				return runWire(cmd, wire, unwire, dryRun, events, noStatusLine, settingsPath, force)
+			}
+			return runInit(cmd, args)
+		},
 	}
+
+	cmd.Flags().BoolVar(&wire, "wire", false, "Wire hookwise into Claude Code settings.json")
+	cmd.Flags().BoolVar(&unwire, "unwire", false, "Remove hookwise hooks from Claude Code settings.json")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print what would change without writing")
+	cmd.Flags().StringSliceVar(&events, "events", []string{"PreToolUse", "PostToolUse"}, "Hook events to wire (comma-separated)")
+	cmd.Flags().BoolVar(&noStatusLine, "no-status-line", false, "Skip wiring the statusLine entry")
+	cmd.Flags().StringVar(&settingsPath, "settings", "", "Override path to Claude Code settings.json")
+	cmd.Flags().BoolVar(&force, "force", false, "Wire even if pre-flight finds FAIL-level issues")
+
+	return cmd
+}
+
+// runWire handles --wire and --unwire modes.
+func runWire(cmd *cobra.Command, wire, unwire, dryRun bool, events []string, noStatusLine bool, settingsPath string, force bool) error {
+	if wire && unwire {
+		return fmt.Errorf("--wire and --unwire are mutually exclusive")
+	}
+
+	// Resolve the settings path.
+	if settingsPath == "" {
+		paths := hooks.DefaultSettingsPaths()
+		if len(paths) > 0 {
+			settingsPath = paths[0]
+		}
+	}
+	if settingsPath == "" {
+		return fmt.Errorf("could not determine Claude Code settings.json path; use --settings")
+	}
+
+	opts := hooks.WireOptions{
+		SettingsPath: settingsPath,
+		Events:       events,
+		StatusLine:   !noStatusLine,
+		DryRun:       dryRun,
+		Unwire:       unwire,
+		Force:        force,
+	}
+
+	out := cmd.OutOrStdout()
+
+	if dryRun {
+		fmt.Fprintln(out, "DRY RUN — no files will be modified.")
+	}
+
+	result, err := hooks.Wire(opts)
+	if err != nil {
+		// Print any findings before the error.
+		if result != nil && len(result.Findings) > 0 {
+			fmt.Fprintln(out, "\nPre-flight findings:")
+			for _, f := range result.Findings {
+				fmt.Fprintf(out, "  %s  %s: %s\n", f.Level, f.Code, f.Message)
+				for _, d := range f.Details {
+					fmt.Fprintf(out, "         %s\n", d)
+				}
+			}
+		}
+		return err
+	}
+
+	// Print pre-flight findings (informational).
+	if len(result.Findings) > 0 {
+		fmt.Fprintln(out, "Pre-flight:")
+		for _, f := range result.Findings {
+			fmt.Fprintf(out, "  %s  %s: %s\n", f.Level, f.Code, f.Message)
+		}
+		fmt.Fprintln(out)
+	}
+
+	if dryRun {
+		fmt.Fprintln(out, "Changes:")
+		fmt.Fprintln(out, result.Diff)
+		return nil
+	}
+
+	if unwire {
+		if result.Changed {
+			fmt.Fprintf(out, "Unwired hookwise from %s\n", settingsPath)
+			if result.BackupPath != "" {
+				fmt.Fprintf(out, "Backup:  %s\n", result.BackupPath)
+			}
+		} else {
+			fmt.Fprintln(out, "Nothing to unwire (no hookwise entries found).")
+		}
+		return nil
+	}
+
+	// Wire summary.
+	if !result.Changed {
+		fmt.Fprintln(out, "Already wired — nothing changed.")
+		return nil
+	}
+
+	fmt.Fprintf(out, "Wired settings.json: %s\n", settingsPath)
+	if result.BackupPath != "" {
+		fmt.Fprintf(out, "Backup:             %s\n", result.BackupPath)
+	}
+
+	if len(result.WiredEvents) > 0 {
+		fmt.Fprintf(out, "Events wired:       %s\n", strings.Join(result.WiredEvents, ", "))
+	}
+	if len(result.SkippedEvents) > 0 {
+		fmt.Fprintf(out, "Events skipped:     %s (already present)\n", strings.Join(result.SkippedEvents, ", "))
+	}
+	if result.StatusLineWired {
+		fmt.Fprintln(out, "statusLine:         wired")
+	} else if result.StatusLineSkipped {
+		fmt.Fprintln(out, "statusLine:         skipped (already present)")
+	}
+
+	fmt.Fprintln(out, "\nNext steps:")
+	fmt.Fprintln(out, "  hookwise daemon start")
+	fmt.Fprintln(out, "  hookwise doctor")
+
+	return nil
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
