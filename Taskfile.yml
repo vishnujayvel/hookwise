@@ -60,6 +60,16 @@ tasks:
       - go.mod
       - go.sum
 
+  secrets:
+    desc: "Scan full git history for secrets + PII (gitleaks)"
+    cmds:
+      - gitleaks git --config .gitleaks.toml --log-opts=--all --verbose --redact
+
+  secrets:staged:
+    desc: "Scan staged changes only (fast pre-commit equivalent)"
+    cmds:
+      - gitleaks git --config .gitleaks.toml --pre-commit --staged --verbose --redact
+
   lint:py:
     desc: "Lint Python TUI code with ruff"
     dir: tui

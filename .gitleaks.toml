@@ -1,0 +1,78 @@
+# Gitleaks configuration for hookwise.
+#
+# Scans commits/diffs for secrets (API keys, tokens, private keys) and a small
+# set of high-confidence PII patterns. Runs in CI (.github/workflows/secret-scan.yml),
+# locally via `task secrets`, and as an optional pre-commit hook.
+#
+# Design notes:
+#   - We extend gitleaks' built-in ruleset (100+ provider patterns) rather than
+#     replace it: `[extend] useDefault = true`.
+#   - PII is hard. Emails / phone numbers have a very high false-positive rate in
+#     a Go+Python codebase full of test fixtures, so we DELIBERATELY do not block
+#     on them. We only add high-confidence PII rules (private keys are already in
+#     defaults; we add SSN + credit-card with Luhn-style structure + allowlists).
+#   - This repo has many fixtures (testdata/contracts/*.json, tui/tests/) — those
+#     directories are allowlisted to keep the gate signal-to-noise high.
+
+title = "hookwise gitleaks config"
+
+[extend]
+useDefault = true
+
+# ── Global allowlists (apply to every rule) ──────────────────────────────────
+# Paths use Go regexp syntax, matched against the file path.
+
+[[allowlists]]
+description = "Test fixtures, snapshots, generated and vendored files (high FP risk, no real secrets)"
+paths = [
+  '''testdata/''',           # contract fixtures (testdata/contracts/*.json)
+  '''.*_test\.go$''',        # Go test files
+  '''tui/tests/''',          # Python TUI tests + snapshots
+  '''.*\.snap$''',
+  '''.*\.snapshot$''',
+  '''.*\.ambr$''',           # syrupy snapshot format
+  '''go\.sum$''',
+  '''go\.mod$''',
+  '''dist/''',
+  '''vendor/''',
+  '''node_modules/''',
+  '''.*\.venv/''',
+]
+
+[[allowlists]]
+description = "Common placeholder / sentinel values used in tests and docs"
+regexTarget = "match"
+regexes = [
+  '''(?i)(your[-_]?(api[-_]?)?key|placeholder|changeme|example|dummy|sample|redacted|xxxx+)''',
+  '''(?i)test[-_]?(token|secret|key|password)''',
+]
+
+# ── High-confidence custom PII rules ─────────────────────────────────────────
+# Kept narrow on purpose. Emails / phones are intentionally NOT here.
+
+[[rules]]
+id = "hookwise-us-ssn"
+description = "US Social Security Number (xxx-xx-xxxx). RE2-safe: no lookaheads; FP controlled via keyword proximity + test-data allowlists."
+regex = '''\b\d{3}-\d{2}-\d{4}\b'''
+keywords = ["ssn", "social security", "social-security"]
+tags = ["pii", "ssn"]
+
+  [[rules.allowlists]]
+  description = "Sentinel SSNs in test data"
+  paths = ['''testdata/''', '''.*_test\.go$''', '''tui/tests/''']
+
+[[rules]]
+id = "hookwise-credit-card"
+description = "Credit card number (Visa/MC/Amex/Discover structure)"
+regex = '''\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b'''
+tags = ["pii", "pci"]
+
+  [[rules.allowlists]]
+  description = "Well-known test card numbers + fixtures"
+  paths = ['''testdata/''', '''.*_test\.go$''', '''tui/tests/''']
+  regexes = [
+    '''4111111111111111''',
+    '''4242424242424242''',
+    '''5555555555554444''',
+    '''378282246310005''',
+  ]
