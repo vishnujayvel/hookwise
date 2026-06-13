@@ -9,6 +9,26 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
 
+// ttlGraceSeconds keeps a cache entry "fresh" a bit past its poll interval so
+// one slow/missed poll doesn't blank the segment; a truly stopped daemon still
+// ages it out.
+const ttlGraceSeconds = 120
+
+// feedTTLFloorSeconds mirrors bridge.DefaultTTLSeconds (kept local to avoid a
+// feeds→bridge import, which cycles with bridge_test → feeds). Fast feeds never
+// get a TTL shorter than this floor.
+const feedTTLFloorSeconds = 300
+
+// feedCacheTTLSeconds computes the TTL to inject into a cache envelope for a
+// given poll interval: interval + grace, floored at feedTTLFloorSeconds.
+func feedCacheTTLSeconds(interval time.Duration) int {
+	ttl := int(interval.Seconds()) + ttlGraceSeconds
+	if ttl < feedTTLFloorSeconds {
+		ttl = feedTTLFloorSeconds
+	}
+	return ttl
+}
+
 // ConfigAware is an optional interface that producers can implement to receive
 // the feed configuration before producing data.
 type ConfigAware interface {
@@ -33,7 +53,7 @@ func (d *Daemon) pollFeed(ctx context.Context, p Producer, interval time.Duratio
 	defer ticker.Stop()
 
 	// Run once immediately on start.
-	d.runProducer(ctx, p)
+	d.runProducer(ctx, p, interval)
 
 	for {
 		select {
@@ -42,7 +62,7 @@ func (d *Daemon) pollFeed(ctx context.Context, p Producer, interval time.Duratio
 		case <-d.stopCh:
 			return
 		case <-ticker.C:
-			d.runProducer(ctx, p)
+			d.runProducer(ctx, p, interval)
 		}
 	}
 }
@@ -50,7 +70,12 @@ func (d *Daemon) pollFeed(ctx context.Context, p Producer, interval time.Duratio
 // runProducer executes a single producer and writes the result to the JSON cache.
 // Panics in Produce() are recovered so that a failing producer cannot crash
 // the daemon goroutine (ARCH-1 fail-open guarantee).
-func (d *Daemon) runProducer(ctx context.Context, p Producer) {
+//
+// interval is the poll interval for this producer; it is used to compute and
+// inject a ttl_seconds value into the envelope's data map so the status-line
+// segment stays visible until the next poll (+ grace). Producers that already
+// set ttl_seconds are left unchanged.
+func (d *Daemon) runProducer(ctx context.Context, p Producer, interval time.Duration) {
 	// IDLE-1: Reset idle timer on producer poll completion, including
 	// error/panic paths — any activity counts.
 	defer d.resetIdleTimer()
@@ -64,6 +89,18 @@ func (d *Daemon) runProducer(ctx context.Context, p Producer) {
 	if err != nil {
 		core.Logger().Error("feeds: producer error", "producer", p.Name(), "error", err)
 		return
+	}
+
+	// Inject ttl_seconds into the envelope's data map so the bridge freshness
+	// check keeps the segment visible until the next poll + grace period.
+	// Producers that already set ttl_seconds are left unchanged (ok guards are
+	// fail-safe for non-canonical shapes).
+	if env, ok := data.(map[string]interface{}); ok {
+		if dataMap, ok := env["data"].(map[string]interface{}); ok {
+			if _, exists := dataMap["ttl_seconds"]; !exists {
+				dataMap["ttl_seconds"] = feedCacheTTLSeconds(interval)
+			}
+		}
 	}
 
 	// ARCH-3: Write to JSON cache only, NOT the analytics DB.

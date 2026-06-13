@@ -1579,3 +1579,148 @@ func TestDaemon_SocketBindReleasedOnStop(t *testing.T) {
 	require.NoError(t, d2.Start(), "second daemon should start after first stopped")
 	require.NoError(t, d2.Stop())
 }
+
+// ---------------------------------------------------------------------------
+// feedCacheTTLSeconds unit tests (issue #88)
+// ---------------------------------------------------------------------------
+
+func TestFeedCacheTTLSeconds_Table(t *testing.T) {
+	tests := []struct {
+		interval time.Duration
+		wantTTL  int
+	}{
+		{1800 * time.Second, 1920}, // news: 1800 + 120
+		{900 * time.Second, 1020},  // weather: 900 + 120
+		{300 * time.Second, 420},   // 300 + 120 = 420 > floor(300)
+		{60 * time.Second, 300},    // 60 + 120 = 180 < floor(300) → 300
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.interval.String(), func(t *testing.T) {
+			got := feedCacheTTLSeconds(tt.interval)
+			assert.Equal(t, tt.wantTTL, got,
+				"feedCacheTTLSeconds(%v) = %d, want %d", tt.interval, got, tt.wantTTL)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runProducer TTL injection tests (issue #88)
+// ---------------------------------------------------------------------------
+
+// canonicalEnvelopeProducer returns a canonical NewEnvelope for runProducer tests.
+type canonicalEnvelopeProducer struct {
+	name string
+	data map[string]interface{}
+}
+
+func (c *canonicalEnvelopeProducer) Name() string { return c.name }
+func (c *canonicalEnvelopeProducer) Produce(_ context.Context) (interface{}, error) {
+	// Deep-copy data so mutations in runProducer don't affect the original map.
+	dataCopy := make(map[string]interface{}, len(c.data))
+	for k, v := range c.data {
+		dataCopy[k] = v
+	}
+	return NewEnvelope(c.name, dataCopy), nil
+}
+
+// readCacheJSON reads and unmarshals a JSON cache file written by runProducer.
+func readCacheJSON(t *testing.T, cacheDir, name string) map[string]interface{} {
+	t.Helper()
+	path := filepath.Join(cacheDir, name+".json")
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err, "cache file %s should exist", path)
+	var m map[string]interface{}
+	require.NoError(t, json.Unmarshal(raw, &m))
+	return m
+}
+
+// TestRunProducer_InjectsTTLForLongInterval verifies that runProducer injects
+// ttl_seconds = interval + grace (1800 + 120 = 1920) when the producer does not
+// set ttl_seconds (the common case for news/weather producers).
+func TestRunProducer_InjectsTTLForLongInterval(t *testing.T) {
+	r := NewRegistry()
+	p := &canonicalEnvelopeProducer{
+		name: "news",
+		data: map[string]interface{}{"headline": "test"},
+	}
+	r.Register(p)
+
+	d, tmpDir := newTestDaemon(t, r)
+	cacheDir := filepath.Join(tmpDir, "cache")
+	require.NoError(t, os.MkdirAll(cacheDir, 0o700))
+	d.SetCacheDir(cacheDir)
+
+	interval := 1800 * time.Second
+	ctx := context.Background()
+	d.runProducer(ctx, p, interval)
+
+	m := readCacheJSON(t, cacheDir, "news")
+	data, ok := m["data"].(map[string]interface{})
+	require.True(t, ok, "envelope should have a 'data' map")
+
+	ttl, ok := data["ttl_seconds"].(float64) // JSON numbers unmarshal as float64
+	require.True(t, ok, "data.ttl_seconds should be a number after JSON round-trip")
+	assert.Equal(t, float64(1920), ttl, "ttl_seconds should be 1800 + 120 grace")
+}
+
+// TestRunProducer_FloorForShortInterval verifies that a sub-floor interval (60s)
+// yields bridge.DefaultTTLSeconds (300) rather than 60+120=180.
+func TestRunProducer_FloorForShortInterval(t *testing.T) {
+	r := NewRegistry()
+	p := &canonicalEnvelopeProducer{
+		name: "project",
+		data: map[string]interface{}{"branch": "main"},
+	}
+	r.Register(p)
+
+	d, tmpDir := newTestDaemon(t, r)
+	cacheDir := filepath.Join(tmpDir, "cache")
+	require.NoError(t, os.MkdirAll(cacheDir, 0o700))
+	d.SetCacheDir(cacheDir)
+
+	interval := 60 * time.Second
+	ctx := context.Background()
+	d.runProducer(ctx, p, interval)
+
+	m := readCacheJSON(t, cacheDir, "project")
+	data, ok := m["data"].(map[string]interface{})
+	require.True(t, ok, "envelope should have a 'data' map")
+
+	ttl, ok := data["ttl_seconds"].(float64)
+	require.True(t, ok, "data.ttl_seconds should be a number")
+	assert.Equal(t, float64(300), ttl,
+		"short-interval TTL should be floored at bridge.DefaultTTLSeconds (300)")
+}
+
+// TestRunProducer_DoesNotOverwriteProducerSetTTL verifies that if the producer
+// already sets ttl_seconds, runProducer leaves it unchanged.
+func TestRunProducer_DoesNotOverwriteProducerSetTTL(t *testing.T) {
+	r := NewRegistry()
+	p := &canonicalEnvelopeProducer{
+		name: "weather",
+		data: map[string]interface{}{
+			"temperature": 72,
+			"ttl_seconds": 9999, // producer explicitly sets its own TTL
+		},
+	}
+	r.Register(p)
+
+	d, tmpDir := newTestDaemon(t, r)
+	cacheDir := filepath.Join(tmpDir, "cache")
+	require.NoError(t, os.MkdirAll(cacheDir, 0o700))
+	d.SetCacheDir(cacheDir)
+
+	interval := 900 * time.Second
+	ctx := context.Background()
+	d.runProducer(ctx, p, interval)
+
+	m := readCacheJSON(t, cacheDir, "weather")
+	data, ok := m["data"].(map[string]interface{})
+	require.True(t, ok, "envelope should have a 'data' map")
+
+	ttl, ok := data["ttl_seconds"].(float64)
+	require.True(t, ok, "data.ttl_seconds should be a number")
+	assert.Equal(t, float64(9999), ttl,
+		"runProducer must not overwrite a ttl_seconds already set by the producer")
+}
