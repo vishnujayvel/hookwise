@@ -47,10 +47,11 @@ func IsEventType(value string) bool {
 
 // HookPayload is the JSON payload piped to stdin by Claude Code for each hook invocation.
 type HookPayload struct {
-	SessionID string                 `json:"session_id"`
-	ToolName  string                 `json:"tool_name,omitempty"`
-	ToolInput map[string]interface{} `json:"tool_input,omitempty"`
-	Extra     map[string]interface{} `json:"-"` // captures unknown fields
+	SessionID      string                 `json:"session_id"`
+	ToolName       string                 `json:"tool_name,omitempty"`
+	ToolInput      map[string]interface{} `json:"tool_input,omitempty"`
+	TranscriptPath string                 `json:"transcript_path,omitempty"`
+	Extra          map[string]interface{} `json:"-"` // captures unknown fields
 }
 
 // IsValidPayload checks that the payload has the required session_id field.

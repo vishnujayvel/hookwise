@@ -10,6 +10,8 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/core"
 	"github.com/vishnujayvel/hookwise/internal/notifications"
+	"github.com/vishnujayvel/hookwise/internal/pricing"
+	"github.com/vishnujayvel/hookwise/internal/transcript"
 )
 
 // newDispatchCmd handles "hookwise dispatch <EventType>".
@@ -93,7 +95,7 @@ func newDispatchCmd() *cobra.Command {
 					done := make(chan struct{})
 					go func() {
 						defer close(done)
-						recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath, config.CostTracking.DailyBudget)
+						recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath, config.CostTracking)
 					}()
 					select {
 					case <-done:
@@ -146,7 +148,7 @@ const analyticsRecordTimeout = 2 * time.Second
 // recordAnalytics writes session/event data to the SQLite analytics DB. The
 // caller waits for it (bounded) before os.Exit so the write actually persists.
 // Fail-open: any error is logged but never surfaces to the user (ARCH-1).
-func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string, budgetThreshold float64) {
+func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string, costCfg core.CostTrackingConfig) {
 	defer func() {
 		if r := recover(); r != nil {
 			core.Logger().Error("panic in analytics recording", "recovered", fmt.Sprintf("%v", r))
@@ -188,12 +190,39 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 		costState, _ := db.ReadCostState(ctx)
 		coachState, _ := db.ReadCoachingState(ctx)
 		ns := notifications.NewNotificationService(db)
-		if err := notifications.RunAll(ctx, ns, db, costState, coachState, budgetThreshold); err != nil {
+		if err := notifications.RunAll(ctx, ns, db, costState, coachState, costCfg.DailyBudget); err != nil {
 			core.Logger().Warn("notifications: generation had errors", "error", err)
 		}
 
 	case core.EventSessionEnd, core.EventStop:
-		if err := a.EndSession(ctx, payload.SessionID, now, analytics.SessionStats{}); err != nil {
+		var sessionCost float64
+		if costCfg.Enabled && payload.TranscriptPath != "" {
+			usageByModel, terr := transcript.SumUsage(payload.TranscriptPath)
+			if terr != nil {
+				core.Logger().Warn("cost: read transcript usage", "error", terr)
+			} else {
+				for model, u := range usageByModel {
+					sessionCost += pricing.ComputeWithRates(model, u, costCfg.Rates)
+				}
+				if state, serr := db.ReadCostState(ctx); serr == nil {
+					today := now.Format("2006-01-02")
+					delta := sessionCost - state.SessionCosts[payload.SessionID]
+					state.SessionCosts[payload.SessionID] = sessionCost
+					state.TotalToday += delta
+					if state.TotalToday < 0 {
+						state.TotalToday = 0
+					}
+					state.DailyCosts[today] += delta
+					state.Today = today
+					if werr := db.WriteCostState(ctx, state); werr != nil {
+						core.Logger().Error("cost: write cost_state", "error", werr)
+					}
+				} else {
+					core.Logger().Warn("cost: read cost_state", "error", serr)
+				}
+			}
+		}
+		if err := a.EndSession(ctx, payload.SessionID, now, analytics.SessionStats{EstimatedCostUSD: sessionCost}); err != nil {
 			core.Logger().Error("analytics: end session", "error", err)
 		}
 	}
