@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-03-19
+type: feature
+parent: architecture-v2
+part: 2
+depends_on: architecture-v2-part1 (PR #72, merged)

@@ -1,0 +1,91 @@
+{
+  "generatedAt": "2026-06-15T22:11:28.021Z",
+  "specVersion": "1.0.0",
+  "domains": [
+    {
+      "domain": "analytics",
+      "specPath": "openspec/specs/analytics/spec.md",
+      "sourceFiles": [
+        "/Users/vishnu/workplace/hookwise/internal/analytics/history_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/sqlite.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/persist_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/snapshot_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/history.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/state.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/snapshot.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/analytics.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/analytics_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/state_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/analytics/helpers_test.go"
+      ],
+      "requirementCount": 19,
+      "dependsOn": [],
+      "calledBy": []
+    },
+    {
+      "domain": "feeds",
+      "specPath": "openspec/specs/feeds/spec.md",
+      "sourceFiles": [
+        "/Users/vishnu/workplace/hookwise/internal/feeds/envelope.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/custom.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer_weather.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer_memories_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer_news.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/client.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/socket_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer_insights.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer_project.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer_memories.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/daemon.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/envelope_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/client_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/socket.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer_calendar_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer_calendar.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/polling.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/producer_news_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/feeds_test.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/builtin.go",
+        "/Users/vishnu/workplace/hookwise/internal/feeds/main_test.go"
+      ],
+      "requirementCount": 61,
+      "dependsOn": [],
+      "calledBy": []
+    },
+    {
+      "domain": "notifications",
+      "specPath": "openspec/specs/notifications/spec.md",
+      "sourceFiles": [
+        "/Users/vishnu/workplace/hookwise/internal/notifications/producers.go",
+        "/Users/vishnu/workplace/hookwise/internal/notifications/notifications.go",
+        "/Users/vishnu/workplace/hookwise/internal/notifications/notifications_test.go"
+      ],
+      "requirementCount": 7,
+      "dependsOn": [],
+      "calledBy": []
+    },
+    {
+      "domain": "pricing",
+      "specPath": "openspec/specs/pricing/spec.md",
+      "sourceFiles": [
+        "/Users/vishnu/workplace/hookwise/internal/pricing/pricing.go",
+        "/Users/vishnu/workplace/hookwise/internal/pricing/pricing_test.go"
+      ],
+      "requirementCount": 6,
+      "dependsOn": [],
+      "calledBy": []
+    },
+    {
+      "domain": "transcript",
+      "specPath": "openspec/specs/transcript/spec.md",
+      "sourceFiles": [
+        "/Users/vishnu/workplace/hookwise/internal/transcript/transcript.go",
+        "/Users/vishnu/workplace/hookwise/internal/transcript/transcript_test.go"
+      ],
+      "requirementCount": 1,
+      "dependsOn": [],
+      "calledBy": []
+    }
+  ]
+}

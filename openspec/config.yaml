@@ -1,0 +1,43 @@
+schema: spec-driven
+context: >-
+  # User-provided context (preserved)
+
+  Hookwise is a Go CLI tool for config-driven Claude Code hooks with guards,
+
+  analytics (Dolt embedded SQL), coaching, feeds, and a Python TUI.
+
+
+  Architecture: Go binary installed to PATH, invoked by Claude Code hooks on every
+
+  tool use. Dolt embedded driver makes each test binary ~149 MB (vs typical 5-10 MB).
+
+
+  Key constraint: ARCH-1 fail-open — dispatch always exits 0 on error.
+
+  Resource constraint: 24 GB MacBook Air, test suite can consume 4.5 GB per invocation.
+
+
+  Tech stack: Go 1.25, Dolt embedded SQL, Python Textual TUI, Taskfile (go-task)
+
+  Testing: testify, race detector, contract tests, architecture lint, PBT, mutation testing
+
+
+  # Auto-detected by openlore
+
+  Tech stack: Go, Cobra, Textual, Dagger, SQLite, GitHub Actions, Textual (Python), SQLite
+  (modernc.org/sqlite)
+
+  Architecture: Layered (routes → controllers → services → repositories)
+
+  Domains: hook, guard, feed, analytics, notification, recipe, coaching, transcript, pricing,
+  dispatch, feeds, notifications, hooks, migration
+openlore:
+  version: 1.0.0
+  generatedAt: 2026-06-15T22:11:28.015Z
+  domains:
+    - analytics
+    - transcript
+    - pricing
+    - feeds
+    - notifications
+  confidence: 0.95
