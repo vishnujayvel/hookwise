@@ -44,10 +44,7 @@ func runSnapshot(cmd *cobra.Command, dataDir, snapshotsDir string, retention int
 	}
 
 	// Resolve the DB path: explicit flag wins, then config, then default.
-	dbPath := dataDir
-	if dbPath == "" {
-		dbPath = config.Analytics.DBPath
-	}
+	dbPath := resolveAnalyticsDBPath(dataDir, config)
 
 	// Resolve the snapshots dir: explicit flag wins, else the default.
 	if snapshotsDir == "" {

@@ -3,12 +3,27 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/vishnujayvel/hookwise/internal/analytics"
+	"github.com/vishnujayvel/hookwise/internal/core"
 )
+
+// resolveAnalyticsDBPath picks the analytics DB path the way reader commands
+// must agree with the writer (dispatch): an explicit --data-dir flag wins,
+// otherwise the loaded config's Analytics.DBPath is used. The returned value
+// may be empty, in which case analytics.Open falls back to DefaultDBPath().
+// See #105: stats previously ignored config and read the default DB, showing
+// $0 whenever a custom analytics.db_path was set.
+func resolveAnalyticsDBPath(flagDataDir string, config core.HooksConfig) string {
+	if flagDataDir != "" {
+		return flagDataDir
+	}
+	return config.Analytics.DBPath
+}
 
 func newStatsCmd() *cobra.Command {
 	var dataDir string
@@ -22,12 +37,20 @@ func newStatsCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to ~/.hookwise/analytics.db)")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to config analytics.db_path / ~/.hookwise/analytics.db)")
 	return cmd
 }
 
 func runStats(cmd *cobra.Command, dataDir string) error {
-	db, err := analytics.Open(dataDir)
+	// Load config the same way the writer (dispatch) does so reader and writer
+	// agree on the DB path (ARCH-1: never hard-fail on a missing/broken config).
+	cwd, _ := os.Getwd()
+	config, err := core.LoadConfig(cwd)
+	if err != nil {
+		config = core.GetDefaultConfig()
+	}
+
+	db, err := analytics.Open(resolveAnalyticsDBPath(dataDir, config))
 	if err != nil {
 		return fmt.Errorf("failed to open analytics DB: %w", err)
 	}
