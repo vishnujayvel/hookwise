@@ -1,0 +1,190 @@
+package main
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/vishnujayvel/hookwise/internal/analytics"
+	"github.com/vishnujayvel/hookwise/internal/core"
+)
+
+// writeSonnetFixture writes a .jsonl transcript with one assistant line:
+// claude-sonnet-4, input_tokens=1_000_000, output_tokens=1_000_000.
+// At built-in Sonnet rates ($3/MTok input, $15/MTok output) this costs
+// exactly $18.00 USD.
+func writeSonnetFixture(t *testing.T) string {
+	t.Helper()
+	line := `{"type":"assistant","message":{"id":"msg_01","model":"claude-sonnet-4","role":"assistant","usage":{"input_tokens":1000000,"output_tokens":1000000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}},"timestamp":"2026-06-15T00:00:00Z"}`
+	f, err := os.CreateTemp(t.TempDir(), "transcript-*.jsonl")
+	require.NoError(t, err)
+	_, err = f.WriteString(line + "\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	return f.Name()
+}
+
+// openTestDB opens (or creates) the analytics DB in dataDir so the test can
+// assert post-call state without duplicating the open logic in recordAnalytics.
+func openTestDB(t *testing.T, dataDir string) *analytics.DB {
+	t.Helper()
+	db, err := analytics.Open(dataDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+const expectedSonnetCost = 18.00 // $3*1 + $15*1 (1M tokens each, Sonnet rates)
+
+// TestRecordAnalytics_CostStop verifies that calling recordAnalytics with a
+// Stop event and a real transcript path writes the expected cost into both
+// the cost_state table and the sessions table.
+func TestRecordAnalytics_CostStop(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, ".hookwise"))
+	dbPath := filepath.Join(tmpDir, "analytics.db")
+
+	transcriptPath := writeSonnetFixture(t)
+	sid := "cost-test-session-001"
+
+	// Pre-create the session so EndSession's UPDATE has a row to touch.
+	db := openTestDB(t, dbPath)
+	a := analytics.NewAnalytics(db)
+	require.NoError(t, a.StartSession(context.Background(), sid, time.Now()))
+	db.Close()
+
+	costCfg := core.CostTrackingConfig{Enabled: true}
+	payload := core.HookPayload{
+		SessionID:      sid,
+		TranscriptPath: transcriptPath,
+	}
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+
+	// Re-open to assert.
+	db = openTestDB(t, dbPath)
+	defer db.Close()
+
+	// Assert cost_state.TotalToday and SessionCosts[sid].
+	state, err := db.ReadCostState(context.Background())
+	require.NoError(t, err)
+	assert.InDelta(t, expectedSonnetCost, state.TotalToday, 0.001, "TotalToday should equal $18.00")
+	assert.InDelta(t, expectedSonnetCost, state.SessionCosts[sid], 0.001, "SessionCosts[sid] should equal $18.00")
+
+	// Assert the sessions table also holds the cost via DailySummary.
+	a = analytics.NewAnalytics(db)
+	today := time.Now().UTC().Format("2006-01-02")
+	summary, err := a.DailySummary(context.Background(), today)
+	require.NoError(t, err)
+	assert.InDelta(t, expectedSonnetCost, summary.EstimatedCostUSD, 0.001, "DailySummary.EstimatedCostUSD should equal $18.00")
+}
+
+// TestRecordAnalytics_CostStop_Idempotent verifies that re-running a Stop for
+// the same session does NOT double-count cost (delta = 0, TotalToday unchanged).
+func TestRecordAnalytics_CostStop_Idempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, ".hookwise"))
+	dbPath := filepath.Join(tmpDir, "analytics.db")
+
+	transcriptPath := writeSonnetFixture(t)
+	sid := "cost-test-session-002"
+
+	db := openTestDB(t, dbPath)
+	a := analytics.NewAnalytics(db)
+	require.NoError(t, a.StartSession(context.Background(), sid, time.Now()))
+	db.Close()
+
+	costCfg := core.CostTrackingConfig{Enabled: true}
+	payload := core.HookPayload{
+		SessionID:      sid,
+		TranscriptPath: transcriptPath,
+	}
+
+	// First Stop.
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+
+	// Second Stop — same transcript, same session.
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+
+	db = openTestDB(t, dbPath)
+	defer db.Close()
+
+	state, err := db.ReadCostState(context.Background())
+	require.NoError(t, err)
+	assert.InDelta(t, expectedSonnetCost, state.TotalToday, 0.001,
+		"TotalToday must NOT be doubled on second Stop (idempotency)")
+}
+
+// TestRecordAnalytics_CostStop_Disabled verifies that when CostTracking.Enabled=false,
+// no cost is written and TotalToday stays 0.
+func TestRecordAnalytics_CostStop_Disabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, ".hookwise"))
+	dbPath := filepath.Join(tmpDir, "analytics.db")
+
+	transcriptPath := writeSonnetFixture(t)
+	sid := "cost-test-session-003"
+
+	db := openTestDB(t, dbPath)
+	a := analytics.NewAnalytics(db)
+	require.NoError(t, a.StartSession(context.Background(), sid, time.Now()))
+	db.Close()
+
+	costCfg := core.CostTrackingConfig{Enabled: false}
+	payload := core.HookPayload{
+		SessionID:      sid,
+		TranscriptPath: transcriptPath,
+	}
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+
+	db = openTestDB(t, dbPath)
+	defer db.Close()
+
+	state, err := db.ReadCostState(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0.0, state.TotalToday, "TotalToday must remain 0 when cost tracking disabled")
+	assert.Empty(t, state.SessionCosts, "SessionCosts must be empty when cost tracking disabled")
+}
+
+// TestRecordAnalytics_CostStop_NoTranscript verifies that an empty TranscriptPath
+// does not panic, EndSession is still called (session ends cleanly), and cost is 0.
+func TestRecordAnalytics_CostStop_NoTranscript(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, ".hookwise"))
+	dbPath := filepath.Join(tmpDir, "analytics.db")
+
+	sid := "cost-test-session-004"
+
+	db := openTestDB(t, dbPath)
+	a := analytics.NewAnalytics(db)
+	require.NoError(t, a.StartSession(context.Background(), sid, time.Now()))
+	db.Close()
+
+	costCfg := core.CostTrackingConfig{Enabled: true}
+	payload := core.HookPayload{
+		SessionID:      sid,
+		TranscriptPath: "", // no transcript path
+	}
+
+	// Must not panic.
+	require.NotPanics(t, func() {
+		recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+	})
+
+	db = openTestDB(t, dbPath)
+	defer db.Close()
+
+	state, err := db.ReadCostState(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0.0, state.TotalToday, "TotalToday must be 0 with no transcript")
+
+	// Session should still have been ended with cost=0.
+	a = analytics.NewAnalytics(db)
+	today := time.Now().UTC().Format("2006-01-02")
+	summary, err := a.DailySummary(context.Background(), today)
+	require.NoError(t, err)
+	assert.Equal(t, 0.0, summary.EstimatedCostUSD, "EstimatedCostUSD must be 0 with no transcript")
+}
