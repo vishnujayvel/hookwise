@@ -107,6 +107,38 @@ func TestDaemonClient_EnsureDaemon_AlreadyRunning(t *testing.T) {
 	assert.NoError(t, err, "EnsureDaemon should succeed without spawning when daemon is already running")
 }
 
+// TestIsTestBinary checks the heuristic that prevents the retro-009 / #84
+// fork bomb: a `go test` binary must be recognised so the daemon is never
+// re-exec'd from it.
+func TestIsTestBinary(t *testing.T) {
+	assert.True(t, isTestBinary("/tmp/go-build123/b001/hookwise.test"), "go-build test binary")
+	assert.True(t, isTestBinary("hookwise.test"), "bare test binary name")
+	assert.True(t, isTestBinary("C:/tmp/feeds.test.exe"), "windows test binary")
+	assert.False(t, isTestBinary("/usr/local/bin/hookwise"), "installed binary is not a test binary")
+	assert.False(t, isTestBinary("hookwise"), "bare binary name is not a test binary")
+}
+
+// TestSpawnDaemon_RefusedUnderTestBinary is the regression guard for the
+// retro-009 kernel-panic fork bomb (#84). Because this test itself runs inside
+// the package's <pkg>.test binary, os.Executable() ends in ".test", so
+// spawnDaemon MUST refuse to re-exec and return errDaemonAutostartDisabled
+// instead of forking an unbounded chain of daemon processes.
+func TestSpawnDaemon_RefusedUnderTestBinary(t *testing.T) {
+	client := NewDaemonClient(filepath.Join(t.TempDir(), "nope.sock"))
+	err := client.spawnDaemon("")
+	require.ErrorIs(t, err, errDaemonAutostartDisabled,
+		"spawnDaemon must refuse to re-exec from a *.test binary (fork-bomb guard)")
+}
+
+// TestSpawnDaemon_RefusedWhenDisabledEnv verifies the operator escape hatch:
+// HOOKWISE_DISABLE_DAEMON_AUTOSTART=1 also blocks auto-spawn.
+func TestSpawnDaemon_RefusedWhenDisabledEnv(t *testing.T) {
+	t.Setenv("HOOKWISE_DISABLE_DAEMON_AUTOSTART", "1")
+	client := NewDaemonClient(filepath.Join(t.TempDir(), "nope.sock"))
+	err := client.spawnDaemon("")
+	require.ErrorIs(t, err, errDaemonAutostartDisabled)
+}
+
 func TestDaemonClient_HealthResponseFormat(t *testing.T) {
 	// Verify that the Health response contains the expected keys with correct types.
 	socketPath := filepath.Join(socketTempDir(t), "d.sock")
