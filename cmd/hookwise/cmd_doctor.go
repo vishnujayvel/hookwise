@@ -79,7 +79,10 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	// Check 3: analytics DB health. Open the SQLite DB and run a trivial query
 	// so a corrupt or unwritable analytics.db surfaces here — ARCH-1 fail-open
 	// hides analytics write failures everywhere else.
-	dbPath := analytics.DefaultDBPath()
+	// Resolve the analytics DB under the active state dir so doctor checks the
+	// SAME DB the dispatch writer uses (and honors HOOKWISE_STATE_DIR), rather
+	// than the home-relative DefaultDBPath which ignores the env override.
+	dbPath := filepath.Join(core.GetStateDir(), "analytics.db")
 	if _, statErr := os.Stat(dbPath); os.IsNotExist(statErr) {
 		fmt.Fprintf(w, "WARN  analytics: %s not yet created (created on first dispatch)\n", dbPath)
 		warnings++

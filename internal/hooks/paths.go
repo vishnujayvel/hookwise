@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -22,9 +23,16 @@ func SettingsPaths(claudeDir string) []string {
 	return paths
 }
 
-// DefaultSettingsPaths returns SettingsPaths for the real ~/.claude directory.
+// DefaultSettingsPaths returns SettingsPaths for the Claude Code settings
+// directory. It honors the HOOKWISE_CLAUDE_DIR env override (used by tests to
+// isolate the hook scan from the developer's real ~/.claude), falling back to
+// the real ~/.claude directory.
 func DefaultSettingsPaths() []string {
-	return SettingsPaths(filepath.Join(core.HomeDir(), ".claude"))
+	claudeDir := os.Getenv("HOOKWISE_CLAUDE_DIR")
+	if claudeDir == "" {
+		claudeDir = filepath.Join(core.HomeDir(), ".claude")
+	}
+	return SettingsPaths(claudeDir)
 }
 
 // AllFindings runs every hook-safety analysis over the inventory and returns the
