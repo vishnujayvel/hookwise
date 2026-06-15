@@ -15,6 +15,7 @@ const allowedRoot = [
   ".gitignore",
   ".gitleaks.toml",
   ".ls-lint.yml",
+  ".mcp.json",
   ".pre-commit-config.yaml",
   "CLAUDE.md",
   "CONTRIBUTING.md",

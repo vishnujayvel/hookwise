@@ -18,8 +18,7 @@ Thumbs.db
 # Claude Code (PDLC specs, product context)
 .claude/
 
-# OpenSpec (local spec-driven dev, not shipped)
-openspec/
+# OpenSpec (spec-driven dev) — tracked in git: living specs, changes, ADRs
 
 # Loki Mode (autonomous orchestration state)
 .loki/
@@ -60,3 +59,7 @@ node_modules
 
 # go-task runner checksum cache
 .task/
+
+# openlore — local index/analysis stays out of git; decision records are tracked
+.openlore/*
+!.openlore/decisions/
