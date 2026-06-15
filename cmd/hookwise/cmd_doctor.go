@@ -267,6 +267,16 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 			continue
 		}
 
+		// Honesty check: a fresh cache with an empty data object means the
+		// producer ran but emitted nothing — the segment renders blank. Report
+		// it distinctly rather than as "OK" (issue #99: cache-fresh != data-present).
+		if len(dataMap) == 0 {
+			fmt.Fprintf(w, "WARN  feed:%s: cache fresh but no data\n", feedName)
+			warnings++
+			feedStatuses[feedName] = "empty"
+			continue
+		}
+
 		// Parse timestamp once for staleness and reporting.
 		tsStr := envelope["timestamp"].(string)
 		ts, parseErr := core.ParseTimeFlex(tsStr)
