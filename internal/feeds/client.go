@@ -3,17 +3,38 @@ package feeds
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
+
+// errDaemonAutostartDisabled is returned by spawnDaemon when daemon auto-start
+// is refused — either because we are running under a `go test` binary or
+// because HOOKWISE_DISABLE_DAEMON_AUTOSTART is set. Callers fail-open (ARCH-1).
+var errDaemonAutostartDisabled = errors.New("feeds: daemon auto-start disabled (test binary or HOOKWISE_DISABLE_DAEMON_AUTOSTART)")
+
+// isTestBinary reports whether path looks like a `go test` binary. Such a
+// binary must NEVER be re-exec'd as a daemon: under `go test`, os.Executable()
+// is the package's compiled <pkg>.test binary, and re-running it as
+// `<pkg>.test daemon run` re-executes the ENTIRE test suite. Because the
+// status-line command auto-starts the daemon, that re-execution calls back
+// into spawnDaemon and forks an unbounded chain of test processes — the
+// runaway that caused the retro-009 kernel panic (see also #84). The ".test"
+// suffix is how the Go toolchain names test binaries.
+func isTestBinary(path string) bool {
+	base := filepath.Base(path)
+	return strings.HasSuffix(base, ".test") || strings.HasSuffix(base, ".test.exe")
+}
 
 // DaemonClient provides daemon connectivity from CLI commands.
 type DaemonClient struct {
@@ -97,6 +118,15 @@ func (c *DaemonClient) spawnDaemon(configPath string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("find executable: %w", err)
+	}
+
+	// FORK-SAFETY (retro-009 / #84): never re-exec the daemon from a `go test`
+	// binary or when explicitly disabled. Under `go test`, self is the
+	// <pkg>.test binary; re-running it re-executes the whole suite, which (via
+	// status-line auto-start) recurses back here and fork-bombs the machine.
+	// Bail out fail-open — the caller renders from the existing JSON cache.
+	if isTestBinary(self) || os.Getenv("HOOKWISE_DISABLE_DAEMON_AUTOSTART") == "1" {
+		return errDaemonAutostartDisabled
 	}
 
 	args := []string{"daemon", "run"}
