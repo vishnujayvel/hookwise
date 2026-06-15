@@ -35,3 +35,12 @@ func TestSettingsPaths_GlobalAlwaysListedEvenIfAbsent(t *testing.T) {
 	require.Len(t, paths, 1)
 	assert.Equal(t, filepath.Join(claude, "settings.json"), paths[0])
 }
+
+func TestDefaultSettingsPaths_HonorsClaudeDirEnv(t *testing.T) {
+	claude := t.TempDir()
+	t.Setenv("HOOKWISE_CLAUDE_DIR", claude)
+	// The override must point the default scan at the temp dir, not real ~/.claude.
+	paths := DefaultSettingsPaths()
+	require.NotEmpty(t, paths)
+	assert.Equal(t, filepath.Join(claude, "settings.json"), paths[0])
+}

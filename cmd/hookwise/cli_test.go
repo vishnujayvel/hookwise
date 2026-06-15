@@ -1548,6 +1548,22 @@ func TestDoctorFeedHealthAllHealthy(t *testing.T) {
 	cacheDir := filepath.Join(stateDir, "state")
 	os.MkdirAll(cacheDir, 0o700)
 
+	// Isolate the hook-safety scan from the real ~/.claude by pointing it at a
+	// temp .claude dir with a clean (hook-free) settings.json. Without this the
+	// scan reads the developer's real settings and any hook sprawl there makes
+	// this test flake (issue #104).
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	require.NoError(t, os.MkdirAll(claudeDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(`{}`), 0o644))
+	t.Setenv("HOOKWISE_CLAUDE_DIR", claudeDir)
+
+	// Seed an analytics DB under the isolated state dir so doctor's analytics
+	// check finds a real, queryable DB (PASS) instead of WARNing that it is not
+	// yet created — which would itself add a warning to the summary.
+	seedDB, err := analytics.Open(filepath.Join(stateDir, "analytics.db"))
+	require.NoError(t, err)
+	require.NoError(t, seedDB.Close())
+
 	configYAML := `version: 1
 status_line:
   enabled: true
