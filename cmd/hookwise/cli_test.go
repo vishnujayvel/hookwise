@@ -1453,6 +1453,40 @@ feeds:
 	assert.Contains(t, output, "WARN  feed:weather: stale data", "doctor should warn about stale weather feed")
 }
 
+// A feed whose cache is fresh but whose data payload is empty ({}) is a real
+// problem — the producer ran but emitted nothing, so the status-line segment
+// renders blank. doctor must be honest about this rather than reporting "OK"
+// (issue #99 — doctor honesty: distinguish "cache fresh" from "data absent").
+func TestDoctorFeedHealthEmptyData(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	defer os.Chdir(origDir)
+
+	stateDir := filepath.Join(tmpDir, ".hookwise")
+	t.Setenv("HOOKWISE_STATE_DIR", stateDir)
+	cacheDir := filepath.Join(stateDir, "state")
+	os.MkdirAll(cacheDir, 0o700)
+
+	// Fresh timestamp, but an empty data object.
+	now := time.Now().UTC().Format(time.RFC3339)
+	writeJSONFile(t, filepath.Join(cacheDir, "weather.json"), map[string]interface{}{
+		"type":      "weather",
+		"timestamp": now,
+		"data":      map[string]interface{}{},
+	})
+
+	output, err := executeCommand("doctor")
+	require.NoError(t, err, "doctor failed\noutput: %s", output)
+
+	assert.Contains(t, output, "WARN  feed:weather: cache fresh but no data",
+		"doctor should warn that a fresh-cache feed carries no data")
+	assert.NotContains(t, output, "feed:weather: OK",
+		"an empty-data feed must NOT be reported as OK")
+}
+
 // ---------------------------------------------------------------------------
 // 29. Doctor feed health: segment coverage
 // ---------------------------------------------------------------------------
