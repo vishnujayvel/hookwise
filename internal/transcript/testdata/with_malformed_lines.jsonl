@@ -1,0 +1,5 @@
+{"type":"assistant","message":{"id":"msg_01","model":"claude-haiku-3-5","role":"assistant","usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":5,"cache_creation_input_tokens":2}},"timestamp":"2026-06-07T00:00:00Z"}
+this is not json at all
+{"type":"assistant","message":{"id":"msg_02","model":"claude-haiku-3-5","role":"assistant","usage":{"input_tokens":200,"output_tokens":75,"cache_read_input_tokens":10,"cache_creation_input_tokens":3}},"timestamp":"2026-06-07T00:00:01Z"}
+{broken json
+{"type":"user","message":{"role":"user","content":"hi"},"timestamp":"2026-06-07T00:00:02Z"}
