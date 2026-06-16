@@ -1,12 +1,17 @@
 # Optional local pre-commit hooks — the first line of the secret-scanning
-# defense-in-depth chain (pre-commit → GitHub push protection → CI gate).
+# defense-in-depth chain (pre-commit → GitHub push protection → CI gate),
+# plus a local commit-message guard mirroring the CI commitlint gate.
 #
 # Opt in once per clone:
 #   pipx install pre-commit   # or: brew install pre-commit
-#   pre-commit install
+#   pre-commit install                        # gitleaks on staged changes
+#   pre-commit install --hook-type commit-msg # commitlint on the message
 #
 # Thereafter `git commit` scans staged changes with gitleaks before the commit
-# is created, so a secret never reaches local git history.
+# is created (so a secret never reaches local git history), and validates the
+# commit message against .commitlintrc.yml (conventional type + header ≤72)
+# before push — catching what the CI commitlint gate would otherwise reject
+# only after a push + CI round-trip.
 
 repos:
   - repo: https://github.com/gitleaks/gitleaks
@@ -14,3 +19,10 @@ repos:
     hooks:
       - id: gitleaks
         args: ["--config", ".gitleaks.toml"]
+
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.25.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ["@commitlint/config-conventional"]
