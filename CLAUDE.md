@@ -2,7 +2,7 @@
 
 ## The #1 Rule
 
-**After changing Go code, run `make install` before testing.**
+**After changing Go code, run `task install` before testing.**
 
 Hookwise is invoked by Claude Code hooks via the `hookwise` binary on your PATH (verify with `which hookwise`).
 Source code changes have NO effect until the binary is rebuilt. This has caused real
@@ -12,22 +12,22 @@ incidents where everything "looked fine" in source but the installed binary was 
 
 ```bash
 # After any Go code change:
-make install          # Rebuild + install binary with version info
+task install          # Rebuild + install binary with version info
 
-# Full check (install + doctor + status-line verify):
-make dev
+# Full check (install + doctor + version):
+task dev
 
 # Quick iteration without installing (runs from source):
-make run ARGS="status-line"
-make run ARGS="dispatch PreToolUse"
+task run -- status-line
+task run -- dispatch PreToolUse
 
 # Run tests:
-make test             # Unit tests with race detector
-make test-integration # Integration tests (chaos, etc.)
-make test-tui         # Python TUI tests
+task test:go:unit         # Go unit tests with race detector (guarded)
+task test:go:integration  # Integration + chaos tests
+task test:tui:unit        # Python TUI tests
 
 # Check if installed binary matches source:
-make version-check
+task staleness
 ```
 
 ## Pipeline (Dagger)
@@ -46,7 +46,7 @@ dagger call publish --src=. --version=v1.4.0 --commit=$(git rev-parse HEAD) # Bu
 ```
 
 When to use what:
-- `make install` / `make dev` — after code changes, fastest loop (no Docker)
+- `task install` / `task dev` — after code changes, fastest loop (no Docker)
 - `dagger call check` — pre-commit in containers
 - `dagger call ci` — pre-push, full pipeline (same as GitHub Actions)
 
@@ -97,17 +97,17 @@ cd tui && .venv/bin/python -m pytest tests/   # TUI tests
 
 ## Common Gotchas
 
-1. **Stale binary**: `hookwise --version` shows "dev" or old commit → run `make install`
+1. **Stale binary**: `hookwise --version` shows "dev" or old commit → run `task install`
 2. **Config parse errors are silent**: ARCH-1 fail-open means bad config = no output, exit 0
-3. **SegmentConfig accepts strings**: `- session` works in YAML (custom UnmarshalYAML)
+3. **SegmentConfig accepts strings**: `- cost` works in YAML (custom UnmarshalYAML)
 4. **Cross-language boundary**: Go feeds → JSON cache → Python TUI. Test both sides.
 5. **TUI venv**: Always use `tui/.venv/bin/python`, never system python
 
 ## Build with Version Info
 
-The Makefile bakes in version/commit/date via ldflags. Direct `go build` without
+The Taskfile bakes in version/commit/date via ldflags. Direct `go build` without
 ldflags produces `version: dev, commit: none` — this is fine for quick tests but
-`make install` is preferred for the installed binary.
+`task install` is preferred for the installed binary.
 
 <!-- BEGIN OPENLORE (managed — edits inside this block will be overwritten) -->
 <!-- openlore-fingerprint: 2b3f41bc7958a8a2 -->
