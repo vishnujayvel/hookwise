@@ -88,21 +88,34 @@ var builtinRates = map[family]modelRates{
 	},
 }
 
-// matchFamily returns the model family for the given model ID.
-// Matching is case-insensitive substring search in priority order:
-// opus → sonnet → haiku.  Unrecognised IDs return defaultFamily.
-func matchFamily(model string) family {
+// matchFamily returns the model family for the given model ID and whether the
+// ID was recognised. Matching is case-insensitive substring search in priority
+// order: opus → sonnet → haiku.  Unrecognised IDs return (defaultFamily, false)
+// so callers can distinguish a genuine Sonnet match from a fallback.
+func matchFamily(model string) (family, bool) {
 	lower := strings.ToLower(model)
 	switch {
 	case strings.Contains(lower, "opus"):
-		return familyOpus
+		return familyOpus, true
 	case strings.Contains(lower, "sonnet"):
-		return familySonnet
+		return familySonnet, true
 	case strings.Contains(lower, "haiku"):
-		return familyHaiku
+		return familyHaiku, true
 	default:
-		return defaultFamily
+		return defaultFamily, false
 	}
+}
+
+// Recognized reports whether the model ID maps to a known family
+// (opus/sonnet/haiku) rather than falling back to the default Sonnet rates.
+//
+// Cost computation never fails on an unknown model — it silently uses Sonnet
+// rates — which can badly under- or over-count a model from an as-yet-unknown
+// family. Callers on the cost path use this to emit a diagnostic when a cost is
+// derived from fallback rates ("degrade gracefully AND always warn").
+func Recognized(model string) bool {
+	_, ok := matchFamily(model)
+	return ok
 }
 
 // resolveRates returns the effective modelRates for the given family, applying
@@ -140,7 +153,7 @@ func computeCost(u Usage, r modelRates) float64 {
 // using built-in rate tables.  Unknown model IDs fall back to Sonnet rates
 // and never panic.  Zero usage always returns 0.0.
 func Compute(model string, u Usage) float64 {
-	fam := matchFamily(model)
+	fam, _ := matchFamily(model)
 	r := resolveRates(fam, nil)
 	return computeCost(u, r)
 }
@@ -152,7 +165,7 @@ func Compute(model string, u Usage) float64 {
 // Unknown model IDs fall back to Sonnet rates; unknown override keys are
 // silently ignored.  Never panics.
 func ComputeWithRates(model string, u Usage, overrides map[string]float64) float64 {
-	fam := matchFamily(model)
+	fam, _ := matchFamily(model)
 	r := resolveRates(fam, overrides)
 	return computeCost(u, r)
 }

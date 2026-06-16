@@ -311,3 +311,48 @@ func TestFractionalTokens_Sonnet(t *testing.T) {
 	cost := pricing.Compute("claude-sonnet-4", u)
 	assert.InDelta(t, want, cost, 1e-9)
 }
+
+// ---------------------------------------------------------------------------
+// Recognized (audit #26: fallback telemetry)
+// ---------------------------------------------------------------------------
+
+// TestRecognized verifies that known families report true (case-insensitively,
+// via substring) and that unknown IDs report false so the cost path can warn
+// when a cost is derived from fallback Sonnet rates.
+func TestRecognized(t *testing.T) {
+	known := []string{
+		"claude-opus-4-8",
+		"CLAUDE-OPUS-4-20250601",
+		"claude-sonnet-4-6",
+		"claude-3-5-haiku-20241022",
+		"some-haiku-variant",
+	}
+	for _, m := range known {
+		assert.True(t, pricing.Recognized(m), "expected %q to be recognized", m)
+	}
+
+	unknown := []string{
+		"",
+		"gpt-4o",
+		"gemini-2.5-pro",
+		"claude-x-9",
+		"unknown-model",
+	}
+	for _, m := range unknown {
+		assert.False(t, pricing.Recognized(m), "expected %q to be unrecognized", m)
+	}
+}
+
+// TestRecognized_FallbackStillComputes confirms the telemetry change did not
+// alter cost math: an unrecognized model still computes at Sonnet rates and is
+// identical to an explicitly-Sonnet model with the same usage.
+func TestRecognized_FallbackStillComputes(t *testing.T) {
+	u := pricing.Usage{InputTokens: 1_000_000, OutputTokens: 500_000}
+
+	unknownCost := pricing.Compute("gpt-4o", u)
+	sonnetCost := pricing.Compute("claude-sonnet-4-6", u)
+
+	require.False(t, pricing.Recognized("gpt-4o"))
+	assert.InDelta(t, sonnetCost, unknownCost, delta,
+		"unknown model must still compute at Sonnet fallback rates")
+}
