@@ -203,6 +203,11 @@ func hasNotificationTodayWithContent(ctx context.Context, ns *NotificationServic
 
 // escapeLIKE escapes SQL LIKE wildcard characters (% and _) in a string.
 func escapeLIKE(s string) string {
+	// Escape the escape char itself FIRST, so the backslashes added for % and _
+	// below are not re-escaped. Required because the dedup LIKE query uses
+	// ESCAPE '\': an unescaped backslash in s would otherwise be treated as an
+	// escape character by SQLite and silently corrupt the match.
+	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "%", "\\%")
 	s = strings.ReplaceAll(s, "_", "\\_")
 	return s

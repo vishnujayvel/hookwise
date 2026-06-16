@@ -10,6 +10,18 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/analytics"
 )
 
+// storedDay returns the UTC date string of the most recently created
+// notification. Deriving "today" from the row's own created_at stamp (rather
+// than a separate time.Now() call) makes the dedup-lookup tests immune to a
+// UTC-midnight race between the test's clock read and the stamp inside Create.
+func storedDay(t *testing.T, ns *NotificationService) string {
+	t.Helper()
+	rows, err := ns.List(context.Background(), 1)
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	return rows[0].CreatedAt.UTC().Format("2006-01-02")
+}
+
 // TestHasNotificationTodayWithContent_UnderscoreToolName guards the LIKE-escape
 // dedup path. A content substring containing SQL LIKE wildcards (`_` or `%`) --
 // as in MCP tool names like "mcp__server__tool" -- must still match its own
@@ -23,11 +35,11 @@ func TestHasNotificationTodayWithContent_UnderscoreToolName(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	today := time.Now().UTC().Format("2006-01-02")
 
 	tool := "mcp__playwright__click"
 	content := `Guard rule for "` + tool + `" triggered 7 times today`
 	require.NoError(t, ns.Create(ctx, ProducerGuard, TypeGuardEffectiveness, content))
+	today := storedDay(t, ns)
 
 	// The dedup lookup must find the row it just wrote, despite the underscores.
 	found, err := hasNotificationTodayWithContent(ctx, ns, ProducerGuard, TypeGuardEffectiveness, today, tool)
@@ -40,9 +52,30 @@ func TestHasNotificationTodayWithContent_UnderscoreToolName(t *testing.T) {
 	assert.False(t, other, "dedup must not match a different tool name")
 }
 
+// TestHasNotificationTodayWithContent_BackslashToolName guards the escape-char
+// completeness: with the ESCAPE '\' clause in place, a literal backslash in the
+// substring must itself be escaped, otherwise SQLite treats it as the escape
+// character and corrupts the match. (escapeLIKE escapes `\` before % and _.)
+func TestHasNotificationTodayWithContent_BackslashToolName(t *testing.T) {
+	ns, _, cleanup := testService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	tool := `weird\tool`
+	content := `Guard rule for "` + tool + `" triggered 9 times today`
+	require.NoError(t, ns.Create(ctx, ProducerGuard, TypeGuardEffectiveness, content))
+	today := storedDay(t, ns)
+
+	found, err := hasNotificationTodayWithContent(ctx, ns, ProducerGuard, TypeGuardEffectiveness, today, tool)
+	require.NoError(t, err)
+	assert.True(t, found, "dedup must match a tool name containing a literal backslash")
+}
+
 // TestCheckGuardEffectiveness_DeduplicatesUnderscoreTool is the user-facing
 // proof: running the producer twice for an MCP-style tool with >=5 blocks must
-// create exactly ONE notification, not a duplicate on every run.
+// create exactly ONE notification, not a duplicate on every run. The assertion
+// counts by producer/type (no test-side clock), so it is not midnight-sensitive.
 func TestCheckGuardEffectiveness_DeduplicatesUnderscoreTool(t *testing.T) {
 	ns, db, cleanup := testService(t)
 	defer cleanup()
