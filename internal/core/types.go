@@ -85,7 +85,6 @@ type DispatchConfig struct {
 type HooksConfig struct {
 	Version          int                   `yaml:"version" json:"version"`
 	Guards           []GuardRuleConfig     `yaml:"guards" json:"guards"`
-	Coaching         CoachingConfig        `yaml:"coaching" json:"coaching"`
 	Analytics        AnalyticsConfig       `yaml:"analytics" json:"analytics"`
 	Greeting         GreetingConfig        `yaml:"greeting" json:"greeting"`
 	Sounds           SoundsConfig          `yaml:"sounds" json:"sounds"`
@@ -99,39 +98,6 @@ type HooksConfig struct {
 	Daemon           DaemonConfig          `yaml:"daemon" json:"daemon"`
 	TUI              TUIConfig             `yaml:"tui" json:"tui"`
 	Dispatch         DispatchConfig        `yaml:"dispatch" json:"dispatch"`
-}
-
-type CoachingConfig struct {
-	Metacognition MetacognitionConfig `yaml:"metacognition" json:"metacognition"`
-	BuilderTrap   BuilderTrapConfig   `yaml:"builder_trap" json:"builderTrap"`
-	Communication CommunicationConfig `yaml:"communication" json:"communication"`
-}
-
-type MetacognitionConfig struct {
-	Enabled         bool   `yaml:"enabled" json:"enabled"`
-	IntervalSeconds int    `yaml:"interval_seconds" json:"intervalSeconds"`
-	PromptsFile     string `yaml:"prompts_file,omitempty" json:"promptsFile,omitempty"`
-}
-
-type BuilderTrapConfig struct {
-	Enabled         bool                  `yaml:"enabled" json:"enabled"`
-	Thresholds      BuilderTrapThresholds `yaml:"thresholds" json:"thresholds"`
-	ToolingPatterns []string              `yaml:"tooling_patterns" json:"toolingPatterns"`
-	PracticeTools   []string              `yaml:"practice_tools" json:"practiceTools"`
-}
-
-type BuilderTrapThresholds struct {
-	Yellow int `yaml:"yellow" json:"yellow"`
-	Orange int `yaml:"orange" json:"orange"`
-	Red    int `yaml:"red" json:"red"`
-}
-
-type CommunicationConfig struct {
-	Enabled   bool     `yaml:"enabled" json:"enabled"`
-	Frequency int      `yaml:"frequency" json:"frequency"`
-	MinLength int      `yaml:"min_length" json:"minLength"`
-	Rules     []string `yaml:"rules" json:"rules"`
-	Tone      string   `yaml:"tone" json:"tone"` // "gentle", "direct", "silent"
 }
 
 type AnalyticsConfig struct {
@@ -342,13 +308,6 @@ type StatsOptions struct {
 	From      string `json:"from,omitempty"`
 	To        string `json:"to,omitempty"`
 }
-
-// --- Coaching Types ---
-//
-// Runtime coaching types (Mode, AlertLevel, CoachingCache, etc.) have been
-// extracted to internal/coaching/types.go.  Config types (CoachingConfig,
-// MetacognitionConfig, BuilderTrapConfig, etc.) remain here to avoid
-// circular imports.
 
 // --- Cost Types ---
 

@@ -648,20 +648,6 @@ func TestValidateConfig_InvalidDaemonTimeout(t *testing.T) {
 	}
 }
 
-func TestValidateConfig_InvalidCoachingInterval(t *testing.T) {
-	raw := map[string]interface{}{
-		"coaching": map[string]interface{}{
-			"metacognition": map[string]interface{}{
-				"interval_seconds": "not-a-number",
-			},
-		},
-	}
-	result := ValidateConfig(raw)
-	if result.Valid {
-		t.Error("expected invalid for non-numeric interval")
-	}
-}
-
 func TestValidateConfig_GuardInvalidAction(t *testing.T) {
 	raw := map[string]interface{}{
 		"guards": []interface{}{
@@ -721,22 +707,6 @@ func TestGetDefaultConfig_StatusLineDelimiter(t *testing.T) {
 	cfg := GetDefaultConfig()
 	if cfg.StatusLine.Delimiter != DefaultStatusDelimiter {
 		t.Errorf("expected delimiter=%q, got %q", DefaultStatusDelimiter, cfg.StatusLine.Delimiter)
-	}
-}
-
-func TestGetDefaultConfig_CoachingDefaults(t *testing.T) {
-	cfg := GetDefaultConfig()
-	if cfg.Coaching.Metacognition.Enabled {
-		t.Error("expected metacognition disabled by default")
-	}
-	if cfg.Coaching.Metacognition.IntervalSeconds != 300 {
-		t.Errorf("expected metacognition interval=300, got %d", cfg.Coaching.Metacognition.IntervalSeconds)
-	}
-	if cfg.Coaching.BuilderTrap.Thresholds.Yellow != 30 {
-		t.Errorf("expected builderTrap yellow=30, got %d", cfg.Coaching.BuilderTrap.Thresholds.Yellow)
-	}
-	if cfg.Coaching.Communication.Tone != "gentle" {
-		t.Errorf("expected communication tone=gentle, got %q", cfg.Coaching.Communication.Tone)
 	}
 }
 
@@ -914,10 +884,8 @@ func TestLoadConfig_GlobalConfigOnly(t *testing.T) {
 
 	globalConfig := `
 version: 1
-coaching:
-  metacognition:
-    enabled: true
-    interval_seconds: 600
+analytics:
+  enabled: false
 `
 	if err := os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(globalConfig), 0o644); err != nil {
 		t.Fatal(err)
@@ -932,11 +900,8 @@ coaching:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cfg.Coaching.Metacognition.Enabled {
-		t.Error("expected metacognition.enabled=true from global config")
-	}
-	if cfg.Coaching.Metacognition.IntervalSeconds != 600 {
-		t.Errorf("expected interval_seconds=600, got %d", cfg.Coaching.Metacognition.IntervalSeconds)
+	if cfg.Analytics.Enabled {
+		t.Error("expected analytics.enabled=false from global config")
 	}
 }
 
@@ -953,10 +918,6 @@ version: 1
 analytics:
   enabled: true
   db_path: "/global/db.sqlite"
-coaching:
-  metacognition:
-    enabled: false
-    interval_seconds: 300
 `
 	if err := os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(globalConfig), 0o644); err != nil {
 		t.Fatal(err)
@@ -969,9 +930,6 @@ coaching:
 	projectConfig := `
 analytics:
   enabled: false
-coaching:
-  metacognition:
-    enabled: true
 `
 	if err := os.WriteFile(filepath.Join(projectDir, "hookwise.yaml"), []byte(projectConfig), 0o644); err != nil {
 		t.Fatal(err)
@@ -988,14 +946,6 @@ coaching:
 	// Global's db_path preserved (project didn't override it)
 	if cfg.Analytics.DBPath != "/global/db.sqlite" {
 		t.Errorf("expected global db_path preserved, got %q", cfg.Analytics.DBPath)
-	}
-	// Project overrides metacognition.enabled
-	if !cfg.Coaching.Metacognition.Enabled {
-		t.Error("expected metacognition.enabled=true from project override")
-	}
-	// Global interval_seconds preserved
-	if cfg.Coaching.Metacognition.IntervalSeconds != 300 {
-		t.Errorf("expected interval_seconds=300 from global, got %d", cfg.Coaching.Metacognition.IntervalSeconds)
 	}
 }
 
@@ -1181,10 +1131,6 @@ version: 1
 settings:
   log_level: warn
   handler_timeout_seconds: 30
-coaching:
-  metacognition:
-    enabled: false
-    interval_seconds: 300
 `
 	if err := os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(globalConfig), 0o644); err != nil {
 		t.Fatal(err)
@@ -1206,9 +1152,6 @@ sounds:
 	// Project config overrides with env vars and includes
 	projectDir := filepath.Join(tmpDir, "project")
 	projectConfig := `
-coaching:
-  metacognition:
-    enabled: true
 daemon:
   log_file: "${HOOKWISE_CUSTOM_LOG}"
 includes:
@@ -1227,14 +1170,6 @@ guards:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Project overrides global: metacognition enabled
-	if !cfg.Coaching.Metacognition.Enabled {
-		t.Error("expected metacognition enabled from project override")
-	}
-	// Global setting preserved: interval_seconds
-	if cfg.Coaching.Metacognition.IntervalSeconds != 300 {
-		t.Errorf("expected global interval preserved, got %d", cfg.Coaching.Metacognition.IntervalSeconds)
-	}
 	// Global log_level preserved (project didn't override)
 	if cfg.Settings.LogLevel != "warn" {
 		t.Errorf("expected log_level=warn from global, got %q", cfg.Settings.LogLevel)
@@ -1688,9 +1623,6 @@ version: 1
 	}
 	if cfg.Settings.LogLevel != defaults.Settings.LogLevel {
 		t.Errorf("expected default log_level=%q, got %q", defaults.Settings.LogLevel, cfg.Settings.LogLevel)
-	}
-	if cfg.Coaching.Communication.Tone != defaults.Coaching.Communication.Tone {
-		t.Errorf("expected default tone=%q, got %q", defaults.Coaching.Communication.Tone, cfg.Coaching.Communication.Tone)
 	}
 	if cfg.Feeds.Project.IntervalSeconds != defaults.Feeds.Project.IntervalSeconds {
 		t.Errorf("expected default project interval=%d, got %d", defaults.Feeds.Project.IntervalSeconds, cfg.Feeds.Project.IntervalSeconds)

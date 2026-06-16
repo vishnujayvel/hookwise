@@ -38,7 +38,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:     "hookwise",
 		Short:   "Config-driven hook framework for Claude Code",
-		Long:    "Hookwise provides guards, analytics, coaching, feeds, and an interactive TUI for Claude Code sessions.",
+		Long:    "Hookwise provides guards, analytics, feeds, and an interactive TUI for Claude Code sessions.",
 		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, buildDate),
 	}
 

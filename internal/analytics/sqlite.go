@@ -265,19 +265,6 @@ var schemaDDL = []string{
 		ttl_seconds INTEGER NOT NULL
 	)`,
 
-	`CREATE TABLE IF NOT EXISTS coaching_state (
-		id INTEGER PRIMARY KEY DEFAULT 1,
-		last_prompt_at TEXT,
-		prompt_history TEXT,
-		current_mode TEXT,
-		mode_started_at TEXT,
-		tooling_minutes REAL DEFAULT 0,
-		alert_level TEXT DEFAULT 'none',
-		today_date TEXT,
-		practice_count INTEGER DEFAULT 0,
-		last_large_change TEXT
-	)`,
-
 	`CREATE TABLE IF NOT EXISTS cost_state (
 		id INTEGER PRIMARY KEY DEFAULT 1,
 		daily_costs TEXT,

@@ -12,16 +12,14 @@ import (
 
 // Producer name constants used in the notifications table.
 const (
-	ProducerBudget     = "budget"
-	ProducerGuard      = "guard"
-	ProducerCoaching   = "coaching"
+	ProducerBudget = "budget"
+	ProducerGuard  = "guard"
 )
 
 // Notification type constants.
 const (
-	TypeBudgetThreshold     = "budget_threshold"
-	TypeGuardEffectiveness  = "guard_effectiveness"
-	TypeCoachingPrompt      = "coaching_prompt"
+	TypeBudgetThreshold    = "budget_threshold"
+	TypeGuardEffectiveness = "guard_effectiveness"
 )
 
 // ---------------------------------------------------------------------------
@@ -30,16 +28,13 @@ const (
 
 // RunAll runs every notification producer best-effort. A failure in one does
 // NOT stop the others; all errors are joined and returned (callers log + ignore
-// per ARCH-1). costState/coachState may be nil (producers no-op on nil).
-func RunAll(ctx context.Context, ns *NotificationService, db *analytics.DB, costState *analytics.CostState, coachState *analytics.CoachingState, budgetThreshold float64) error {
+// per ARCH-1). costState may be nil (producers no-op on nil).
+func RunAll(ctx context.Context, ns *NotificationService, db *analytics.DB, costState *analytics.CostState, budgetThreshold float64) error {
 	var errs []error
 	if err := CheckBudget(ctx, ns, costState, budgetThreshold); err != nil {
 		errs = append(errs, err)
 	}
 	if err := CheckGuardEffectiveness(ctx, ns, db); err != nil {
-		errs = append(errs, err)
-	}
-	if err := CheckCoaching(ctx, ns, coachState); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
@@ -165,68 +160,6 @@ func queryGuardBlocks(ctx context.Context, db *analytics.DB, today string) ([]Gu
 		summaries = append(summaries, s)
 	}
 	return summaries, rows.Err()
-}
-
-// ---------------------------------------------------------------------------
-// Coaching prompt notifications (R12.3)
-// ---------------------------------------------------------------------------
-
-// CheckCoaching checks coaching state and creates a notification if the
-// alert level has changed to something actionable (yellow, orange, or red).
-//
-// It avoids duplicate notifications by checking whether a coaching notification
-// with the same alert level was already created today.
-func CheckCoaching(ctx context.Context, ns *NotificationService, coachState *analytics.CoachingState) error {
-	if coachState == nil {
-		return nil
-	}
-
-	// Only notify on elevated alert levels.
-	alertLevel := coachState.AlertLevel
-	if alertLevel == "none" || alertLevel == "" {
-		return nil
-	}
-
-	today := time.Now().UTC().Format("2006-01-02")
-
-	// Deduplicate: check if we already sent a coaching notification
-	// with this alert level today.
-	alreadyNotified, err := hasNotificationTodayWithContent(ctx, ns, ProducerCoaching, TypeCoachingPrompt, today, alertLevel)
-	if err != nil {
-		return fmt.Errorf("notifications: check coaching: %w", err)
-	}
-	if alreadyNotified {
-		return nil
-	}
-
-	content := formatCoachingContent(coachState)
-	return ns.Create(ctx, ProducerCoaching, TypeCoachingPrompt, content)
-}
-
-// formatCoachingContent builds a human-readable coaching notification.
-func formatCoachingContent(state *analytics.CoachingState) string {
-	switch state.AlertLevel {
-	case "yellow":
-		return fmt.Sprintf(
-			"Coaching alert (yellow): %.0f minutes of tooling detected in %s mode. Consider taking a step back.",
-			state.ToolingMinutes, state.CurrentMode,
-		)
-	case "orange":
-		return fmt.Sprintf(
-			"Coaching alert (orange): %.0f minutes of heavy tooling in %s mode. Time for a review pause.",
-			state.ToolingMinutes, state.CurrentMode,
-		)
-	case "red":
-		return fmt.Sprintf(
-			"Coaching alert (red): %.0f minutes of continuous tooling in %s mode. Strongly recommend stopping to review.",
-			state.ToolingMinutes, state.CurrentMode,
-		)
-	default:
-		return fmt.Sprintf(
-			"Coaching alert (%s): current mode is %s with %.0f tooling minutes.",
-			state.AlertLevel, state.CurrentMode, state.ToolingMinutes,
-		)
-	}
 }
 
 // ---------------------------------------------------------------------------
