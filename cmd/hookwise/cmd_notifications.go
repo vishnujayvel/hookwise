@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/vishnujayvel/hookwise/internal/analytics"
+	"github.com/vishnujayvel/hookwise/internal/core"
 	"github.com/vishnujayvel/hookwise/internal/notifications"
 )
 
@@ -27,14 +29,22 @@ surfaced via the status line or this command.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to ~/.hookwise/analytics.db)")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to config analytics.db_path / ~/.hookwise/analytics.db)")
 	cmd.Flags().IntVar(&limit, "limit", 20, "Maximum number of notifications to show")
 
 	return cmd
 }
 
 func runNotifications(cmd *cobra.Command, dataDir string, limit int) error {
-	db, err := analytics.Open(dataDir)
+	// Load config the same way the writer (dispatch) does so reader and writer
+	// agree on the DB path (ARCH-1: never hard-fail on a missing/broken config).
+	cwd, _ := os.Getwd()
+	config, err := core.LoadConfig(cwd)
+	if err != nil {
+		config = core.GetDefaultConfig()
+	}
+
+	db, err := analytics.Open(resolveAnalyticsDBPath(dataDir, config))
 	if err != nil {
 		return fmt.Errorf("failed to open analytics DB: %w", err)
 	}
