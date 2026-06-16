@@ -72,6 +72,40 @@ func TestHasNotificationTodayWithContent_BackslashToolName(t *testing.T) {
 	assert.True(t, found, "dedup must match a tool name containing a literal backslash")
 }
 
+// TestHasNotificationTodayWithContent_PercentToolName completes the LIKE-escape
+// trio: sibling tests cover `_` and `\`, but the `%` branch of escapeLIKE was
+// untested even though its doc comment claims to escape `%`. A literal `%` in
+// the dedup substring must be escaped so SQLite treats it as a literal, not a
+// wildcard. If the `%` escape were dropped, dedup substrings would turn into
+// wildcards, producing false-positive matches that SILENTLY SUPPRESS legitimate
+// notifications. This test matches the row with a literal-`%` tool name AND
+// proves the discriminating negative that only fails under wildcard behaviour.
+func TestHasNotificationTodayWithContent_PercentToolName(t *testing.T) {
+	ns, _, cleanup := testService(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// A tool name containing a literal percent sign must match its own row.
+	tool := "build%cache"
+	content := `Guard rule for "` + tool + `" triggered 8 times today`
+	require.NoError(t, ns.Create(ctx, ProducerGuard, TypeGuardEffectiveness, content))
+	today := storedDay(t, ns)
+
+	found, err := hasNotificationTodayWithContent(ctx, ns, ProducerGuard, TypeGuardEffectiveness, today, tool)
+	require.NoError(t, err)
+	assert.True(t, found, "dedup must match a tool name containing a literal percent sign")
+
+	// Discriminating negative: "build%che" only matches the stored "build%cache"
+	// if `%` is treated as a SQL wildcard (build…che, where "che" falls inside
+	// "cache"). With `%` correctly escaped it requires the literal "build%che",
+	// which is absent -> no false-positive dedup. This assertion is what fails if
+	// the `%` escape line is removed from escapeLIKE.
+	wildcard, err := hasNotificationTodayWithContent(ctx, ns, ProducerGuard, TypeGuardEffectiveness, today, "build%che")
+	require.NoError(t, err)
+	assert.False(t, wildcard, "an unescaped %-wildcard must not produce a false-positive dedup match")
+}
+
 // TestCheckGuardEffectiveness_DeduplicatesUnderscoreTool is the user-facing
 // proof: running the producer twice for an MCP-style tool with >=5 blocks must
 // create exactly ONE notification, not a duplicate on every run. The assertion
