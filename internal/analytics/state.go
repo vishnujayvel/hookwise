@@ -34,14 +34,31 @@ func defaultCostState() *CostState {
 	}
 }
 
+// costStateSelectSQL reads the singleton cost_state row (id=1). Shared by the
+// pooled ReadCostState and the transaction-bound UpdateCostState so both issue
+// an identical query.
+const costStateSelectSQL = `SELECT daily_costs, session_costs, today, total_today
+	 FROM cost_state WHERE id = 1`
+
+// costStateExecer is satisfied by *sql.DB and *sql.Conn, letting writeCostState
+// run either on the pool (WriteCostState) or inside a pinned transaction
+// (UpdateCostState).
+type costStateExecer interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+}
+
 // ReadCostState loads the singleton cost state from SQLite.
 // If no row exists, it returns a default state with today's date.
 // If the stored date differs from today, TotalToday is reset to 0.
 func (d *DB) ReadCostState(ctx context.Context) (*CostState, error) {
-	row := d.QueryRow(ctx,
-		`SELECT daily_costs, session_costs, today, total_today
-		 FROM cost_state WHERE id = 1`)
+	return scanCostStateRow(d.QueryRow(ctx, costStateSelectSQL))
+}
 
+// scanCostStateRow scans a single cost_state row (or applies defaults when the
+// row is absent) and performs the date-boundary reset. Shared by ReadCostState
+// (pooled) and UpdateCostState (transaction-bound) so both observe identical
+// parse and reset semantics.
+func scanCostStateRow(row *sql.Row) (*CostState, error) {
 	var (
 		dailyCostsJSON   sql.NullString
 		sessionCostsJSON sql.NullString
@@ -93,6 +110,12 @@ func (d *DB) ReadCostState(ctx context.Context) (*CostState, error) {
 
 // WriteCostState persists the cost state to the singleton row (id=1).
 func (d *DB) WriteCostState(ctx context.Context, state *CostState) error {
+	return writeCostState(ctx, d.db, state)
+}
+
+// writeCostState marshals and REPLACEs the singleton cost_state row using the
+// given execer (the pool or a transaction-bound connection).
+func writeCostState(ctx context.Context, ex costStateExecer, state *CostState) error {
 	dailyCostsJSON, err := json.Marshal(state.DailyCosts)
 	if err != nil {
 		return fmt.Errorf("analytics: marshal daily_costs: %w", err)
@@ -103,7 +126,7 @@ func (d *DB) WriteCostState(ctx context.Context, state *CostState) error {
 		return fmt.Errorf("analytics: marshal session_costs: %w", err)
 	}
 
-	_, err = d.Exec(ctx,
+	_, err = ex.ExecContext(ctx,
 		`REPLACE INTO cost_state
 		 (id, daily_costs, session_costs, today, total_today)
 		 VALUES (1, ?, ?, ?, ?)`,
@@ -112,6 +135,55 @@ func (d *DB) WriteCostState(ctx context.Context, state *CostState) error {
 	if err != nil {
 		return fmt.Errorf("analytics: write cost_state: %w", err)
 	}
+	return nil
+}
+
+// UpdateCostState atomically reads, mutates, and persists the singleton cost
+// state inside a single BEGIN IMMEDIATE transaction on a dedicated connection.
+//
+// Each `hookwise dispatch` runs in its own OS process with its own connection
+// to the shared WAL database, so a plain Read→mutate→Write is a cross-process
+// lost-update race: two Stop events can both read the same TotalToday and the
+// second writer clobbers the first. BEGIN IMMEDIATE takes the write lock at
+// transaction start, so a concurrent updater blocks (up to busy_timeout) and
+// then reads the already-committed state instead of a stale snapshot.
+//
+// A dedicated *sql.Conn is required: under SetMaxOpenConns(1) the pooled
+// helpers would deadlock against a connection this method already holds.
+func (d *DB) UpdateCostState(ctx context.Context, mutate func(*CostState)) error {
+	conn, err := d.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("analytics: cost_state conn: %w", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return fmt.Errorf("analytics: cost_state begin: %w", err)
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			// Best-effort rollback; the deferred Close also releases the lock.
+			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		}
+	}()
+
+	state, err := scanCostStateRow(conn.QueryRowContext(ctx, costStateSelectSQL))
+	if err != nil {
+		return err
+	}
+
+	mutate(state)
+
+	if err := writeCostState(ctx, conn, state); err != nil {
+		return err
+	}
+
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return fmt.Errorf("analytics: cost_state commit: %w", err)
+	}
+	committed = true
 	return nil
 }
 
