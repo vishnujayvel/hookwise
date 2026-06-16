@@ -213,6 +213,29 @@ func renderHookFinding(w io.Writer, f hooks.Finding) {
 	}
 }
 
+// knownBuiltinFeeds is the canonical list of feed names that have a Go producer.
+// Mirrors the cases in getFeedInterval's switch statement.
+var knownBuiltinFeeds = []string{"project", "news", "calendar", "weather", "memories", "insights"}
+
+// isKnownFeed returns true if feedName corresponds to a built-in producer or to
+// a custom feed declared in cfg. Unknown orphan files (written by old versions or
+// by the Python TUI) return false and should be silently skipped.
+func isKnownFeed(feedName string, cfg *core.HooksConfig) bool {
+	for _, b := range knownBuiltinFeeds {
+		if feedName == b {
+			return true
+		}
+	}
+	if cfg != nil {
+		for _, c := range cfg.Feeds.Custom {
+			if feedName == c.Name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // checkFeedHealth reads feed cache files and reports placeholder/stale feeds.
 // Returns the number of warnings emitted.
 func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
@@ -232,6 +255,11 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 			continue
 		}
 		feedName := strings.TrimSuffix(base, ".json")
+		// Skip orphan cache files that have no Go producer and are not in the
+		// config's custom feeds. Only known feeds produce actionable diagnostics.
+		if !isKnownFeed(feedName, cfg) {
+			continue
+		}
 
 		raw, err := os.ReadFile(f)
 		if err != nil {
