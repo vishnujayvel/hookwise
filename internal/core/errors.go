@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -84,6 +85,33 @@ func NewAnalyticsError(msg string) *AnalyticsError {
 
 // --- Structured Logging via slog ---
 
+// maxLogBytes is the log file size threshold (10 MB) that triggers rotation.
+const maxLogBytes int64 = 10 * 1024 * 1024
+
+// logLevelFromEnv returns slog.LevelDebug if HOOKWISE_LOG_LEVEL == "debug"
+// (case-insensitive), otherwise slog.LevelInfo.
+func logLevelFromEnv() slog.Level {
+	if strings.EqualFold(os.Getenv("HOOKWISE_LOG_LEVEL"), "debug") {
+		return slog.LevelDebug
+	}
+	return slog.LevelInfo
+}
+
+// rotateLogIfNeeded renames logPath to logPath+".1" (overwriting any existing
+// backup) when the file exists and its size exceeds maxBytes. Errors are
+// swallowed — logging setup must never crash dispatch (ARCH-1 fail-open).
+func rotateLogIfNeeded(logPath string, maxBytes int64) {
+	info, err := os.Stat(logPath)
+	if err != nil {
+		// File does not exist or is inaccessible — nothing to rotate.
+		return
+	}
+	if info.Size() > maxBytes {
+		// Best-effort: ignore rename errors.
+		_ = os.Rename(logPath, logPath+".1")
+	}
+}
+
 var (
 	logger     *slog.Logger
 	loggerOnce sync.Once
@@ -99,12 +127,13 @@ func Logger() *slog.Logger {
 			return
 		}
 		logPath := filepath.Join(logDir, "hookwise.log")
+		rotateLogIfNeeded(logPath, maxLogBytes)
 		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
 			logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 			return
 		}
-		logger = slog.New(slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		logger = slog.New(slog.NewJSONHandler(f, &slog.HandlerOptions{Level: logLevelFromEnv()}))
 	})
 	return logger
 }
