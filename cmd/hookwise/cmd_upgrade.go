@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/vishnujayvel/hookwise/internal/core"
 	"github.com/vishnujayvel/hookwise/internal/migration"
 )
 
@@ -33,9 +34,20 @@ Original files are never modified (non-destructive).`,
 				}
 			}
 
+			// Resolve the analytics DB path the way the writer (dispatch) and
+			// other readers (stats/doctor) do, so upgrade imports into the SAME
+			// DB they use. Without this, a custom analytics.db_path is ignored
+			// and migrated data lands in the default DB that dispatch never
+			// touches -- leaving `hookwise stats` at $0 after upgrade (#109).
+			// ARCH-1: never hard-fail on a missing/broken config.
+			config, err := core.LoadConfig(projectDir)
+			if err != nil {
+				config = core.GetDefaultConfig()
+			}
+
 			result := migration.Run(migration.MigrationOpts{
 				DryRun:      dryRun,
-				DoltDataDir: dataDir,
+				DoltDataDir: resolveAnalyticsDBPath(dataDir, config),
 				ProjectDir:  projectDir,
 				Writer:      cmd.OutOrStdout(),
 			})
