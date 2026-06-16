@@ -26,12 +26,11 @@ TERMINAL_SIZE = (80, 24)
 TAB_SPECS: list[tuple[str, tuple[str, ...]]] = [
     ("dashboard", ()),
     ("guards", ("2",)),
-    ("coaching", ("3",)),
-    ("analytics", ("4",)),
-    ("feeds", ("5",)),
-    ("insights", ("6",)),
-    ("recipes", ("7",)),
-    ("status", ("8",)),
+    ("analytics", ("3",)),
+    ("feeds", ("4",)),
+    ("insights", ("5",)),
+    ("recipes", ("6",)),
+    ("status", ("7",)),
 ]
 
 

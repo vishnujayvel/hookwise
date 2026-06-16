@@ -23,12 +23,6 @@ FEATURES = [
         "config_path": None,  # Always on if guards list non-empty
     },
     {
-        "key": "coaching",
-        "title": "Coaching",
-        "description": "AI-powered coding guidance — metacognition, builder's trap, and communication coaching",
-        "config_path": None,  # Check sub-features
-    },
-    {
         "key": "feeds",
         "title": "Feeds",
         "description": "Live data from calendar, news, git, and usage insights — powered by the background daemon",
@@ -68,14 +62,6 @@ def _is_enabled(config: dict, feature: dict) -> bool:
         if key == "guards":
             guards = config.get("guards", [])
             return isinstance(guards, list) and len(guards) > 0
-        if key == "coaching":
-            coaching = config.get("coaching", {})
-            if not isinstance(coaching, dict):
-                return False
-            for sub in coaching.values():
-                if isinstance(sub, dict) and sub.get("enabled"):
-                    return True
-            return False
         if key == "feeds":
             feeds = config.get("feeds", {})
             if not isinstance(feeds, dict):
@@ -100,17 +86,6 @@ def _get_detail(config: dict, feature: dict) -> str:
         guards = config.get("guards", [])
         count = len(guards) if isinstance(guards, list) else 0
         return f"{count} guard rule{'s' if count != 1 else ''} configured"
-    if key == "coaching":
-        coaching = config.get("coaching", {})
-        if not isinstance(coaching, dict):
-            return ""
-        active = [
-            name for name, sub in coaching.items()
-            if isinstance(sub, dict) and sub.get("enabled")
-        ]
-        if active:
-            return f"Active: {', '.join(active)}"
-        return "All coaching features disabled"
     if key == "feeds":
         feeds = config.get("feeds", {})
         if not isinstance(feeds, dict):
