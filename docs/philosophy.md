@@ -34,7 +34,7 @@ Graceful degradation is a design practice, not a philosophical argument against 
 
 hookwise is a developer tool platform. Developer tool platforms have databases, background daemons, and managed processes. This is normal and expected.
 
-hookwise already runs a background daemon for feeds, manages PID files, bundles better-sqlite3 as a native addon, and ships a Python TUI package. The bar for adding infrastructure should be: "Does this solve a real problem for users?" Not: "Is this zero-config?" and not: "Could this possibly go down?"
+hookwise already runs a background daemon for feeds, manages PID files, embeds a pure-Go SQLite engine (modernc.org/sqlite, CGO-free), and ships a Python TUI package. The bar for adding infrastructure should be: "Does this solve a real problem for users?" Not: "Is this zero-config?" and not: "Could this possibly go down?"
 
 What matters is that infrastructure is invisible to the user when it works, and diagnostic when it does not.
 
