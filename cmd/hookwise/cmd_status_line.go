@@ -92,8 +92,8 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	// from THIS invocation's directory.
 	feedCache = overlayLiveProject(feedCache, projectDir)
 
-	// Load today's daily summary from the analytics DB for session/cost segments.
-	// Fail-open: nil summary → segments fall back to "--".
+	// Load today's daily summary from the analytics DB for the cost segment.
+	// Fail-open: nil summary → the segment is omitted.
 	var dailySummary *analytics.DailySummaryResult
 	if db, err := analytics.Open(config.Analytics.DBPath); err == nil {
 		defer db.Close()
@@ -234,11 +234,6 @@ func renderSegment(seg core.SegmentConfig, feedCache map[string]interface{}, sum
 // real data from the feed cache and analytics DB daily summary when available.
 func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary *analytics.DailySummaryResult) string {
 	switch name {
-	case "session":
-		if summary != nil && summary.TotalSessions > 0 {
-			return ansiBold + ansiGreen + fmt.Sprintf("session: %d", summary.TotalSessions) + ansiReset
-		}
-		return "" // No data — omit segment instead of showing "--"
 	case "cost":
 		if summary != nil && summary.EstimatedCostUSD > 0 {
 			return ansiYellow + fmt.Sprintf("cost: $%.2f", summary.EstimatedCostUSD) + ansiReset

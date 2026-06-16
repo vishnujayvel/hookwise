@@ -13,7 +13,6 @@
 | Segment | Shows |
 |---------|-------|
 | `clock` | Current time |
-| `session` | Duration + tool count |
 | `cost` | Session cost estimate |
 | `builder_trap` | Alert level + nudge message |
 | `mantra` | Rotating motivational prompt |
@@ -60,7 +59,6 @@
 status_line:
   enabled: true
   segments:
-    - session
     - builder_trap
     - cost
     - project

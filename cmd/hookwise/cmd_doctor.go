@@ -314,8 +314,8 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 			if name == "" {
 				continue
 			}
-			// session and cost are computed from analytics, not feed-backed.
-			if name == "session" || name == "cost" {
+			// cost is computed from analytics, not feed-backed.
+			if name == "cost" {
 				continue
 			}
 			feedSegments++

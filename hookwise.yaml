@@ -21,7 +21,6 @@ feeds:
 status_line:
   enabled: true
   segments:
-    - session
     - cost
     - weather
     - project
