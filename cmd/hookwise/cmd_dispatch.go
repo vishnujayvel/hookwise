@@ -223,6 +223,13 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 						state.TotalToday = 0
 					}
 					state.DailyCosts[today] += delta
+					// Mirror the non-negative floor: TotalToday and DailyCosts[today]
+					// are redundant views of the same daily total, so a negative delta
+					// (lowered Rates override or truncated transcript) must clamp both
+					// identically — clamping only one lets them diverge permanently.
+					if state.DailyCosts[today] < 0 {
+						state.DailyCosts[today] = 0
+					}
 					state.Today = today
 				}); uerr != nil {
 					core.Logger().Error("cost: update cost_state", "error", uerr)
