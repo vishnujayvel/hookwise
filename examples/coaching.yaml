@@ -55,5 +55,4 @@ coaching:
 status_line:
   enabled: true
   segments:
-    - session        # session duration
     - builder_trap   # builder trap status indicator

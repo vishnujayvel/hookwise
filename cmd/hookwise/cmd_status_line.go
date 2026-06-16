@@ -92,8 +92,8 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	// from THIS invocation's directory.
 	feedCache = overlayLiveProject(feedCache, projectDir)
 
-	// Load today's daily summary from the analytics DB for session/cost segments.
-	// Fail-open: nil summary → segments fall back to "--".
+	// Load today's daily summary from the analytics DB for the cost segment.
+	// Fail-open: nil summary → the segment is omitted.
 	var dailySummary *analytics.DailySummaryResult
 	if db, err := analytics.Open(config.Analytics.DBPath); err == nil {
 		defer db.Close()
@@ -230,15 +230,21 @@ func renderSegment(seg core.SegmentConfig, feedCache map[string]interface{}, sum
 	return ""
 }
 
+// removedSegments are builtins that used to exist but were deliberately removed.
+// They render nothing — NOT the gray unknown-segment fallback below — so a config
+// carried over from before the removal doesn't surface a dead label.
+//   - "session": daily session-count segment, removed in #129.
+var removedSegments = map[string]string{
+	"session": "#129",
+}
+
 // renderBuiltinSegment renders a known builtin segment by name, reading
 // real data from the feed cache and analytics DB daily summary when available.
 func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary *analytics.DailySummaryResult) string {
+	if _, removed := removedSegments[name]; removed {
+		return ""
+	}
 	switch name {
-	case "session":
-		if summary != nil && summary.TotalSessions > 0 {
-			return ansiBold + ansiGreen + fmt.Sprintf("session: %d", summary.TotalSessions) + ansiReset
-		}
-		return "" // No data — omit segment instead of showing "--"
 	case "cost":
 		if summary != nil && summary.EstimatedCostUSD > 0 {
 			return ansiYellow + fmt.Sprintf("cost: $%.2f", summary.EstimatedCostUSD) + ansiReset

@@ -88,7 +88,6 @@ status_line:
   enabled: true
   segments:
     - ai_ratio       # AI vs human authorship percentage
-    - session        # session duration and tool call count
     - builder_trap   # builder trap status indicator
     - cost           # current cost vs daily budget
 

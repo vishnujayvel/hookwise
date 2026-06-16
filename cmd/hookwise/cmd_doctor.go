@@ -314,8 +314,13 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 			if name == "" {
 				continue
 			}
-			// session and cost are computed from analytics, not feed-backed.
-			if name == "session" || name == "cost" {
+			// Removed builtins (e.g. session, #129) are not feed-backed — a stray
+			// config entry must not produce a misleading "feed:<name>" warning.
+			if _, removed := removedSegments[name]; removed {
+				continue
+			}
+			// cost is computed from analytics, not feed-backed.
+			if name == "cost" {
 				continue
 			}
 			feedSegments++

@@ -263,8 +263,8 @@ func TestStatusLineEnabled(t *testing.T) {
 status_line:
   enabled: true
   segments:
-    - builtin: session
     - builtin: cost
+    - builtin: project
 `
 	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
 	os.WriteFile(configPath, []byte(configYAML), 0o644)
@@ -425,7 +425,7 @@ func TestRenderBuiltinSegments(t *testing.T) {
 	emptyCache := map[string]interface{}{}
 
 	// Segments with no data should return empty (omitted from output).
-	noDataSegments := []string{"session", "cost", "project", "calendar", "weather"}
+	noDataSegments := []string{"cost", "project", "calendar", "weather"}
 	for _, name := range noDataSegments {
 		result := renderBuiltinSegment(name, emptyCache, nil)
 		if result != "" {
@@ -437,6 +437,18 @@ func TestRenderBuiltinSegments(t *testing.T) {
 	unknown := renderBuiltinSegment("unknown_segment", emptyCache, nil)
 	if unknown == "" {
 		t.Error("unknown builtin segment should still render")
+	}
+}
+
+// TestSessionSegmentRemoved verifies the daily-session-count "session" segment
+// is gone (#129): even with a non-zero TotalSessions, it must render NOTHING —
+// not the count, and not the gray unknown-segment fallback. A config carried
+// over from before the removal must not surface a dead "session" label.
+func TestSessionSegmentRemoved(t *testing.T) {
+	summary := &analytics.DailySummaryResult{TotalSessions: 5}
+	result := renderBuiltinSegment("session", map[string]interface{}{}, summary)
+	if result != "" {
+		t.Errorf("removed session segment must render empty, got: %q", stripANSI(result))
 	}
 }
 
@@ -930,26 +942,6 @@ func TestStatusLinePlaceholderFallback(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 21. Session segment with daily summary
-// ---------------------------------------------------------------------------
-
-func TestStatusLineSessionSegment(t *testing.T) {
-	summary := &analytics.DailySummaryResult{TotalSessions: 3}
-	result := renderBuiltinSegment("session", nil, summary)
-	stripped := stripANSI(result)
-	if !strings.Contains(stripped, "session: 3") {
-		t.Errorf("session segment should show count, got: %s", stripped)
-	}
-}
-
-func TestStatusLineSessionSegmentNoSummary(t *testing.T) {
-	result := renderBuiltinSegment("session", nil, nil)
-	if result != "" {
-		t.Errorf("session segment without summary should return empty, got: %s", stripANSI(result))
-	}
-}
-
-// ---------------------------------------------------------------------------
 // 22. Cost segment with daily summary
 // ---------------------------------------------------------------------------
 
@@ -1309,7 +1301,6 @@ func TestStatusLineMultiLine(t *testing.T) {
 status_line:
   enabled: true
   segments:
-    - session
     - cost
 `
 	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
@@ -1513,7 +1504,6 @@ func TestDoctorFeedHealthSegmentCoverage(t *testing.T) {
 status_line:
   enabled: true
   segments:
-    - session
     - weather
     - project
     - calendar
