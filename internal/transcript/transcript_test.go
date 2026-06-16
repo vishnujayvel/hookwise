@@ -216,6 +216,38 @@ func TestVeryLongLine(t *testing.T) {
 	assert.Equal(t, int64(1), u.CacheCreationTokens)
 }
 
+// TestLineOverBufferLimitNotFatal verifies that a single line exceeding the scanner's
+// buffer cap does NOT abort the whole scan. The two valid assistant lines before and
+// after the giant junk line must both be counted, and the call must return nil error.
+func TestLineOverBufferLimitNotFatal(t *testing.T) {
+	line1 := assistantLine("claude-opus-4-8", 10, 2, 0, 0)
+	giantJunk := strings.Repeat("x", 11*1024*1024) // 11 MiB of non-JSON junk, exceeds old 10 MiB cap
+	line3 := assistantLine("claude-sonnet-4-6", 20, 4, 0, 0)
+
+	f, err := os.CreateTemp(t.TempDir(), "overlimit_*.jsonl")
+	require.NoError(t, err)
+	_, err = fmt.Fprintf(f, "%s\n%s\n%s\n", line1, giantJunk, line3)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	result, err := transcript.SumUsage(f.Name())
+	require.NoError(t, err, "giant junk line must not abort the scan")
+
+	opus, ok := result["claude-opus-4-8"]
+	require.True(t, ok, "expected 'claude-opus-4-8' key")
+	assert.Equal(t, int64(10), opus.InputTokens)
+	assert.Equal(t, int64(2), opus.OutputTokens)
+	assert.Equal(t, int64(0), opus.CacheReadTokens)
+	assert.Equal(t, int64(0), opus.CacheCreationTokens)
+
+	sonnet, ok := result["claude-sonnet-4-6"]
+	require.True(t, ok, "expected 'claude-sonnet-4-6' key")
+	assert.Equal(t, int64(20), sonnet.InputTokens)
+	assert.Equal(t, int64(4), sonnet.OutputTokens)
+	assert.Equal(t, int64(0), sonnet.CacheReadTokens)
+	assert.Equal(t, int64(0), sonnet.CacheCreationTokens)
+}
+
 // TestResultTypeIsPricingUsage is a compile-time assertion that SumUsage returns map[string]pricing.Usage.
 // If the return type ever changes, this assignment will fail to compile.
 func TestResultTypeIsPricingUsage(t *testing.T) {
