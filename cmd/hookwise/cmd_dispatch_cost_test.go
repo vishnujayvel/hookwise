@@ -118,6 +118,63 @@ func TestRecordAnalytics_CostStop_Idempotent(t *testing.T) {
 		"TotalToday must NOT be doubled on second Stop (idempotency)")
 }
 
+// TestRecordAnalytics_CostStop_TranscriptGrows is the per-turn reality: Stop
+// fires once per turn against the SAME session whose transcript GROWS each turn.
+// The idempotent test only proves "same file twice => no change"; this proves
+// the stronger property the design depends on -- recompute-from-full-file plus a
+// delta against the prior stored cost yields the correct INCREMENT, never a
+// double-count of earlier turns. Turn 1 = $18, transcript doubles, turn 2 must
+// land at $36 total (delta +$18), not $54 (naive add of the full recompute) and
+// not $18 (no update).
+func TestRecordAnalytics_CostStop_TranscriptGrows(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, ".hookwise"))
+	dbPath := filepath.Join(tmpDir, "analytics.db")
+
+	transcriptPath := writeSonnetFixture(t) // one $18 assistant line
+	sid := "cost-test-session-grow"
+
+	db := openTestDB(t, dbPath)
+	a := analytics.NewAnalytics(db)
+	require.NoError(t, a.StartSession(context.Background(), sid, time.Now()))
+	db.Close()
+
+	costCfg := core.CostTrackingConfig{Enabled: true}
+	payload := core.HookPayload{SessionID: sid, TranscriptPath: transcriptPath}
+
+	// Turn 1: single line => $18.
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+
+	// The transcript grows by one more identical assistant line (another $18)
+	// before the next turn's Stop, exactly as a live session accumulates usage.
+	line := `{"type":"assistant","message":{"id":"msg_02","model":"claude-sonnet-4","role":"assistant","usage":{"input_tokens":1000000,"output_tokens":1000000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}},"timestamp":"2026-06-15T00:01:00Z"}`
+	f, err := os.OpenFile(transcriptPath, os.O_APPEND|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	_, err = f.WriteString(line + "\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	// Turn 2: two lines => $36 recomputed; delta +$18 applied.
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+
+	db = openTestDB(t, dbPath)
+	defer db.Close()
+
+	state, err := db.ReadCostState(context.Background())
+	require.NoError(t, err)
+	assert.InDelta(t, 2*expectedSonnetCost, state.TotalToday, 0.001,
+		"TotalToday must equal the full $36 recompute, not double-count turn 1")
+	assert.InDelta(t, 2*expectedSonnetCost, state.SessionCosts[sid], 0.001,
+		"SessionCosts[sid] must be overwritten with the full recomputed $36")
+
+	a = analytics.NewAnalytics(db)
+	today := time.Now().UTC().Format("2006-01-02")
+	summary, err := a.DailySummary(context.Background(), today)
+	require.NoError(t, err)
+	assert.InDelta(t, 2*expectedSonnetCost, summary.EstimatedCostUSD, 0.001,
+		"DailySummary.EstimatedCostUSD must reflect the grown-transcript recompute")
+}
+
 // TestRecordAnalytics_CostStop_Disabled verifies that when CostTracking.Enabled=false,
 // no cost is written and TotalToday stays 0.
 func TestRecordAnalytics_CostStop_Disabled(t *testing.T) {
