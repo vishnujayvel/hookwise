@@ -230,9 +230,20 @@ func renderSegment(seg core.SegmentConfig, feedCache map[string]interface{}, sum
 	return ""
 }
 
+// removedSegments are builtins that used to exist but were deliberately removed.
+// They render nothing — NOT the gray unknown-segment fallback below — so a config
+// carried over from before the removal doesn't surface a dead label.
+//   - "session": daily session-count segment, removed in #129.
+var removedSegments = map[string]string{
+	"session": "#129",
+}
+
 // renderBuiltinSegment renders a known builtin segment by name, reading
 // real data from the feed cache and analytics DB daily summary when available.
 func renderBuiltinSegment(name string, feedCache map[string]interface{}, summary *analytics.DailySummaryResult) string {
+	if _, removed := removedSegments[name]; removed {
+		return ""
+	}
 	switch name {
 	case "cost":
 		if summary != nil && summary.EstimatedCostUSD > 0 {

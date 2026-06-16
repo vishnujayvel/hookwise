@@ -441,14 +441,14 @@ func TestRenderBuiltinSegments(t *testing.T) {
 }
 
 // TestSessionSegmentRemoved verifies the daily-session-count "session" segment
-// is gone (#129): even with a non-zero TotalSessions, it must not render the
-// "session: N" count. The count was a daily aggregate, not per-session info,
-// and was confusing/low-value in the status line.
+// is gone (#129): even with a non-zero TotalSessions, it must render NOTHING —
+// not the count, and not the gray unknown-segment fallback. A config carried
+// over from before the removal must not surface a dead "session" label.
 func TestSessionSegmentRemoved(t *testing.T) {
 	summary := &analytics.DailySummaryResult{TotalSessions: 5}
-	result := stripANSI(renderBuiltinSegment("session", map[string]interface{}{}, summary))
-	if strings.Contains(result, "session:") {
-		t.Errorf("session segment must no longer render a count, got: %q", result)
+	result := renderBuiltinSegment("session", map[string]interface{}{}, summary)
+	if result != "" {
+		t.Errorf("removed session segment must render empty, got: %q", stripANSI(result))
 	}
 }
 
