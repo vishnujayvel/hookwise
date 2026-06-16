@@ -478,16 +478,20 @@ func TestStatusLineWithFeedCache(t *testing.T) {
 	}
 	writeJSONFile(t, filepath.Join(cacheDir, "weather.json"), weatherEnvelope)
 
-	// Write project feed cache with real data.
+	// Write a STALE project feed cache from a different repo. The status line
+	// must IGNORE this and derive project live from the cwd (#126).
 	projectEnvelope := map[string]interface{}{
 		"type":      "project",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]interface{}{
-			"name":   "hookwise",
-			"branch": "main",
+			"name":   "some-other-repo",
+			"branch": "stale-branch",
 		},
 	}
 	writeJSONFile(t, filepath.Join(cacheDir, "project.json"), projectEnvelope)
+
+	// Make the cwd (tmpDir) a real git repo so the live project segment renders.
+	gitInitRepoAt(t, tmpDir, "live-branch")
 
 	configYAML := `version: 1
 status_line:
@@ -514,12 +518,12 @@ status_line:
 		t.Errorf("weather segment should show description 'Clear', got: %s", stripped)
 	}
 
-	// Project should show name and branch from cache.
-	if !strings.Contains(stripped, "hookwise") {
-		t.Errorf("project segment should show project name, got: %s", stripped)
+	// Project should show the LIVE cwd repo's branch, not the stale cached one.
+	if !strings.Contains(stripped, "(live-branch)") {
+		t.Errorf("project segment should show the live branch, got: %s", stripped)
 	}
-	if !strings.Contains(stripped, "(main)") {
-		t.Errorf("project segment should show branch, got: %s", stripped)
+	if strings.Contains(stripped, "some-other-repo") || strings.Contains(stripped, "stale-branch") {
+		t.Errorf("project segment must not show the stale cached repo/branch, got: %s", stripped)
 	}
 }
 
