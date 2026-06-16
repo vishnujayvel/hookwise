@@ -175,6 +175,57 @@ func TestRecordAnalytics_CostStop_TranscriptGrows(t *testing.T) {
 		"DailySummary.EstimatedCostUSD must reflect the grown-transcript recompute")
 }
 
+// TestRecordAnalytics_CostStop_NegativeDelta verifies that when a session's
+// recomputed cost is LOWER than its previously stored SessionCosts (reachable
+// via a lowered CostTracking.Rates override between two Stops, or a truncated/
+// rotated transcript), the non-negative clamp is applied CONSISTENTLY: both
+// TotalToday and DailyCosts[today] floor at 0 and stay equal. The bug this guards
+// against: TotalToday was clamped while DailyCosts[today] was not, letting the two
+// redundant views of "today's total" diverge permanently (DailyCosts going
+// negative, so later increments dig out from a negative floor).
+func TestRecordAnalytics_CostStop_NegativeDelta(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, ".hookwise"))
+	dbPath := filepath.Join(tmpDir, "analytics.db")
+
+	transcriptPath := writeSonnetFixture(t) // recomputes to $18
+	sid := "cost-test-session-negdelta"
+	today := time.Now().Format("2006-01-02") // local date, matching the closure
+
+	// Pre-create the session and seed a cost state where this session is already
+	// recorded at $36 (higher than the $18 transcript will recompute to) while
+	// today's running totals sit at only $2 — so the -$18 delta drives TotalToday
+	// below zero and trips the clamp.
+	db := openTestDB(t, dbPath)
+	a := analytics.NewAnalytics(db)
+	require.NoError(t, a.StartSession(context.Background(), sid, time.Now()))
+	require.NoError(t, db.WriteCostState(context.Background(), &analytics.CostState{
+		DailyCosts:   map[string]float64{today: 2.0},
+		SessionCosts: map[string]float64{sid: 36.0},
+		Today:        today,
+		TotalToday:   2.0,
+	}))
+	db.Close()
+
+	costCfg := core.CostTrackingConfig{Enabled: true}
+	payload := core.HookPayload{SessionID: sid, TranscriptPath: transcriptPath}
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+
+	db = openTestDB(t, dbPath)
+	defer db.Close()
+
+	state, err := db.ReadCostState(context.Background())
+	require.NoError(t, err)
+	assert.InDelta(t, 0.0, state.TotalToday, 0.001,
+		"TotalToday must clamp to 0 on a negative delta")
+	assert.InDelta(t, 0.0, state.DailyCosts[today], 0.001,
+		"DailyCosts[today] must clamp to 0 too, not go negative")
+	assert.InDelta(t, state.TotalToday, state.DailyCosts[today], 0.001,
+		"TotalToday and DailyCosts[today] must stay equal (consistent daily total)")
+	assert.InDelta(t, expectedSonnetCost, state.SessionCosts[sid], 0.001,
+		"SessionCosts[sid] must be overwritten with the recomputed $18")
+}
+
 // TestRecordAnalytics_CostStop_Disabled verifies that when CostTracking.Enabled=false,
 // no cost is written and TotalToday stays 0.
 func TestRecordAnalytics_CostStop_Disabled(t *testing.T) {
