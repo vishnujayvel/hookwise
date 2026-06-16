@@ -11,7 +11,6 @@ from textual.widgets import Footer, Header, TabbedContent, TabPane
 
 from hookwise_tui.tabs.dashboard import DashboardTab
 from hookwise_tui.tabs.guards import GuardsTab
-from hookwise_tui.tabs.coaching import CoachingTab
 from hookwise_tui.tabs.analytics import AnalyticsTab
 from hookwise_tui.tabs.feeds import FeedsTab
 from hookwise_tui.tabs.insights import InsightsTab
@@ -40,12 +39,11 @@ class HookwiseTUI(App):
     BINDINGS = [
         Binding("1", "switch_tab('dashboard')", "Dashboard", show=True),
         Binding("2", "switch_tab('guards')", "Guards", show=True),
-        Binding("3", "switch_tab('coaching')", "Coaching", show=True),
-        Binding("4", "switch_tab('analytics')", "Analytics", show=True),
-        Binding("5", "switch_tab('feeds')", "Feeds", show=True),
-        Binding("6", "switch_tab('insights')", "Insights", show=True),
-        Binding("7", "switch_tab('recipes')", "Recipes", show=True),
-        Binding("8", "switch_tab('status')", "Status", show=True),
+        Binding("3", "switch_tab('analytics')", "Analytics", show=True),
+        Binding("4", "switch_tab('feeds')", "Feeds", show=True),
+        Binding("5", "switch_tab('insights')", "Insights", show=True),
+        Binding("6", "switch_tab('recipes')", "Recipes", show=True),
+        Binding("7", "switch_tab('status')", "Status", show=True),
         Binding("q", "quit", "Quit", show=True),
         Binding("w", "cycle_weather", "Weather", show=False),
     ]
@@ -75,7 +73,6 @@ class HookwiseTUI(App):
             with TabbedContent(
                 "Dashboard",
                 "Guards",
-                "Coaching",
                 "Analytics",
                 "Feeds",
                 "Insights",
@@ -87,8 +84,6 @@ class HookwiseTUI(App):
                     yield DashboardTab()
                 with TabPane("Guards", id="guards"):
                     yield GuardsTab()
-                with TabPane("Coaching", id="coaching"):
-                    yield CoachingTab()
                 with TabPane("Analytics", id="analytics"):
                     yield AnalyticsTab()
                 with TabPane("Feeds", id="feeds"):

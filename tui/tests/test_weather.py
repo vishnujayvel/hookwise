@@ -469,7 +469,7 @@ class TestAppWeatherIntegration:
             assert tabs.active == "dashboard"
             await pilot.press("2")
             assert tabs.active == "guards"
-            await pilot.press("8")
+            await pilot.press("7")
             assert tabs.active == "status"
 
     async def test_content_layer_exists(self):

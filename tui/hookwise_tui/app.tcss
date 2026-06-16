@@ -154,13 +154,6 @@ DataTable > .datatable--header {
     padding: 0 1;
 }
 
-/* Coaching feature explanation */
-.coaching-explanation {
-    color: $text-muted;
-    margin: 0 0 1 2;
-    text-style: italic;
-}
-
 /* Summary panel */
 .summary-panel {
     border: round $accent;
