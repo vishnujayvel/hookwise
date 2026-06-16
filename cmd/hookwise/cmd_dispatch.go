@@ -203,7 +203,11 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 				for model, u := range usageByModel {
 					sessionCost += pricing.ComputeWithRates(model, u, costCfg.Rates)
 				}
-				if state, serr := db.ReadCostState(ctx); serr == nil {
+				// Atomic read-modify-write: each dispatch is its own process
+				// sharing one WAL DB, so a plain Read→Write would lose updates
+				// when two Stop events race. UpdateCostState serializes via
+				// BEGIN IMMEDIATE (audit #6).
+				if uerr := db.UpdateCostState(ctx, func(state *analytics.CostState) {
 					today := now.Format("2006-01-02")
 					delta := sessionCost - state.SessionCosts[payload.SessionID]
 					state.SessionCosts[payload.SessionID] = sessionCost
@@ -213,11 +217,8 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 					}
 					state.DailyCosts[today] += delta
 					state.Today = today
-					if werr := db.WriteCostState(ctx, state); werr != nil {
-						core.Logger().Error("cost: write cost_state", "error", werr)
-					}
-				} else {
-					core.Logger().Warn("cost: read cost_state", "error", serr)
+				}); uerr != nil {
+					core.Logger().Error("cost: update cost_state", "error", uerr)
 				}
 			}
 		}

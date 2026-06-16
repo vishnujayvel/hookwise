@@ -3,8 +3,10 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -126,6 +128,64 @@ func TestCostState_EmptyMaps(t *testing.T) {
 	assert.NotNil(t, loaded.SessionCosts)
 	assert.Empty(t, loaded.DailyCosts)
 	assert.Empty(t, loaded.SessionCosts)
+}
+
+// TestUpdateCostState_ConcurrentNoLostUpdate simulates the cross-process race
+// (audit #6): two `hookwise dispatch` processes each open their own connection
+// to the SAME WAL database and run cost updates concurrently. A plain
+// Read→mutate→Write loses updates because both readers observe the same
+// snapshot; UpdateCostState must serialize via BEGIN IMMEDIATE so every
+// increment is preserved.
+func TestUpdateCostState_ConcurrentNoLostUpdate(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "hookwise-cost-race-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "analytics.db")
+
+	// Two independent handles to one file, mirroring two separate OS processes
+	// (each with SetMaxOpenConns(1)).
+	db1, err := Open(dbPath)
+	require.NoError(t, err)
+	defer db1.Close()
+	db2, err := Open(dbPath)
+	require.NoError(t, err)
+	defer db2.Close()
+
+	ctx := context.Background()
+	today := time.Now().Format("2006-01-02")
+
+	const opsPerHandle = 25
+	handles := []*DB{db1, db2}
+
+	var wg sync.WaitGroup
+	for h, db := range handles {
+		for i := 0; i < opsPerHandle; i++ {
+			wg.Add(1)
+			go func(db *DB, h, i int) {
+				defer wg.Done()
+				sessionID := fmt.Sprintf("h%d-op%d", h, i)
+				uerr := db.UpdateCostState(ctx, func(state *CostState) {
+					state.SessionCosts[sessionID] = 1.0
+					state.TotalToday += 1.0
+					state.DailyCosts[today] += 1.0
+					state.Today = today
+				})
+				assert.NoError(t, uerr)
+			}(db, h, i)
+		}
+	}
+	wg.Wait()
+
+	total := opsPerHandle * len(handles)
+	loaded, err := db1.ReadCostState(ctx)
+	require.NoError(t, err)
+	assert.InDelta(t, float64(total), loaded.TotalToday, 0.001,
+		"every concurrent increment must survive (no lost update)")
+	assert.InDelta(t, float64(total), loaded.DailyCosts[today], 0.001,
+		"daily total must equal the sum of all increments")
+	assert.Len(t, loaded.SessionCosts, total,
+		"every session's cost must be recorded")
 }
 
 // --- Feed Cache Tests ---
