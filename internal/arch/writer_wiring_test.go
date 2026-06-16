@@ -15,11 +15,7 @@ import (
 //
 // Entries are added deliberately, never to silence a freshly-introduced dead
 // writer. Each value is the tracking issue for wiring (or removing) it.
-var writeStateAllowlist = map[string]string{
-	// WriteCoachingState has only test callers: the coaching-state producer was
-	// not ported in the TS→Go rewrite. Tracked by the WRITER AUDIT.
-	"WriteCoachingState": "#99 — coaching-state producer not yet ported (readers-without-writers)",
-}
+var writeStateAllowlist = map[string]string{}
 
 // TestArch_WriteStateMethodsHaveNonTestCaller enforces the WRITER AUDIT (#99)
 // lesson: the TS→Go port shipped several "readers without writers" — Write*State

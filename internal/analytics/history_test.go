@@ -151,7 +151,7 @@ func TestListSnapshotInfos_RowCountsForAllTables(t *testing.T) {
 	require.Len(t, infos, 1)
 
 	wantTables := []string{
-		"agent_spans", "authorship_ledger", "coaching_state", "cost_state",
+		"agent_spans", "authorship_ledger", "cost_state",
 		"events", "feed_cache", "metacognition_logs", "notifications",
 		"schema_meta", "sessions",
 	}

@@ -43,7 +43,7 @@ func TestSnapshot_CreatesOpenableDBWithData(t *testing.T) {
 	// All ten schema tables must be present in the snapshot.
 	wantTables := []string{
 		"sessions", "events", "authorship_ledger", "metacognition_logs",
-		"agent_spans", "feed_cache", "coaching_state", "cost_state",
+		"agent_spans", "feed_cache", "cost_state",
 		"notifications", "schema_meta",
 	}
 	for _, tbl := range wantTables {

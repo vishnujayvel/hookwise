@@ -226,16 +226,6 @@ guards:
     reason: "External tool"
 analytics:
   enabled: true
-coaching:
-  metacognition:
-    enabled: true
-    interval_seconds: 300
-  builder_trap:
-    enabled: true
-    thresholds:
-      yellow: 30
-      orange: 60
-      red: 90
 feeds:
   pulse:
     enabled: true

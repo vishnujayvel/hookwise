@@ -116,9 +116,6 @@ func buildConfig(fc FixtureConfig) core.HooksConfig {
 	cfg.Guards = fc.Guards
 	// Disable analytics and other side-effect-producing features in contract tests.
 	cfg.Analytics.Enabled = false
-	cfg.Coaching.Metacognition.Enabled = false
-	cfg.Coaching.BuilderTrap.Enabled = false
-	cfg.Coaching.Communication.Enabled = false
 	cfg.Sounds.Enabled = false
 	cfg.StatusLine.Enabled = false
 	cfg.CostTracking.Enabled = false

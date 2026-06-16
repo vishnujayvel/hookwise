@@ -17,7 +17,6 @@ var envVarPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 var knownSections = map[string]bool{
 	"version":           true,
 	"guards":            true,
-	"coaching":          true,
 	"analytics":         true,
 	"greeting":          true,
 	"sounds":            true,
@@ -41,25 +40,6 @@ func GetDefaultConfig() HooksConfig {
 	return HooksConfig{
 		Version: 1,
 		Guards:  []GuardRuleConfig{},
-		Coaching: CoachingConfig{
-			Metacognition: MetacognitionConfig{
-				Enabled:         false,
-				IntervalSeconds: 300,
-			},
-			BuilderTrap: BuilderTrapConfig{
-				Enabled:         false,
-				Thresholds:      BuilderTrapThresholds{Yellow: 30, Orange: 60, Red: 90},
-				ToolingPatterns: []string{},
-				PracticeTools:   []string{},
-			},
-			Communication: CommunicationConfig{
-				Enabled:   false,
-				Frequency: 3,
-				MinLength: 50,
-				Rules:     []string{},
-				Tone:      "gentle",
-			},
-		},
 		Analytics: AnalyticsConfig{
 			Enabled:                 true,
 			SnapshotEnabled:         true,
@@ -530,25 +510,6 @@ func ValidateConfig(raw map[string]interface{}) ValidationResult {
 				Message:    "includes must be an array of file paths",
 				Suggestion: "Use: includes: ['./recipes/safety.yaml']",
 			})
-		}
-	}
-
-	// Validate coaching
-	if c, ok := raw["coaching"]; ok {
-		if coaching, isMap := c.(map[string]interface{}); isMap {
-			if mc, ok := coaching["metacognition"]; ok {
-				if metacog, isMap := mc.(map[string]interface{}); isMap {
-					if interval, ok := metacog["interval_seconds"]; ok {
-						if !isPositiveOrZeroNumber(interval) {
-							errors = append(errors, ValidationError{
-								Path:       "coaching.metacognition.interval_seconds",
-								Message:    "interval_seconds must be a non-negative number",
-								Suggestion: "Set interval_seconds: 300 (5 minutes)",
-							})
-						}
-					}
-				}
-			}
 		}
 	}
 

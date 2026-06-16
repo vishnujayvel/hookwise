@@ -261,133 +261,7 @@ func TestCheckBudget_ZeroThreshold(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 9: CheckCoaching triggers on elevated alert level
-// ---------------------------------------------------------------------------
-
-func TestCheckCoaching_TriggersOnElevatedAlert(t *testing.T) {
-	ns, _, cleanup := testService(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	coachState := &analytics.CoachingState{
-		AlertLevel:     "yellow",
-		CurrentMode:    "tooling",
-		ToolingMinutes: 30,
-		TodayDate:      time.Now().Format("2006-01-02"),
-	}
-
-	err := CheckCoaching(ctx, ns, coachState)
-	require.NoError(t, err)
-
-	notifs, err := ns.List(ctx, 10)
-	require.NoError(t, err)
-	require.Len(t, notifs, 1)
-
-	assert.Equal(t, ProducerCoaching, notifs[0].Producer)
-	assert.Equal(t, TypeCoachingPrompt, notifs[0].Type)
-	assert.Contains(t, notifs[0].Content, "yellow")
-	assert.Contains(t, notifs[0].Content, "30 minutes")
-}
-
-// ---------------------------------------------------------------------------
-// Test 10: CheckCoaching does NOT trigger on "none" alert level
-// ---------------------------------------------------------------------------
-
-func TestCheckCoaching_NoNotificationOnNone(t *testing.T) {
-	ns, _, cleanup := testService(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	coachState := &analytics.CoachingState{
-		AlertLevel:  "none",
-		CurrentMode: "coding",
-	}
-
-	err := CheckCoaching(ctx, ns, coachState)
-	require.NoError(t, err)
-
-	notifs, err := ns.List(ctx, 10)
-	require.NoError(t, err)
-	assert.Empty(t, notifs)
-}
-
-// ---------------------------------------------------------------------------
-// Test 11: CheckCoaching deduplicates same alert level on same day
-// ---------------------------------------------------------------------------
-
-func TestCheckCoaching_Deduplicates(t *testing.T) {
-	ns, _, cleanup := testService(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	coachState := &analytics.CoachingState{
-		AlertLevel:     "orange",
-		CurrentMode:    "tooling",
-		ToolingMinutes: 60,
-		TodayDate:      time.Now().Format("2006-01-02"),
-	}
-
-	// Call twice.
-	require.NoError(t, CheckCoaching(ctx, ns, coachState))
-	require.NoError(t, CheckCoaching(ctx, ns, coachState))
-
-	notifs, err := ns.List(ctx, 10)
-	require.NoError(t, err)
-	assert.Len(t, notifs, 1, "should not create duplicate coaching notification")
-}
-
-// ---------------------------------------------------------------------------
-// Test 12: CheckCoaching with nil state is a no-op
-// ---------------------------------------------------------------------------
-
-func TestCheckCoaching_NilState(t *testing.T) {
-	ns, _, cleanup := testService(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	err := CheckCoaching(ctx, ns, nil)
-	require.NoError(t, err)
-
-	notifs, err := ns.List(ctx, 10)
-	require.NoError(t, err)
-	assert.Empty(t, notifs)
-}
-
-// ---------------------------------------------------------------------------
-// Test 13: Notification content formatting for coaching levels
-// ---------------------------------------------------------------------------
-
-func TestFormatCoachingContent_AllLevels(t *testing.T) {
-	tests := []struct {
-		alertLevel string
-		expectSub  string
-	}{
-		{"yellow", "Coaching alert (yellow)"},
-		{"orange", "Coaching alert (orange)"},
-		{"red", "Coaching alert (red)"},
-		{"custom", "Coaching alert (custom):"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.alertLevel, func(t *testing.T) {
-			state := &analytics.CoachingState{
-				AlertLevel:     tc.alertLevel,
-				CurrentMode:    "coding",
-				ToolingMinutes: 45,
-			}
-			content := formatCoachingContent(state)
-			assert.Contains(t, content, tc.expectSub)
-			assert.Contains(t, content, "45")
-		})
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Test 14: CheckGuardEffectiveness with frequent blocks
+// Test 9: CheckGuardEffectiveness with frequent blocks
 // ---------------------------------------------------------------------------
 
 func TestCheckGuardEffectiveness_FrequentBlocks(t *testing.T) {
@@ -632,7 +506,7 @@ func TestRunAll_CreatesBudgetNotification(t *testing.T) {
 	cs, err := db.ReadCostState(ctx)
 	require.NoError(t, err)
 
-	err = RunAll(ctx, ns, db, cs, nil, 10.00)
+	err = RunAll(ctx, ns, db, cs, 10.00)
 	require.NoError(t, err)
 
 	notifs, err := ns.List(ctx, 20)
@@ -660,7 +534,7 @@ func TestRunAll_NilStatesNoPanic(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := RunAll(ctx, ns, db, nil, nil, 0)
+	err := RunAll(ctx, ns, db, nil, 0)
 	require.NoError(t, err)
 
 	notifs, err := ns.List(ctx, 20)
@@ -682,7 +556,7 @@ func TestRunAll_FailSoft(t *testing.T) {
 	require.NoError(t, db.Close())
 
 	// RunAll should return a non-nil joined error but must not panic.
-	err := RunAll(ctx, ns, db, nil, nil, 0)
+	err := RunAll(ctx, ns, db, nil, 0)
 	// With all nil/zero inputs, producers that check nil first return nil,
 	// so at most guard-effectiveness errors propagate (it queries the DB).
 	// The key invariant: no panic.

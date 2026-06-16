@@ -188,9 +188,8 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 		// Best-effort notification generation (fail-open, ARCH-1). Producers dedup
 		// per day, so repeated calls don't spam.
 		costState, _ := db.ReadCostState(ctx)
-		coachState, _ := db.ReadCoachingState(ctx)
 		ns := notifications.NewNotificationService(db)
-		if err := notifications.RunAll(ctx, ns, db, costState, coachState, costCfg.DailyBudget); err != nil {
+		if err := notifications.RunAll(ctx, ns, db, costState, costCfg.DailyBudget); err != nil {
 			core.Logger().Warn("notifications: generation had errors", "error", err)
 		}
 
