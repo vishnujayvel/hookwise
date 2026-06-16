@@ -85,3 +85,77 @@ func TestCheckFeedHealth_CustomFeedTreatedAsKnown(t *testing.T) {
 	assert.Contains(t, out, "placeholder", "custom feed must warn about placeholder data")
 	assert.Equal(t, 1, count, "warning count must be 1 for the custom feed")
 }
+
+// writeInsightsFeedFile writes a fresh insights cache envelope with the given
+// total_sessions value and a representative set of other zeroed/non-zero fields.
+// This mirrors the real zeroedEnvelope shape (fully-keyed, not empty).
+func writeInsightsFeedFile(t *testing.T, cacheDir string, totalSessions int) {
+	t.Helper()
+	data := map[string]interface{}{
+		"total_sessions":       totalSessions,
+		"total_messages":       0,
+		"total_lines_added":    0,
+		"avg_duration_minutes": float64(0),
+		"top_tools":            []interface{}{},
+		"friction_counts":      map[string]interface{}{},
+		"friction_total":       0,
+		"peak_hour":            0,
+		"days_active":          0,
+		"staleness_days":       0,
+		"recent_msgs_per_day":  0,
+		"recent_messages":      0,
+		"recent_days_active":   0,
+		"recent_session":       map[string]interface{}{},
+	}
+	envelope := map[string]interface{}{
+		"type":      "insights",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"data":      data,
+	}
+	raw, err := json.Marshal(envelope)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(cacheDir, "insights.json"), raw, 0o644)
+	require.NoError(t, err)
+}
+
+// TestCheckFeedHealth_InsightsZeroSessionsWarns verifies that a fresh insights
+// cache with total_sessions==0 (the zeroedEnvelope shape) emits a WARN rather
+// than a false-positive OK. The data map is non-empty so the generic empty-map
+// guard would NOT catch this without the zero-liveness check (issue #98).
+func TestCheckFeedHealth_InsightsZeroSessionsWarns(t *testing.T) {
+	cacheDir := t.TempDir()
+	writeInsightsFeedFile(t, cacheDir, 0)
+
+	cfg := core.GetDefaultConfig()
+	cfg.Feeds.Insights.Enabled = true
+
+	var buf bytes.Buffer
+	count := checkFeedHealth(&buf, cacheDir, &cfg)
+	out := buf.String()
+
+	assert.Contains(t, out, "WARN  feed:insights: cache fresh but no sessions recorded",
+		"zero-sessions insights envelope must warn")
+	assert.NotContains(t, out, "feed:insights: OK",
+		"zero-sessions insights envelope must NOT report OK")
+	assert.Equal(t, 1, count, "warning count must be 1 for the zero-sessions insights feed")
+}
+
+// TestCheckFeedHealth_InsightsWithSessionsOK verifies that a fresh insights cache
+// with total_sessions>0 is reported as healthy (no zero-liveness WARN).
+func TestCheckFeedHealth_InsightsWithSessionsOK(t *testing.T) {
+	cacheDir := t.TempDir()
+	writeInsightsFeedFile(t, cacheDir, 5)
+
+	cfg := core.GetDefaultConfig()
+	cfg.Feeds.Insights.Enabled = true
+
+	var buf bytes.Buffer
+	count := checkFeedHealth(&buf, cacheDir, &cfg)
+	out := buf.String()
+
+	assert.Contains(t, out, "feed:insights: OK",
+		"insights feed with sessions must report OK")
+	assert.NotContains(t, out, "cache fresh but no sessions recorded",
+		"insights feed with sessions must NOT emit zero-liveness warning")
+	assert.Equal(t, 0, count, "warning count must be 0 for a healthy insights feed")
+}
