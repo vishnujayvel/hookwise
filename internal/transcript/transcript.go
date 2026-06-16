@@ -5,7 +5,9 @@ package transcript
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/vishnujayvel/hookwise/internal/pricing"
 )
@@ -31,10 +33,12 @@ type transcriptUsage struct {
 	CacheCreationInputTokens int64 `json:"cache_creation_input_tokens"`
 }
 
-// scannerBufSize is the initial Scanner buffer size (10 MiB).
-// Transcript lines can easily exceed the default 64 KiB limit when assistant
-// messages embed large tool-result payloads.
-const scannerBufSize = 10 * 1024 * 1024 // 10 MiB
+// maxLineBytes is the upper bound on lines we will attempt to JSON-parse.
+// Lines longer than this are skipped (not fatal) — they exceed any realistic
+// transcript line shape and would only arise from embedded base64 blobs or
+// corrupted data. ReadString buffers a full line in memory; this cap bounds
+// the json-parse step while keeping accounting for all other lines intact.
+const maxLineBytes = 50 * 1024 * 1024 // 50 MiB
 
 // SumUsage opens the .jsonl transcript at path, scans it line by line, and
 // returns a map from model ID to the total token usage accumulated across all
@@ -44,6 +48,7 @@ const scannerBufSize = 10 * 1024 * 1024 // 10 MiB
 //   - Non-JSON and malformed lines are skipped (not fatal).
 //   - Lines where type != "assistant" are skipped.
 //   - Assistant lines with no usage block are skipped.
+//   - Lines longer than maxLineBytes are skipped (not fatal).
 //   - All other lines contribute their token counts to the per-model accumulator.
 //
 // A missing file returns a non-nil error.
@@ -58,47 +63,38 @@ func SumUsage(path string) (map[string]pricing.Usage, error) {
 
 	result := make(map[string]pricing.Usage)
 
-	sc := bufio.NewScanner(f)
-	// Allocate a 10 MiB initial buffer; allow it to grow up to 10 MiB max.
-	buf := make([]byte, scannerBufSize)
-	sc.Buffer(buf, scannerBufSize)
-
-	for sc.Scan() {
-		raw := sc.Bytes()
-		if len(raw) == 0 {
-			continue
+	r := bufio.NewReader(f)
+	for {
+		raw, err := r.ReadString('\n')
+		// Process whatever was read before checking the error.
+		line := strings.TrimSpace(raw)
+		if line != "" {
+			// Skip pathologically large lines — don't attempt to json.Unmarshal them.
+			if len(line) > maxLineBytes {
+				// oversized line: skip, not fatal (ARCH-1 spirit: degrade gracefully)
+			} else {
+				var tl transcriptLine
+				if jsonErr := json.Unmarshal([]byte(line), &tl); jsonErr == nil {
+					if tl.Type == "assistant" && tl.Message.Usage != nil && tl.Message.Model != "" {
+						u := tl.Message.Usage
+						existing := result[tl.Message.Model]
+						result[tl.Message.Model] = pricing.Usage{
+							InputTokens:         existing.InputTokens + u.InputTokens,
+							OutputTokens:        existing.OutputTokens + u.OutputTokens,
+							CacheReadTokens:     existing.CacheReadTokens + u.CacheReadInputTokens,
+							CacheCreationTokens: existing.CacheCreationTokens + u.CacheCreationInputTokens,
+						}
+					}
+				}
+				// Malformed JSON or non-assistant line — skip, not fatal.
+			}
 		}
-
-		var line transcriptLine
-		if err := json.Unmarshal(raw, &line); err != nil {
-			// Malformed line — skip, not fatal.
-			continue
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
 		}
-
-		if line.Type != "assistant" {
-			continue
-		}
-		if line.Message.Usage == nil {
-			continue
-		}
-		if line.Message.Model == "" {
-			continue
-		}
-
-		u := line.Message.Usage
-		existing := result[line.Message.Model]
-		result[line.Message.Model] = pricing.Usage{
-			InputTokens:         existing.InputTokens + u.InputTokens,
-			OutputTokens:        existing.OutputTokens + u.OutputTokens,
-			CacheReadTokens:     existing.CacheReadTokens + u.CacheReadInputTokens,
-			CacheCreationTokens: existing.CacheCreationTokens + u.CacheCreationInputTokens,
-		}
-	}
-
-	// sc.Err() returns nil on normal EOF; any scanner error (e.g., token too
-	// long even after our large buffer) would surface here — treat as fatal.
-	if err := sc.Err(); err != nil {
-		return nil, err
 	}
 
 	return result, nil
