@@ -305,6 +305,17 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 			continue
 		}
 
+		// Zero-liveness check: some producers emit a fully-keyed but all-zero
+		// envelope when their data source is empty (issue #98). The segment
+		// renders blank even though len(dataMap) > 0, so the empty-map guard
+		// above won't catch it. Detect feed-specific zero-liveness conditions.
+		if reason := feedZeroLivenessReason(feedName, dataMap); reason != "" {
+			fmt.Fprintf(w, "WARN  feed:%s: %s\n", feedName, reason)
+			warnings++
+			feedStatuses[feedName] = "empty"
+			continue
+		}
+
 		// Parse timestamp once for staleness and reporting.
 		tsStr := envelope["timestamp"].(string)
 		ts, parseErr := core.ParseTimeFlex(tsStr)
@@ -371,6 +382,21 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 	}
 
 	return warnings
+}
+
+// feedZeroLivenessReason reports whether a fresh, non-empty feed envelope
+// actually contains zero live data (cache-fresh != data-present, issue #98).
+// Some producers (e.g. insights) emit a fully-keyed but all-zero envelope when
+// their data source is empty, which would otherwise pass as OK. Returns a
+// human-readable reason when the feed should be flagged, or "" when it looks live.
+func feedZeroLivenessReason(feedName string, dataMap map[string]interface{}) string {
+	switch feedName {
+	case "insights":
+		if n, ok := dataMap["total_sessions"].(float64); ok && n == 0 {
+			return "cache fresh but no sessions recorded"
+		}
+	}
+	return ""
 }
 
 // getFeedInterval returns the configured interval_seconds for a feed name.
