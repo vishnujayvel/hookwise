@@ -185,9 +185,13 @@ func hasNotificationToday(ctx context.Context, ns *NotificationService, producer
 // producer, type, and content substring was already created today.
 func hasNotificationTodayWithContent(ctx context.Context, ns *NotificationService, producer, notifType, today, contentSubstr string) (bool, error) {
 	escaped := escapeLIKE(contentSubstr)
+	// escapeLIKE backslash-escapes % and _ in the substring; SQLite only honors
+	// that with an explicit ESCAPE clause (it has no default escape char).
+	// Without it, tool names with underscores (e.g. MCP "mcp__server__tool")
+	// never match and dedup silently fails -> duplicate notifications.
 	row := ns.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM notifications
-		 WHERE producer = ? AND notification_type = ? AND created_at LIKE ? AND content LIKE ?`,
+		 WHERE producer = ? AND notification_type = ? AND created_at LIKE ? AND content LIKE ? ESCAPE '\'`,
 		producer, notifType, today+"%", "%"+escaped+"%",
 	)
 	var count int
@@ -199,6 +203,11 @@ func hasNotificationTodayWithContent(ctx context.Context, ns *NotificationServic
 
 // escapeLIKE escapes SQL LIKE wildcard characters (% and _) in a string.
 func escapeLIKE(s string) string {
+	// Escape the escape char itself FIRST, so the backslashes added for % and _
+	// below are not re-escaped. Required because the dedup LIKE query uses
+	// ESCAPE '\': an unescaped backslash in s would otherwise be treated as an
+	// escape character by SQLite and silently corrupt the match.
+	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "%", "\\%")
 	s = strings.ReplaceAll(s, "_", "\\_")
 	return s
