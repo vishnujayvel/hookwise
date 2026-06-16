@@ -482,7 +482,12 @@ func calendarRelativeTime(now, eventStart time.Time) string {
 	eventDate := time.Date(eventStart.Year(), eventStart.Month(), eventStart.Day(), 0, 0, 0, 0, eventStart.Location())
 	dayDiff := int(eventDate.Sub(nowDate).Hours() / 24)
 
-	if dayDiff == 0 {
+	// Same calendar day, or imminent enough that a countdown beats a clock time
+	// even across midnight: show "in Xh[ Ym]". Without the diff guard a
+	// late-night event a couple of hours away (e.g. 23:00 -> 01:30) crosses the
+	// calendar-day boundary and mislabels as "tomorrow 1:30am" instead of the
+	// far more useful "in 2h 30m".
+	if dayDiff == 0 || diff < 6*time.Hour {
 		hours := totalMinutes / 60
 		minutes := totalMinutes % 60
 		if minutes < 5 {
