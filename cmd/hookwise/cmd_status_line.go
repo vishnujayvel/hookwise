@@ -17,8 +17,29 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/analytics"
 	"github.com/vishnujayvel/hookwise/internal/bridge"
 	"github.com/vishnujayvel/hookwise/internal/core"
+	"github.com/vishnujayvel/hookwise/internal/feeds"
 	"github.com/vishnujayvel/hookwise/internal/notifications"
 )
+
+// projectInfoTimeout bounds the git calls used to derive the live project
+// segment so a slow/locked repo can never hang the status line.
+const projectInfoTimeout = 2 * time.Second
+
+// overlayLiveProject overwrites the cached "project" feed envelope with data
+// derived live from projectDir. The project segment (repo name + branch) is a
+// pure function of the session's directory, but the shared daemon cache holds
+// whichever repo the daemon last polled — so a new session in a different repo
+// would render that other repo's name/branch (#126). Deriving it live makes the
+// segment correct per-session regardless of cache state.
+func overlayLiveProject(feedCache map[string]interface{}, projectDir string) map[string]interface{} {
+	if feedCache == nil {
+		feedCache = map[string]interface{}{}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), projectInfoTimeout)
+	defer cancel()
+	feedCache["project"] = feeds.NewEnvelope("project", feeds.ProjectInfo(ctx, projectDir))
+	return feedCache
+}
 
 func newStatusLineCmd() *cobra.Command {
 	var projectDir string
@@ -64,6 +85,12 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	// Use GetStateDir() to respect HOOKWISE_STATE_DIR env override.
 	cacheDir := filepath.Join(core.GetStateDir(), "state")
 	feedCache, _ := bridge.CollectFeedCache(cacheDir)
+
+	// The project segment (repo/branch) is session-specific. The shared daemon
+	// cache holds whichever repo the daemon last polled, so reading it shows a
+	// different session's repo/branch (#126). Overlay it with data derived live
+	// from THIS invocation's directory.
+	feedCache = overlayLiveProject(feedCache, projectDir)
 
 	// Load today's daily summary from the analytics DB for session/cost segments.
 	// Fail-open: nil summary → segments fall back to "--".
@@ -364,9 +391,11 @@ func renderProjectSegment(feedCache map[string]interface{}) string {
 		return ""
 	}
 
-	name := "project"
-	if n, ok := data["name"].(string); ok && n != "" {
-		name = n
+	// Omit the segment when there is no real project (e.g. the directory is not
+	// a git repo) rather than showing a meaningless generic "project" label.
+	name, _ := data["name"].(string)
+	if name == "" {
+		return ""
 	}
 
 	branch := ""

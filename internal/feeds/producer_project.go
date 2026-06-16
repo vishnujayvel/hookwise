@@ -31,44 +31,52 @@ func (p *ProjectProducer) SetFeedsConfig(cfg core.FeedsConfig) {
 func (p *ProjectProducer) Produce(ctx context.Context) (interface{}, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return p.fallbackResult()
+		return NewEnvelope("project", emptyProjectInfo()), nil
 	}
-
-	// Detect git repo root.
-	repoRoot, err := p.runGit(ctx, cwd, "rev-parse", "--show-toplevel")
-	if err != nil {
-		// Not a git repo or git not installed — fail-open (ARCH-1).
-		return p.fallbackResult()
-	}
-
-	repoName := filepath.Base(repoRoot)
-
-	// Get current branch.
-	branchName, err := p.runGit(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
-	if err != nil {
-		branchName = ""
-	}
-
-	// Get short commit hash.
-	commitHash, err := p.runGit(ctx, cwd, "rev-parse", "--short", "HEAD")
-	if err != nil {
-		commitHash = ""
-	}
-
-	// Detect dirty state.
-	porcelain, err := p.runGit(ctx, cwd, "status", "--porcelain")
-	isDirty := err == nil && porcelain != ""
-
-	return NewEnvelope("project", map[string]interface{}{
-		"name":        repoName,
-		"branch":      branchName,
-		"last_commit": commitHash,
-		"dirty":       isDirty,
-	}), nil
+	return NewEnvelope("project", ProjectInfo(ctx, cwd)), nil
 }
 
-// runGit executes a git command in the given directory and returns trimmed stdout.
-func (p *ProjectProducer) runGit(ctx context.Context, dir string, args ...string) (string, error) {
+// ProjectInfo derives git project metadata (name/branch/last_commit/dirty) for
+// the given directory. It is a PURE function of `dir` — it does NOT call
+// os.Getwd — so a caller that knows its own working directory gets data for
+// THAT directory.
+//
+// This matters for the status line: project/branch is session-specific, but the
+// shared daemon feed cache holds whichever repo the daemon last polled. Rendering
+// from the cache showed a different session's repo/branch (#126). The status line
+// calls ProjectInfo with its own cwd instead.
+//
+// Fail-open (ARCH-1): a non-repo or missing git yields empty fields, never an error.
+func ProjectInfo(ctx context.Context, dir string) map[string]interface{} {
+	repoRoot, err := gitOutput(ctx, dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return emptyProjectInfo()
+	}
+
+	branch, _ := gitOutput(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
+	commit, _ := gitOutput(ctx, dir, "rev-parse", "--short", "HEAD")
+	porcelain, perr := gitOutput(ctx, dir, "status", "--porcelain")
+
+	return map[string]interface{}{
+		"name":        filepath.Base(repoRoot),
+		"branch":      branch,
+		"last_commit": commit,
+		"dirty":       perr == nil && porcelain != "",
+	}
+}
+
+// emptyProjectInfo returns the zero-value project data (ARCH-1 fail-open shape).
+func emptyProjectInfo() map[string]interface{} {
+	return map[string]interface{}{
+		"name":        "",
+		"branch":      "",
+		"last_commit": "",
+		"dirty":       false,
+	}
+}
+
+// gitOutput executes a git command in the given directory and returns trimmed stdout.
+func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -76,16 +84,6 @@ func (p *ProjectProducer) runGit(ctx context.Context, dir string, args ...string
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-// fallbackResult returns a valid envelope with empty fields when git is unavailable (ARCH-1: fail-open).
-func (p *ProjectProducer) fallbackResult() (map[string]interface{}, error) {
-	return NewEnvelope("project", map[string]interface{}{
-		"name":        "",
-		"branch":      "",
-		"last_commit": "",
-		"dirty":       false,
-	}), nil
 }
 
 // ProjectTestFixture returns a deterministic project envelope for use in
