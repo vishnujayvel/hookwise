@@ -25,9 +25,10 @@ const snapshotTimeFormat = "20060102T150405Z"
 var snapshotFileRe = regexp.MustCompile(`^\d{8}T\d{6}Z(-\d+)?\.db$`)
 
 // DefaultSnapshotsDir returns the conventional directory for analytics snapshots
-// (~/.hookwise/snapshots), mirroring DefaultDBPath.
+// (~/.hookwise/snapshots), mirroring DefaultDBPath. It honors the
+// HOOKWISE_STATE_DIR environment variable when set.
 func DefaultSnapshotsDir() string {
-	return filepath.Join(core.HomeDir(), ".hookwise", "snapshots")
+	return filepath.Join(core.GetStateDir(), "snapshots")
 }
 
 // Snapshot writes a consistent point-in-time copy of the analytics database to
