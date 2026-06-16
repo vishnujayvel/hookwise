@@ -201,6 +201,13 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 				core.Logger().Warn("cost: read transcript usage", "error", terr)
 			} else {
 				for model, u := range usageByModel {
+					// Degrade gracefully AND warn: an unknown model still costs
+					// at Sonnet fallback rates, but silently mispricing an
+					// as-yet-unknown family undercounts cost. Surface it (audit #26).
+					if !pricing.Recognized(model) {
+						core.Logger().Warn("cost: unknown model, using fallback rates",
+							"model", model)
+					}
 					sessionCost += pricing.ComputeWithRates(model, u, costCfg.Rates)
 				}
 				// Atomic read-modify-write: each dispatch is its own process
