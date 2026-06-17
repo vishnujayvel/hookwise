@@ -816,6 +816,65 @@ func TestFlattenForTUI_InsightsFieldNamesForPythonTUI(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Test 30c/30d: calendar + project field-name parity with the Python TUI
+// (the two remaining exported-but-unguarded fixtures; closes issue #155).
+// ---------------------------------------------------------------------------
+
+func TestFlattenForTUI_CalendarFieldNamesForPythonTUI(t *testing.T) {
+	// status.py reads entry.get("events")/get("next_event") at the top level,
+	// then each event's "name" (NOT "title") and "is_current"/"start"/"end".
+	// This pins both the top-level keys and the nested event key that drifted
+	// (issue #155): a producer rename would fail here, not silently in the TUI.
+	fixture := feeds.CalendarTestFixture()
+	flat := FlattenForTUI(map[string]interface{}{"calendar": fixture})
+
+	entry, ok := flat["calendar"].(map[string]interface{})
+	require.True(t, ok, "calendar entry should be a map after flattening")
+
+	require.Contains(t, entry, "events", "status.py reads entry.get('events')")
+	require.Contains(t, entry, "next_event", "status.py reads entry.get('next_event')")
+
+	events, ok := entry["events"].([]interface{})
+	require.True(t, ok, "events must be a list")
+	require.NotEmpty(t, events)
+	ev, ok := events[0].(map[string]interface{})
+	require.True(t, ok)
+	for _, key := range []string{"name", "start", "end", "is_current"} {
+		require.Contains(t, ev, key,
+			"each event must expose %q (status.py reads event '%s'); 'title' was the #155 drift", key, key)
+	}
+
+	next, ok := entry["next_event"].(map[string]interface{})
+	require.True(t, ok, "next_event must be a map")
+	require.Contains(t, next, "name", "next_event must expose 'name', not 'title' (issue #155)")
+
+	// Envelope stripped + freshness added.
+	assert.NotContains(t, entry, "data")
+	assert.Equal(t, fixture["timestamp"], entry["updated_at"])
+}
+
+func TestFlattenForTUI_ProjectFieldNamesForPythonTUI(t *testing.T) {
+	// status.py reads name/branch/dirty/last_commit_ts (NOT repo/detached).
+	// Pins the producer field names the project segment consumes (issue #155).
+	fixture := feeds.ProjectTestFixture()
+	flat := FlattenForTUI(map[string]interface{}{"project": fixture})
+
+	entry, ok := flat["project"].(map[string]interface{})
+	require.True(t, ok, "project entry should be a map after flattening")
+
+	fixtureData := fixture["data"].(map[string]interface{})
+	for _, key := range []string{"name", "branch", "dirty", "last_commit_ts"} {
+		require.Contains(t, entry, key,
+			"flattened project must expose %q for status.py (issue #155: it read 'repo'/'detached')", key)
+		assert.Equal(t, fixtureData[key], entry[key],
+			"flattened %q must match the producer fixture value", key)
+	}
+
+	assert.NotContains(t, entry, "data")
+	assert.Equal(t, fixture["timestamp"], entry["updated_at"])
+}
+
+// ---------------------------------------------------------------------------
 // Test 31: FlattenForTUI preserves ttl_seconds from data if present
 // ---------------------------------------------------------------------------
 
