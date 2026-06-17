@@ -483,8 +483,8 @@ def read_insights(
         lines = session.get("lines_added", 0)
         dur = session.get("duration_minutes", 0)
 
-        total_messages += msgs if isinstance(msgs, (int, float)) else 0
-        total_lines += lines if isinstance(lines, (int, float)) else 0
+        total_messages += int(msgs) if isinstance(msgs, (int, float)) else 0
+        total_lines += int(lines) if isinstance(lines, (int, float)) else 0
         total_duration += dur if isinstance(dur, (int, float)) else 0
 
         # Tool counts
@@ -513,8 +513,8 @@ def read_insights(
                 date_str = start_time[:10]
             active_dates.add(date_str)
             daily_sessions[date_str] += 1
-            daily_messages[date_str] += msgs if isinstance(msgs, (int, float)) else 0
-            daily_lines[date_str] += lines if isinstance(lines, (int, float)) else 0
+            daily_messages[date_str] += int(msgs) if isinstance(msgs, (int, float)) else 0
+            daily_lines[date_str] += int(lines) if isinstance(lines, (int, float)) else 0
 
     # Read facets for friction
     friction_counts: Counter[str] = Counter()
@@ -533,7 +533,8 @@ def read_insights(
     avg_duration = total_duration / len(valid_sessions) if valid_sessions else 0
     top_tools = tool_counts.most_common(10)
     peak_hour_utc = max(range(24), key=lambda h: hour_counts[h]) if any(hour_counts) else 0
-    local_offset_hours = datetime.now().astimezone().utcoffset().total_seconds() / 3600
+    _utc_offset = datetime.now().astimezone().utcoffset()
+    local_offset_hours = _utc_offset.total_seconds() / 3600 if _utc_offset is not None else 0.0
     peak_hour = int((peak_hour_utc + local_offset_hours + 24) % 24)
     friction_total = sum(friction_counts.values())
 
@@ -609,6 +610,7 @@ def generate_insights_summary(
     # Generate with Claude API
     try:
         from anthropic import Anthropic
+        from anthropic.types import TextBlock
 
         client = Anthropic()
 
@@ -634,7 +636,10 @@ Respond in exactly this JSON format:
 
         if not response.content:
             return None
-        text = response.content[0].text.strip()
+        block = response.content[0]
+        if not isinstance(block, TextBlock):
+            return None
+        text = block.text.strip()
         # Strip markdown code fences if present
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
@@ -691,7 +696,7 @@ def read_recipes(config: dict[str, Any]) -> list[Recipe]:
             if isinstance(inc, str):
                 active_includes.add(inc)
 
-    results = []
+    results: list[Recipe] = []
     if not recipes_dir.is_dir():
         return results
 
