@@ -465,6 +465,15 @@ func ValidateConfig(raw map[string]interface{}) ValidationResult {
 							Suggestion: "Provide a non-empty substring value, or use a different operator if a catch-all is truly intended",
 						})
 					}
+					if parsed.Operator == "matches" {
+						if _, reErr := regexp.Compile(parsed.Value); reErr != nil {
+							errors = append(errors, ValidationError{
+								Path:       fmt.Sprintf("guards[%d].%s", i, condKey),
+								Message:    fmt.Sprintf("guard condition has an invalid regular expression %q: %v (the rule will never match at runtime)", parsed.Value, reErr),
+								Suggestion: "Fix the regex pattern, or use contains/starts_with/ends_with for a literal substring match",
+							})
+						}
+					}
 				}
 			}
 		}

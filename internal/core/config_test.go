@@ -1853,6 +1853,83 @@ func TestValidateConfig_MalformedGuardCondition(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_InvalidRegexGuardCondition(t *testing.T) {
+	validGuard := func(condKey, condVal string) map[string]interface{} {
+		return map[string]interface{}{
+			"match":  "Bash",
+			"action": "warn",
+			"reason": "x",
+			condKey:  condVal,
+		}
+	}
+
+	errorsForPath := func(raw map[string]interface{}, path string) []ValidationError {
+		result := ValidateConfig(raw)
+		var out []ValidationError
+		for _, e := range result.Errors {
+			if e.Path == path {
+				out = append(out, e)
+			}
+		}
+		return out
+	}
+
+	// Positive cases: matches operator with invalid regex must produce an error
+	// whose Message mentions "regex" or "regular expression".
+	positiveCases := []struct {
+		label   string
+		condKey string
+		expr    string
+	}{
+		{"unclosed char class when", "when", `command matches "["`},
+		{"unclosed group when", "when", `command matches "("`},
+		{"unclosed group unless", "unless", `command matches "("`},
+		{"bare repetition when", "when", `command matches "*"`},
+	}
+	for _, tc := range positiveCases {
+		path := "guards[0]." + tc.condKey
+		raw := map[string]interface{}{
+			"guards": []interface{}{validGuard(tc.condKey, tc.expr)},
+		}
+		errs := errorsForPath(raw, path)
+		if len(errs) == 0 {
+			t.Errorf("case=%q: expected ValidationError at path %q, got none", tc.label, path)
+			continue
+		}
+		msg := errs[0].Message
+		if !strings.Contains(msg, "regex") && !strings.Contains(msg, "regular expression") {
+			t.Errorf("case=%q: expected message to mention 'regex' or 'regular expression', got %q", tc.label, msg)
+		}
+		if errs[0].Suggestion == "" {
+			t.Errorf("case=%q: expected non-empty Suggestion", tc.label)
+		}
+	}
+
+	// Negative cases: must NOT produce a regex error at the guard path.
+	negativeCases := []struct {
+		label   string
+		condKey string
+		expr    string
+	}{
+		{"valid regex rm.*", "when", `command matches "rm.*"`},
+		{"valid regex .*", "when", `command matches ".*"`},
+		{"contains with literal [", "when", `command contains "["`},
+		{"equals with literal [", "when", `command == "["`},
+	}
+	for _, tc := range negativeCases {
+		path := "guards[0]." + tc.condKey
+		raw := map[string]interface{}{
+			"guards": []interface{}{validGuard(tc.condKey, tc.expr)},
+		}
+		errs := errorsForPath(raw, path)
+		for _, e := range errs {
+			if strings.Contains(e.Message, "regex") || strings.Contains(e.Message, "regular expression") {
+				t.Errorf("case=%q: expected no regex error at path %q, got %q", tc.label, path, e.Message)
+			}
+		}
+	}
+}
+
 // =============================================================================
 // Test helpers
 // =============================================================================
