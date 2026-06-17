@@ -19,7 +19,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Callable
+from typing import Callable, Protocol
 
 import pytest
 
@@ -511,6 +511,21 @@ def capture_session_artifact(
     return artifact_path
 
 
+class _SessionLike(Protocol):
+    """Structural type for the terminal-harness session objects the Director polls.
+
+    Declared locally as a Protocol rather than importing TerminalSession because
+    terminal_harness is an untracked, local-only package (not present in CI), so
+    it cannot be imported for typing. Only the members the Director accesses on a
+    polled session are declared here.
+    """
+
+    @property
+    def is_alive(self) -> bool: ...
+
+    def get_screen_text(self) -> str: ...
+
+
 class DirectorPollLoop:
     """A Director-side polling loop that monitors multiple Actor sessions.
 
@@ -521,7 +536,7 @@ class DirectorPollLoop:
 
     def __init__(
         self,
-        sessions: dict[str, object],
+        sessions: dict[str, _SessionLike],
         poll_interval: float = 2.0,
         timeout: float = 300.0,
         on_completion: Callable[[PollResult], None] | None = None,
