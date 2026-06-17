@@ -53,7 +53,6 @@ exclude = "prototypes"
 [[tool.mypy.overrides]]
 module = [
     "hookwise_tui.data",
-    "hookwise_tui.tabs.dashboard",
     "tests.test_terminal_e2e",
 ]
 ignore_errors = true

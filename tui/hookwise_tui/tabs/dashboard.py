@@ -1,5 +1,7 @@
 """Dashboard tab — Overview grid with feature cards."""
 
+from typing import Any
+
 from textual.app import ComposeResult
 from textual.containers import Container
 from textual.widget import Widget
@@ -8,8 +10,10 @@ from hookwise_tui.data import read_config
 from hookwise_tui.widgets.feature_card import FeatureCard
 
 
-# Feature descriptions for every hookwise feature
-FEATURES = [
+# Feature descriptions for every hookwise feature.
+# dict[str, Any]: values are heterogeneous (str title/description, tuple|None
+# config_path), so Any keeps the literal permissive while the keys stay typed.
+FEATURES: list[dict[str, Any]] = [
     {
         "key": "analytics",
         "title": "Analytics",
