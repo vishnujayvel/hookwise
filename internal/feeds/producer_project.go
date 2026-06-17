@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -57,21 +58,33 @@ func ProjectInfo(ctx context.Context, dir string) map[string]interface{} {
 	commit, _ := gitOutput(ctx, dir, "rev-parse", "--short", "HEAD")
 	porcelain, perr := gitOutput(ctx, dir, "status", "--porcelain")
 
-	return map[string]interface{}{
+	info := map[string]interface{}{
 		"name":        filepath.Base(repoRoot),
 		"branch":      branch,
 		"last_commit": commit,
 		"dirty":       perr == nil && porcelain != "",
+		// last_commit_ts is the committer epoch (seconds) of HEAD. The status
+		// line renders it as a "Xm ago" suffix; nil when unavailable so the
+		// suffix is simply omitted. Keeping the key always-present keeps the
+		// shape uniform with the fixture (cross-boundary parity, issue #155).
+		"last_commit_ts": nil,
 	}
+	if ctStr, cerr := gitOutput(ctx, dir, "log", "-1", "--format=%ct"); cerr == nil {
+		if ts, perr := strconv.ParseInt(ctStr, 10, 64); perr == nil {
+			info["last_commit_ts"] = ts
+		}
+	}
+	return info
 }
 
 // emptyProjectInfo returns the zero-value project data (ARCH-1 fail-open shape).
 func emptyProjectInfo() map[string]interface{} {
 	return map[string]interface{}{
-		"name":        "",
-		"branch":      "",
-		"last_commit": "",
-		"dirty":       false,
+		"name":           "",
+		"branch":         "",
+		"last_commit":    "",
+		"dirty":          false,
+		"last_commit_ts": nil,
 	}
 }
 
@@ -90,9 +103,10 @@ func gitOutput(ctx context.Context, dir string, args ...string) (string, error) 
 // cross-package tests. Shared fixture so tests bind to actual field names.
 func ProjectTestFixture() map[string]interface{} {
 	return NewEnvelopeAt("project", map[string]interface{}{
-		"name":        "hookwise",
-		"branch":      "main",
-		"last_commit": "abc1234",
-		"dirty":       false,
+		"name":           "hookwise",
+		"branch":         "main",
+		"last_commit":    "abc1234",
+		"dirty":          false,
+		"last_commit_ts": int64(1772877600), // 2026-03-07T10:00:00Z
 	}, time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC))
 }
