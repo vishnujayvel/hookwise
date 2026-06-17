@@ -761,6 +761,61 @@ func TestFlattenForTUI_WeatherFieldNamesForPythonTUI(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Test 30b: FlattenForTUI surfaces every insights field name the Python TUI reads
+// ---------------------------------------------------------------------------
+
+func TestFlattenForTUI_InsightsFieldNamesForPythonTUI(t *testing.T) {
+	// Mirror of Test 30 for the insights feed. InsightsTestFixture is exported
+	// from the feeds package specifically so a field rename in InsightsProducer
+	// surfaces as a failure here rather than silently breaking the TUI: the
+	// Python status tab reads each of these keys via insights.get(...) in
+	// tui/hookwise_tui/tabs/status.py, so a Go-side key drift would pass every
+	// Go test yet render blanks in the TUI (the weather unit->temperatureUnit
+	// class, cf. bug #29).
+	fixture := feeds.InsightsTestFixture()
+	merged := map[string]interface{}{
+		"insights": fixture,
+	}
+
+	flat := FlattenForTUI(merged)
+
+	insightsEntry, ok := flat["insights"].(map[string]interface{})
+	require.True(t, ok, "insights entry should be a map after flattening")
+
+	fixtureData := fixture["data"].(map[string]interface{})
+
+	// The EXACT key names status.py consumes via insights.get(<key>).
+	pythonConsumedKeys := []string{
+		"total_sessions",      // status.py:212,422
+		"total_messages",      // status.py:419
+		"days_active",         // status.py:420
+		"total_lines_added",   // status.py:421
+		"recent_msgs_per_day", // status.py:423
+		"friction_total",      // status.py:406
+		"friction_counts",     // status.py:407
+		"recent_session",      // status.py:403
+		"staleness_days",      // status.py:413
+		"top_tools",           // status.py:443
+		"peak_hour",           // status.py:444
+	}
+	for _, key := range pythonConsumedKeys {
+		require.Contains(t, insightsEntry, key,
+			"flattened insights must expose %q at top level for status.py insights.get(%q)", key, key)
+		assert.Equal(t, fixtureData[key], insightsEntry[key],
+			"flattened %q must match the producer fixture value", key)
+	}
+
+	// Envelope fields are stripped.
+	assert.NotContains(t, insightsEntry, "type")
+	assert.NotContains(t, insightsEntry, "timestamp")
+	assert.NotContains(t, insightsEntry, "data")
+
+	// TUI freshness metadata is added.
+	assert.Equal(t, fixture["timestamp"], insightsEntry["updated_at"])
+	assert.Equal(t, DefaultTTLSeconds, insightsEntry["ttl_seconds"])
+}
+
+// ---------------------------------------------------------------------------
 // Test 31: FlattenForTUI preserves ttl_seconds from data if present
 // ---------------------------------------------------------------------------
 
