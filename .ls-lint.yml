@@ -1,0 +1,26 @@
+# ls-lint — file/folder naming conventions (#47).
+#
+# Scope is deliberately conservative: it enforces snake_case on the source
+# trees that are already 100% uniform (Go under cmd/internal/pkg, Python under
+# tui), so it locks in the existing convention and only catches FUTURE drift.
+# The repo root is intentionally NOT enforced — it legitimately mixes styles
+# (UPPERCASE docs like README.md, kebab dotfiles, Taskfile.yml) and codifying
+# that churn adds risk without value.
+ls:
+  cmd:
+    .go: snake_case
+  internal:
+    .go: snake_case
+  pkg:
+    .go: snake_case
+  tui:
+    .py: snake_case
+
+ignore:
+  - .git
+  - .venv
+  - node_modules
+  - vendor
+  - testdata
+  - .dagger
+  - tui/.venv

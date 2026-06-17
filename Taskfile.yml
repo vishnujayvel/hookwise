@@ -58,6 +58,11 @@ tasks:
     sources:
       - "**/*.go"
 
+  lint:files:
+    desc: "Check file/folder naming conventions with ls-lint (requires: brew install ls-lint)"
+    cmds:
+      - ls-lint
+
   compile:
     desc: "Verify all packages compile"
     cmds:

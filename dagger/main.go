@@ -60,7 +60,8 @@ func (m *Hookwise) pythonContainer(src *dagger.Directory, pythonVersion string) 
 
 // ----- Tier 0: Check -----
 
-// Check runs fast pre-commit checks: golangci-lint, go build, and ruff lint — all in parallel.
+// Check runs fast pre-commit checks: golangci-lint, go build, ruff lint, and
+// ls-lint naming conventions — all in parallel.
 func (m *Hookwise) Check(ctx context.Context, src *dagger.Directory) error {
 	var g errgroup.Group
 
@@ -89,6 +90,17 @@ func (m *Hookwise) Check(ctx context.Context, src *dagger.Directory) error {
 		_, err := m.pythonContainer(src, "3.13").
 			WithExec([]string{"pip", "install", "--quiet", "ruff==0.15.17"}).
 			WithExec([]string{"ruff", "check", "."}).
+			Sync(ctx)
+		return err
+	})
+
+	// ls-lint file/folder naming conventions (#47). Pinned to v2.3.1; downloads
+	// the prebuilt binary matching the container architecture (dpkg arch names
+	// align with the release asset suffixes: amd64 / arm64). ls-lint reads
+	// .ls-lint.yml from the working dir by default.
+	g.Go(func() error {
+		_, err := m.goContainer(src).
+			WithExec([]string{"sh", "-c", "ARCH=$(dpkg --print-architecture); curl -sSfL -o /usr/local/bin/ls-lint https://github.com/loeffel-io/ls-lint/releases/download/v2.3.1/ls-lint-linux-${ARCH} && chmod +x /usr/local/bin/ls-lint && ls-lint"}).
 			Sync(ctx)
 		return err
 	})
