@@ -353,10 +353,3 @@ func floatOrDefault(nf sql.NullFloat64, def float64) float64 {
 	return def
 }
 
-// intOrDefault returns the NullInt64 value as int or the default.
-func intOrDefault(ni sql.NullInt64, def int) int {
-	if ni.Valid {
-		return int(ni.Int64)
-	}
-	return def
-}

@@ -53,16 +53,6 @@ func findModuleRoot(t *testing.T) string {
 	}
 }
 
-// hasImport checks if pkg directly imports the target import path.
-func hasImport(pkg *packages.Package, target string) bool {
-	for imp := range pkg.Imports {
-		if imp == target || strings.HasPrefix(imp, target+"/") {
-			return true
-		}
-	}
-	return false
-}
-
 // collectImports returns all direct imports for a package that match the prefix.
 func collectImports(pkg *packages.Package, prefix string) []string {
 	var matches []string

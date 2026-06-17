@@ -253,6 +253,7 @@ func TestLineOverBufferLimitNotFatal(t *testing.T) {
 func TestResultTypeIsPricingUsage(t *testing.T) {
 	result, err := transcript.SumUsage(testdataPath("single.jsonl"))
 	require.NoError(t, err)
+	//nolint:staticcheck // QF1011: the explicit type is the compile-time assertion under test.
 	var _ map[string]pricing.Usage = result
 	_ = result
 }
