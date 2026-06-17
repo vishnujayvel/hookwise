@@ -1,9 +1,13 @@
 """Tests for hookwise_tui.data — all data readers."""
 
+from __future__ import annotations
+
 import json
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -25,7 +29,7 @@ from hookwise_tui.data import (
 
 
 @pytest.fixture
-def tmp_dir(tmp_path):
+def tmp_dir(tmp_path: Path) -> Path:
     """Create a temporary directory for test data."""
     return tmp_path
 
@@ -34,7 +38,7 @@ def tmp_dir(tmp_path):
 
 
 class TestReadConfig:
-    def test_reads_yaml_config(self, tmp_dir):
+    def test_reads_yaml_config(self, tmp_dir: Path) -> None:
         config_path = tmp_dir / "hookwise.yaml"
         config_path.write_text(
             yaml.dump({"version": 1, "guards": [{"match": "Bash", "action": "block"}]})
@@ -43,18 +47,18 @@ class TestReadConfig:
         assert result["version"] == 1
         assert len(result["guards"]) == 1
 
-    def test_missing_file_falls_back_to_global(self, tmp_dir):
+    def test_missing_file_falls_back_to_global(self, tmp_dir: Path) -> None:
         result = read_config(tmp_dir / "nonexistent.yaml")
         # Falls back to ~/.hookwise/config.yaml if it exists, else {}
         assert isinstance(result, dict)
 
-    def test_malformed_yaml_returns_empty(self, tmp_dir):
+    def test_malformed_yaml_returns_empty(self, tmp_dir: Path) -> None:
         config_path = tmp_dir / "bad.yaml"
         config_path.write_text(":::invalid yaml{{{")
         result = read_config(config_path)
         assert result == {}
 
-    def test_non_dict_yaml_returns_empty(self, tmp_dir):
+    def test_non_dict_yaml_returns_empty(self, tmp_dir: Path) -> None:
         config_path = tmp_dir / "list.yaml"
         config_path.write_text("- item1\n- item2\n")
         result = read_config(config_path)
@@ -65,19 +69,19 @@ class TestReadConfig:
 
 
 class TestWriteConfig:
-    def test_round_trip_consistency(self, tmp_dir):
+    def test_round_trip_consistency(self, tmp_dir: Path) -> None:
         config_path = tmp_dir / "hookwise.yaml"
-        original = {"version": 1, "guards": [{"match": "Bash", "action": "block"}]}
+        original: dict[str, Any] = {"version": 1, "guards": [{"match": "Bash", "action": "block"}]}
         assert write_config(original, config_path) is True
         result = read_config(config_path)
         assert result == original
 
-    def test_creates_parent_directories(self, tmp_dir):
+    def test_creates_parent_directories(self, tmp_dir: Path) -> None:
         nested_path = tmp_dir / "a" / "b" / "hookwise.yaml"
         assert write_config({"key": "val"}, nested_path) is True
         assert read_config(nested_path) == {"key": "val"}
 
-    def test_overwrites_existing_config(self, tmp_dir):
+    def test_overwrites_existing_config(self, tmp_dir: Path) -> None:
         config_path = tmp_dir / "hookwise.yaml"
         write_config({"old": True}, config_path)
         write_config({"new": True}, config_path)
@@ -88,19 +92,19 @@ class TestWriteConfig:
 
 
 class TestEffectiveConfigPath:
-    def test_explicit_path_takes_priority(self, tmp_dir):
+    def test_explicit_path_takes_priority(self, tmp_dir: Path) -> None:
         explicit = tmp_dir / "explicit.yaml"
         result = _effective_config_path(explicit)
         assert result == explicit
 
-    def test_local_path_when_exists(self, tmp_dir, monkeypatch):
+    def test_local_path_when_exists(self, tmp_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         local = tmp_dir / "hookwise.yaml"
         local.write_text("version: 1\n")
         monkeypatch.setattr("hookwise_tui.data._default_config_path", lambda: local)
         result = _effective_config_path(None)
         assert result == local
 
-    def test_falls_back_to_global_when_local_missing(self, tmp_dir, monkeypatch):
+    def test_falls_back_to_global_when_local_missing(self, tmp_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         local = tmp_dir / "nonexistent" / "hookwise.yaml"
         global_path = tmp_dir / "global" / "config.yaml"
         global_path.parent.mkdir(parents=True)
@@ -110,7 +114,7 @@ class TestEffectiveConfigPath:
         result = _effective_config_path(None)
         assert result == global_path
 
-    def test_defaults_to_local_when_neither_exists(self, tmp_dir, monkeypatch):
+    def test_defaults_to_local_when_neither_exists(self, tmp_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         local = tmp_dir / "nonexistent" / "hookwise.yaml"
         monkeypatch.setattr("hookwise_tui.data._default_config_path", lambda: local)
         monkeypatch.setattr("hookwise_tui.data._config_dir", lambda: tmp_dir / "also_nonexistent")
@@ -122,7 +126,7 @@ class TestEffectiveConfigPath:
 
 
 class TestReadCache:
-    def test_reads_json_cache(self, tmp_dir):
+    def test_reads_json_cache(self, tmp_dir: Path) -> None:
         cache_path = tmp_dir / "cache.json"
         cache_path.write_text(json.dumps({
             "pulse": {"updated_at": "2026-02-23T12:00:00Z", "ttl_seconds": 30},
@@ -132,11 +136,11 @@ class TestReadCache:
         assert "pulse" in result
         assert result["pulse"]["ttl_seconds"] == 30
 
-    def test_missing_file_returns_empty(self, tmp_dir):
+    def test_missing_file_returns_empty(self, tmp_dir: Path) -> None:
         result = read_cache(tmp_dir / "nonexistent.json")
         assert result == {}
 
-    def test_corrupt_json_returns_empty(self, tmp_dir):
+    def test_corrupt_json_returns_empty(self, tmp_dir: Path) -> None:
         cache_path = tmp_dir / "bad.json"
         cache_path.write_text("{broken json")
         result = read_cache(cache_path)
@@ -147,24 +151,24 @@ class TestReadCache:
 
 
 class TestIsFresh:
-    def test_fresh_entry(self):
+    def test_fresh_entry(self) -> None:
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc).isoformat()
         assert is_fresh({"updated_at": now, "ttl_seconds": 300}) is True
 
-    def test_stale_entry(self):
+    def test_stale_entry(self) -> None:
         assert is_fresh({"updated_at": "2020-01-01T00:00:00Z", "ttl_seconds": 30}) is False
 
-    def test_missing_updated_at(self):
+    def test_missing_updated_at(self) -> None:
         assert is_fresh({"ttl_seconds": 30}) is False
 
-    def test_missing_ttl(self):
+    def test_missing_ttl(self) -> None:
         assert is_fresh({"updated_at": "2026-01-01T00:00:00Z"}) is False
 
-    def test_invalid_timestamp(self):
+    def test_invalid_timestamp(self) -> None:
         assert is_fresh({"updated_at": "not-a-date", "ttl_seconds": 30}) is False
 
-    def test_zero_ttl(self):
+    def test_zero_ttl(self) -> None:
         assert is_fresh({"updated_at": "2026-01-01T00:00:00Z", "ttl_seconds": 0}) is False
 
 
@@ -172,7 +176,7 @@ class TestIsFresh:
 
 
 class TestReadAnalytics:
-    def _create_db(self, db_path):
+    def _create_db(self, db_path: Path) -> sqlite3.Connection:
         conn = sqlite3.connect(str(db_path))
         conn.execute("""
             CREATE TABLE events (
@@ -190,7 +194,7 @@ class TestReadAnalytics:
         """)
         return conn
 
-    def test_reads_analytics(self, tmp_dir):
+    def test_reads_analytics(self, tmp_dir: Path) -> None:
         db_path = tmp_dir / "analytics.db"
         conn = self._create_db(db_path)
         conn.execute(
@@ -205,12 +209,12 @@ class TestReadAnalytics:
         assert len(result.daily) >= 1
         assert result.daily[0].lines_added == 10
 
-    def test_missing_db_returns_empty(self, tmp_dir):
+    def test_missing_db_returns_empty(self, tmp_dir: Path) -> None:
         result = read_analytics(tmp_dir / "nonexistent.db")
         assert result.daily == []
         assert result.tools == []
 
-    def test_tool_breakdown(self, tmp_dir):
+    def test_tool_breakdown(self, tmp_dir: Path) -> None:
         db_path = tmp_dir / "analytics.db"
         conn = self._create_db(db_path)
         for _ in range(5):
@@ -235,18 +239,18 @@ class TestReadAnalytics:
 
 
 class TestReadDaemonStatus:
-    def test_missing_pid_file(self, tmp_dir):
+    def test_missing_pid_file(self, tmp_dir: Path) -> None:
         result = read_daemon_status(tmp_dir / "daemon.pid")
         assert result.running is False
         assert result.pid is None
 
-    def test_invalid_pid_content(self, tmp_dir):
+    def test_invalid_pid_content(self, tmp_dir: Path) -> None:
         pid_path = tmp_dir / "daemon.pid"
         pid_path.write_text("not-a-number")
         result = read_daemon_status(pid_path)
         assert result.running is False
 
-    def test_stale_pid(self, tmp_dir):
+    def test_stale_pid(self, tmp_dir: Path) -> None:
         pid_path = tmp_dir / "daemon.pid"
         pid_path.write_text("999999999")  # Very unlikely to be alive
         result = read_daemon_status(pid_path)
@@ -258,8 +262,8 @@ class TestReadDaemonStatus:
 
 
 class TestReadFeedHealth:
-    def test_builtin_feeds(self):
-        config = {
+    def test_builtin_feeds(self) -> None:
+        config: dict[str, Any] = {
             "feeds": {
                 "pulse": {"enabled": True, "interval_seconds": 30},
                 "project": {"enabled": False, "interval_seconds": 60},
@@ -268,7 +272,7 @@ class TestReadFeedHealth:
                 "insights": {"enabled": True, "interval_seconds": 120},
             }
         }
-        cache = {
+        cache: dict[str, Any] = {
             "pulse": {"updated_at": "2020-01-01T00:00:00Z", "ttl_seconds": 30},
         }
 
@@ -283,19 +287,19 @@ class TestReadFeedHealth:
         assert project.enabled is False
         assert project.healthy is True  # Disabled = healthy
 
-    def test_empty_feeds_config(self):
+    def test_empty_feeds_config(self) -> None:
         # No feeds in config → no feed health entries (dynamic discovery)
         feeds = read_feed_health({}, {})
         assert feeds == []
 
-    def test_discovers_unknown_feed_dynamically(self):
+    def test_discovers_unknown_feed_dynamically(self) -> None:
         """Any key under feeds: is discovered — no hardcoded list."""
-        config = {
+        config: dict[str, Any] = {
             "feeds": {
                 "brand_new_feed": {"enabled": True, "interval_seconds": 42},
             }
         }
-        cache = {}
+        cache: dict[str, Any] = {}
         feeds = read_feed_health(config, cache)
         assert len(feeds) == 1
         assert feeds[0].name == "brand_new_feed"
@@ -307,7 +311,7 @@ class TestReadFeedHealth:
 
 
 class TestReadInsights:
-    def test_reads_session_meta(self, tmp_dir):
+    def test_reads_session_meta(self, tmp_dir: Path) -> None:
         meta_dir = tmp_dir / "session-meta"
         meta_dir.mkdir()
         facets_dir = tmp_dir / "facets"
@@ -318,7 +322,7 @@ class TestReadInsights:
         recent = (datetime.now(timezone.utc) - timedelta(days=1)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
-        session = {
+        session: dict[str, Any] = {
             "session_id": "test-1",
             "start_time": recent,
             "user_message_count": 5,
@@ -329,7 +333,7 @@ class TestReadInsights:
         }
         (meta_dir / "test-1.json").write_text(json.dumps(session))
 
-        facet = {
+        facet: dict[str, Any] = {
             "session_id": "test-1",
             "friction_counts": {"tool_error": 2},
         }
@@ -342,17 +346,17 @@ class TestReadInsights:
         assert result.friction_total == 2
         assert ("Bash", 3) in result.top_tools or ("Read", 7) in result.top_tools
 
-    def test_empty_directory(self, tmp_dir):
+    def test_empty_directory(self, tmp_dir: Path) -> None:
         result = read_insights(tmp_dir)
         assert result.total_sessions == 0
 
-    def test_filters_old_sessions(self, tmp_dir):
+    def test_filters_old_sessions(self, tmp_dir: Path) -> None:
         meta_dir = tmp_dir / "session-meta"
         meta_dir.mkdir()
         facets_dir = tmp_dir / "facets"
         facets_dir.mkdir()
 
-        old_session = {
+        old_session: dict[str, Any] = {
             "session_id": "old",
             "start_time": "2020-01-01T00:00:00Z",
             "user_message_count": 10,
@@ -367,7 +371,7 @@ class TestReadInsights:
 
 
 class TestReadInsightsSummary:
-    def test_reads_cached_summary(self, tmp_dir):
+    def test_reads_cached_summary(self, tmp_dir: Path) -> None:
         summary_path = tmp_dir / "summary.json"
         summary_path.write_text(json.dumps({
             "patterns": "Heavy Bash usage",
@@ -379,7 +383,7 @@ class TestReadInsightsSummary:
         assert result is not None
         assert result.patterns == "Heavy Bash usage"
 
-    def test_missing_file(self, tmp_dir):
+    def test_missing_file(self, tmp_dir: Path) -> None:
         result = read_insights_summary(tmp_dir / "nonexistent.json")
         assert result is None
 
@@ -388,7 +392,7 @@ class TestReadInsightsSummary:
 
 
 class TestReadRecipes:
-    def test_discovers_recipes(self, tmp_dir):
+    def test_discovers_recipes(self, tmp_dir: Path) -> None:
         os.environ["HOOKWISE_CONFIG"] = str(tmp_dir)
         recipes_dir = tmp_dir / "recipes" / "safety" / "test-recipe"
         recipes_dir.mkdir(parents=True)
@@ -398,7 +402,7 @@ class TestReadRecipes:
             "description": "A test recipe",
         }))
 
-        config = {"includes": []}
+        config: dict[str, Any] = {"includes": []}
         recipes = read_recipes(config)
         assert len(recipes) == 1
         assert recipes[0].name == "test-recipe"
@@ -407,7 +411,7 @@ class TestReadRecipes:
         # Cleanup env
         del os.environ["HOOKWISE_CONFIG"]
 
-    def test_no_recipes_dir(self, tmp_dir):
+    def test_no_recipes_dir(self, tmp_dir: Path) -> None:
         os.environ["HOOKWISE_CONFIG"] = str(tmp_dir)
         recipes = read_recipes({})
         assert recipes == []
@@ -420,7 +424,7 @@ class TestReadRecipes:
 class TestAnalyticsLocaltime:
     """Verify that read_analytics SQL uses 'localtime' modifier (RC-3)."""
 
-    def test_sql_uses_localtime_modifier(self, tmp_dir):
+    def test_sql_uses_localtime_modifier(self, tmp_dir: Path) -> None:
         """The SQL queries in read_analytics must use 'localtime' for DATE()
         to avoid UTC date boundaries grouping events on wrong local dates."""
         import inspect
@@ -433,7 +437,7 @@ class TestAnalyticsLocaltime:
         # GROUP BY should also use localtime
         assert "GROUP BY DATE(timestamp, 'localtime')" in source
 
-    def test_analytics_query_does_not_use_bare_date(self, tmp_dir):
+    def test_analytics_query_does_not_use_bare_date(self, tmp_dir: Path) -> None:
         """Ensure no bare DATE(timestamp) without localtime remains."""
         import inspect
         import re
