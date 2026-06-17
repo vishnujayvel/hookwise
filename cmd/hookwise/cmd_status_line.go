@@ -175,10 +175,10 @@ func renderNotificationSegment(dbPath string) string {
 
 	// Show count and the most recent notification's content (truncated).
 	latest := unsurfaced[len(unsurfaced)-1]
-	content := latest.Content
-	if len(content) > 40 {
-		content = content[:37] + "..."
-	}
+	// Rune-aware truncation (matches the news segment): byte-index slicing here
+	// would split a multi-byte rune and emit invalid UTF-8 (U+FFFD) in the status
+	// line when content contains non-ASCII characters.
+	content := truncateRunes(latest.Content, 40)
 
 	segment := fmt.Sprintf("%s%d notif%s%s %s%s%s",
 		ansiYellow, len(unsurfaced), pluralS(len(unsurfaced)), ansiReset,
