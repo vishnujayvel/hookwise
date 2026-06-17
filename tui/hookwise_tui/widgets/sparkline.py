@@ -1,5 +1,7 @@
 """Sparkline widget for trend visualization using Rich Sparkline."""
 
+from collections.abc import Sequence
+
 from textual.app import ComposeResult
 from textual.widget import Widget
 from textual.widgets import Static
@@ -8,7 +10,7 @@ from textual.widgets import Static
 SPARK_CHARS = "▁▂▃▄▅▆▇█"
 
 
-def _sparkline_text(values: list[int | float], width: int = 30) -> str:
+def _sparkline_text(values: Sequence[int | float], width: int = 30) -> str:
     """Render a list of values as a sparkline string."""
     if not values:
         return "[dim]no data[/dim]"
@@ -58,7 +60,7 @@ class SparklineWidget(Widget):
     def __init__(
         self,
         label: str,
-        values: list[int | float],
+        values: Sequence[int | float],
         current_value: str = "",
         **kwargs,
     ) -> None:
