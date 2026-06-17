@@ -56,9 +56,6 @@ module = [
     "hookwise_tui.tabs.insights",
     "hookwise_tui.tabs.analytics",
     "hookwise_tui.tabs.dashboard",
-    "hookwise_tui.tabs.status",
-    "hookwise_tui.tabs.guards",
-    "hookwise_tui.widgets.weather_data",
     "tests.test_terminal_e2e",
 ]
 ignore_errors = true

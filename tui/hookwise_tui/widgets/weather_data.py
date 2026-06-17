@@ -127,7 +127,11 @@ def read_weather_from_cache(
     if not condition and not temperature and not code:
         return None
 
-    # Compute temp_c/temp_f from the single temperature + unit, or from legacy fields
+    # Compute temp_c/temp_f from the single temperature + unit, or from legacy fields.
+    # Declared float: round() yields int in some branches, _safe_float yields float
+    # in others — the variables hold either, so pin them to float.
+    temp_c: float
+    temp_f: float
     if temp_unit == "celsius":
         temp_c = _safe_float(temperature) if temperature else _safe_float(weather_entry.get("temp_c"))
         temp_f = round(temp_c * 9 / 5 + 32)

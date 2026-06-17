@@ -358,7 +358,7 @@ class StatusTab(Widget):
         if not isinstance(friction_counts, dict):
             return ""
         top_cat = ""
-        top_count = 0
+        top_count: float = 0
         for cat, count in friction_counts.items():
             if isinstance(count, (int, float)) and count > top_count:
                 top_cat = cat
