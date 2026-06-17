@@ -14,8 +14,55 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
+
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
+
+// TestWriteBackToken_AtomicAndSecure pins the contract of writeBackToken (which
+// had no coverage): the refreshed OAuth token is persisted in the Python
+// google-auth format, with 0600 permissions (a credential file must never be
+// world-readable), and via an atomic write that leaves no partial/temp files.
+// The 0600 assertion is a real security-regression guard.
+func TestWriteBackToken_AtomicAndSecure(t *testing.T) {
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "token.json")
+
+	tok := &oauth2.Token{
+		AccessToken:  "access-xyz",
+		RefreshToken: "refresh-abc",
+		Expiry:       time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC),
+	}
+	cfg := &oauth2.Config{
+		ClientID:     "cid",
+		ClientSecret: "secret",
+		Endpoint:     oauth2.Endpoint{TokenURL: "https://oauth2.example/token"},
+	}
+
+	writeBackToken(tokenPath, tok, cfg)
+
+	// Credential file must be 0600.
+	info, err := os.Stat(tokenPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "token file must be 0600")
+
+	// Round-trips as the Python google-auth token format with the right fields.
+	data, err := os.ReadFile(tokenPath)
+	require.NoError(t, err)
+	var ptf pythonTokenFile
+	require.NoError(t, json.Unmarshal(data, &ptf))
+	assert.Equal(t, "access-xyz", ptf.Token)
+	assert.Equal(t, "refresh-abc", ptf.RefreshToken)
+	assert.Equal(t, "cid", ptf.ClientID)
+	assert.Equal(t, "secret", ptf.ClientSecret)
+	assert.Equal(t, "https://oauth2.example/token", ptf.TokenURI)
+	assert.Equal(t, "2030-01-02T03:04:05Z", ptf.Expiry)
+
+	// Atomic write must leave no partial/temp files behind — only the token file.
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "only the token file should remain (no .tmp-* leftovers)")
+}
 
 // calendarMockServer handles both the OAuth token endpoint and the Calendar
 // events endpoint on a single httptest.Server.
