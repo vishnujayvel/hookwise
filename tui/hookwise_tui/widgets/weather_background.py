@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 import random
+from typing import Any
 
 from rich.text import Text as RichText
 from textual.reactive import reactive
@@ -98,7 +99,7 @@ class WeatherBackground(Widget):
     weather: reactive[str] = reactive("rain")
     frame: reactive[int] = reactive(0)
 
-    def __init__(self, weather_info: WeatherInfo | None = None, **kwargs):
+    def __init__(self, weather_info: WeatherInfo | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.particles: list[_Particle] = []
         self.splashes: list[_Splash] = []
