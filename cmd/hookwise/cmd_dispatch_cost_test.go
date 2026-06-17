@@ -296,3 +296,44 @@ func TestRecordAnalytics_CostStop_NoTranscript(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0.0, summary.EstimatedCostUSD, "EstimatedCostUSD must be 0 with no transcript")
 }
+
+// TestRecordAnalytics_CostStop_RatesOverride verifies the CostTrackingConfig.Rates
+// override flows end-to-end through the Stop seam: config -> ComputeWithRates
+// (cmd_dispatch.go:211) -> recorded cost state. pricing_test.go covers
+// ComputeWithRates in isolation, but nothing proves dispatch actually PASSES
+// costCfg.Rates through. A refactor that dropped the Rates arg (passing nil) would
+// pass every pricing unit test while silently disabling user rate overrides -- the
+// dead-feature class this whole cost port exists to prevent. Override sonnet.input
+// $3 -> $99: the $18 fixture ($3 in + $15 out, 1M each) must now record $114
+// ($99 in + $15 out), not the built-in $18.
+func TestRecordAnalytics_CostStop_RatesOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, ".hookwise"))
+	dbPath := filepath.Join(tmpDir, "analytics.db")
+
+	transcriptPath := writeSonnetFixture(t)
+	sid := "cost-test-session-rates"
+
+	db := openTestDB(t, dbPath)
+	a := analytics.NewAnalytics(db)
+	require.NoError(t, a.StartSession(context.Background(), sid, time.Now()))
+	db.Close()
+
+	const overriddenCost = 114.00 // $99 input (overridden from $3) + $15 output
+	costCfg := core.CostTrackingConfig{
+		Enabled: true,
+		Rates:   map[string]float64{"sonnet.input": 99.0},
+	}
+	payload := core.HookPayload{SessionID: sid, TranscriptPath: transcriptPath}
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+
+	db = openTestDB(t, dbPath)
+	defer db.Close()
+
+	state, err := db.ReadCostState(context.Background())
+	require.NoError(t, err)
+	assert.InDelta(t, overriddenCost, state.SessionCosts[sid], 0.001,
+		"override sonnet.input=$99 must reach SessionCosts[sid]; default $18 means Rates was not passed through")
+	assert.InDelta(t, overriddenCost, state.TotalToday, 0.001,
+		"override must also flow into TotalToday")
+}
