@@ -172,10 +172,18 @@ func FlattenForTUI(merged map[string]interface{}) map[string]interface{} {
 				}
 			}
 
-			// Add updated_at (renamed from timestamp).
+			// Add updated_at (renamed from timestamp). This is the reserved
+			// feed-freshness key: the TUI computes staleness as now-updated_at
+			// vs ttl_seconds (tui/hookwise_tui/data.py), so it MUST be the
+			// envelope's production timestamp. The envelope deliberately wins
+			// over any same-named field a producer put in its data payload —
+			// do NOT guard this assignment (that would let a domain field
+			// hijack freshness). This asymmetry with ttl_seconds below is
+			// intentional, not a bug.
 			flat["updated_at"] = timestamp
 
-			// Add ttl_seconds if not already present.
+			// Add ttl_seconds only if absent: unlike updated_at, the staleness
+			// window IS producer-overridable, so a data-supplied value wins.
 			if _, hasTTL := flat["ttl_seconds"]; !hasTTL {
 				flat["ttl_seconds"] = DefaultTTLSeconds
 			}

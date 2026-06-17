@@ -423,6 +423,43 @@ func TestFlattenForTUI_EnvelopeToFlat(t *testing.T) {
 	assert.Equal(t, "F", weatherEntry["unit"])
 }
 
+// TestFlattenForTUI_EnvelopeUpdatedAtWinsOverData pins the reserved-key
+// precedence for updated_at. It is the feed-freshness field the TUI uses to
+// compute staleness (now-updated_at vs ttl_seconds), so the envelope's
+// production timestamp MUST win over any same-named field a producer placed in
+// its data payload — otherwise a domain "updated_at" would hijack freshness and
+// the TUI would mis-report the feed as fresh/stale. This is intentionally
+// asymmetric with ttl_seconds (which a producer CAN override); the test below
+// asserts both halves so a future "consistency" refactor that guards updated_at
+// the way ttl_seconds is guarded fails loudly.
+func TestFlattenForTUI_EnvelopeUpdatedAtWinsOverData(t *testing.T) {
+	envelopeTS := "2026-03-06T10:00:00Z"
+	dataTS := "2020-01-01T00:00:00Z" // a producer's own, stale, updated_at
+	merged := map[string]interface{}{
+		"calendar": map[string]interface{}{
+			"type":      "calendar",
+			"timestamp": envelopeTS,
+			"data": map[string]interface{}{
+				"updated_at":  dataTS,        // reserved key: must be overridden
+				"ttl_seconds": float64(900),  // overridable: must be preserved
+				"event":       "standup",
+			},
+		},
+	}
+
+	flat := FlattenForTUI(merged)
+	entry, ok := flat["calendar"].(map[string]interface{})
+	require.True(t, ok)
+
+	// updated_at: the envelope timestamp wins (freshness is not hijackable).
+	assert.Equal(t, envelopeTS, entry["updated_at"],
+		"envelope timestamp must override a data-supplied updated_at (TUI freshness key)")
+	// ttl_seconds: the producer's value is preserved (staleness window is overridable).
+	assert.Equal(t, float64(900), entry["ttl_seconds"],
+		"a data-supplied ttl_seconds must be preserved, not replaced by the default")
+	assert.Equal(t, "standup", entry["event"])
+}
+
 // ---------------------------------------------------------------------------
 // Test 18: FlattenForTUI — already-flat entries pass through
 // ---------------------------------------------------------------------------
