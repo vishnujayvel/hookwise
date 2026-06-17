@@ -3,6 +3,7 @@
 import atexit
 import os
 from pathlib import Path
+from typing import Any
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -54,7 +55,7 @@ class HookwiseTUI(App):
         "snow", "heavy_snow", "sun", "fog", "cloudy",
     ]
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._weather_index = 0
 

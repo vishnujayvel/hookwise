@@ -1,5 +1,7 @@
 """Reusable feature card widget — title, description, enabled badge."""
 
+from typing import Any
+
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widget import Widget
@@ -57,7 +59,7 @@ class FeatureCard(Widget):
         description: str,
         enabled: bool = False,
         detail: str = "",
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._title = title

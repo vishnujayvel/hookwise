@@ -1,6 +1,7 @@
 """Sparkline widget for trend visualization using Rich Sparkline."""
 
 from collections.abc import Sequence
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -62,7 +63,7 @@ class SparklineWidget(Widget):
         label: str,
         values: Sequence[int | float],
         current_value: str = "",
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._label = label

@@ -1,6 +1,7 @@
 """Feed health indicator widget."""
 
 from datetime import datetime, timezone
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -53,7 +54,7 @@ class FeedHealthWidget(Widget):
     }
     """
 
-    def __init__(self, feed: FeedHealth, **kwargs) -> None:
+    def __init__(self, feed: FeedHealth, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._feed = feed
 
