@@ -38,27 +38,18 @@ target-version = "py311"
 # shape used for ruff (#45) and golangci-lint (#44, errcheck disabled).
 # Ratchet history (#48): Phase 1 cleared the error backlog (no ignore_errors
 # override remains); Phase 2 enabled `disallow_untyped_defs` on the data.py
-# boundary module. Phase 3 (this config) flips `disallow_untyped_defs = true` at
-# the TOP LEVEL, so ALL production source (hookwise_tui/**, 18 files) now requires
-# full annotation — including the Go→JSON→Python seam where Bug #29 lived. The
-# only remaining permissive scope is the test modules listed in the override
-# below, which still carry untyped test defs (~150) and are ratcheted separately.
-# New production code cannot regress. prototypes/ is excluded (throwaway code).
+# boundary module. Phase 3 flipped `disallow_untyped_defs = true` at the TOP
+# LEVEL, so ALL production source (hookwise_tui/**) requires full annotation —
+# including the Go→JSON→Python seam where Bug #29 lived. The Phase-3 tail then
+# drained the per-module test quarantine one file at a time (#187–#193); the
+# override block is now gone, so EVERY module (production AND test) is strict.
+# New code cannot regress. prototypes/ is excluded (throwaway code).
 [tool.mypy]
 python_version = "3.11"
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
 exclude = "prototypes"
-
-# Test modules with a remaining untyped-def backlog — quarantined from the
-# strict gate and annotated incrementally (#48 Phase 3 tail). Production source
-# is fully strict; only these test files stay permissive.
-[[tool.mypy.overrides]]
-module = [
-    "tests.test_weather",
-]
-disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
