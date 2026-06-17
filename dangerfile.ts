@@ -14,6 +14,7 @@ const allowedRoot = [
   ".coderabbit.yaml",
   ".gitignore",
   ".gitleaks.toml",
+  ".golangci.yml",
   ".goreleaser.yml",
   ".ls-lint.yml",
   ".mcp.json",
