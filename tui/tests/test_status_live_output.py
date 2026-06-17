@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import pytest
 
 from hookwise_tui.tabs.status import StatusTab, _LAST_STATUS_OUTPUT_PATH, _LIVE_OUTPUT_MAX_AGE
 
@@ -16,7 +17,7 @@ from hookwise_tui.tabs.status import StatusTab, _LAST_STATUS_OUTPUT_PATH, _LIVE_
 class TestReadLiveOutput:
     """Tests for StatusTab._read_live_output() static method."""
 
-    def test_returns_content_when_file_is_fresh(self, tmp_path, monkeypatch):
+    def test_returns_content_when_file_is_fresh(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         output_file = tmp_path / "cache" / "last-status-output.txt"
         output_file.parent.mkdir(parents=True)
         output_file.write_text("55% | $3.14 | 30m\nFocus deeply")
@@ -30,7 +31,7 @@ class TestReadLiveOutput:
         assert "55%" in result
         assert "Focus deeply" in result
 
-    def test_returns_none_when_file_missing(self, tmp_path, monkeypatch):
+    def test_returns_none_when_file_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         missing = tmp_path / "cache" / "last-status-output.txt"
         monkeypatch.setattr(
             "hookwise_tui.tabs.status._LAST_STATUS_OUTPUT_PATH", missing
@@ -39,7 +40,7 @@ class TestReadLiveOutput:
         result = StatusTab._read_live_output()
         assert result is None
 
-    def test_returns_none_when_file_is_stale(self, tmp_path, monkeypatch):
+    def test_returns_none_when_file_is_stale(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         output_file = tmp_path / "cache" / "last-status-output.txt"
         output_file.parent.mkdir(parents=True)
         output_file.write_text("stale content")
@@ -56,7 +57,7 @@ class TestReadLiveOutput:
         result = StatusTab._read_live_output()
         assert result is None
 
-    def test_returns_none_when_file_is_empty(self, tmp_path, monkeypatch):
+    def test_returns_none_when_file_is_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         output_file = tmp_path / "cache" / "last-status-output.txt"
         output_file.parent.mkdir(parents=True)
         output_file.write_text("")
@@ -68,7 +69,7 @@ class TestReadLiveOutput:
         result = StatusTab._read_live_output()
         assert result is None
 
-    def test_returns_none_when_file_is_whitespace_only(self, tmp_path, monkeypatch):
+    def test_returns_none_when_file_is_whitespace_only(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         output_file = tmp_path / "cache" / "last-status-output.txt"
         output_file.parent.mkdir(parents=True)
         output_file.write_text("   \n  \n  ")
@@ -80,7 +81,7 @@ class TestReadLiveOutput:
         result = StatusTab._read_live_output()
         assert result is None
 
-    def test_freshness_boundary(self, tmp_path, monkeypatch):
+    def test_freshness_boundary(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """File at exactly the max age boundary should still be considered fresh."""
         output_file = tmp_path / "cache" / "last-status-output.txt"
         output_file.parent.mkdir(parents=True)
@@ -99,7 +100,7 @@ class TestReadLiveOutput:
         assert result is not None
         assert result == "boundary content"
 
-    def test_default_path_points_to_hookwise_cache(self):
+    def test_default_path_points_to_hookwise_cache(self) -> None:
         """The default path should be under ~/.hookwise/cache/."""
         expected = Path.home() / ".hookwise" / "cache" / "last-status-output.txt"
         assert _LAST_STATUS_OUTPUT_PATH == expected
@@ -114,7 +115,7 @@ class TestWeatherSegmentFromGoProducer:
     must render them correctly, not show "--".
     """
 
-    def test_go_weather_fields_render_temperature(self):
+    def test_go_weather_fields_render_temperature(self) -> None:
         """Cache data with Go producer field names renders temperature, not '--'."""
         cache = {
             "weather": {
@@ -135,7 +136,7 @@ class TestWeatherSegmentFromGoProducer:
         assert "F" in result, "Should show Fahrenheit unit"
         assert "\u2600\ufe0f" in result, "Should show the emoji"
 
-    def test_go_weather_celsius_renders_c_unit(self):
+    def test_go_weather_celsius_renders_c_unit(self) -> None:
         """Celsius unit from Go producer renders as C."""
         cache = {
             "weather": {
@@ -153,7 +154,7 @@ class TestWeatherSegmentFromGoProducer:
         assert "22" in result
         assert "C" in result
 
-    def test_go_weather_high_wind_shows_indicator(self):
+    def test_go_weather_high_wind_shows_indicator(self) -> None:
         """Wind speed > 20 from Go producer adds wind indicator."""
         cache = {
             "weather": {
@@ -170,7 +171,7 @@ class TestWeatherSegmentFromGoProducer:
         result = StatusTab._render_segment("weather", cache)
         assert "\U0001f4a8" in result, "High wind should show wind emoji"
 
-    def test_go_weather_no_temperature_shows_placeholder(self):
+    def test_go_weather_no_temperature_shows_placeholder(self) -> None:
         """Missing temperature from Go producer shows '--'."""
         cache = {
             "weather": {
@@ -188,7 +189,7 @@ class TestWeatherSegmentFromGoProducer:
 class TestSegmentHasDataWithLiveOutput:
     """Tests for StatusTab._segment_has_data() with stdin segments."""
 
-    def test_stdin_segment_has_data_when_live_output_fresh(self, tmp_path, monkeypatch):
+    def test_stdin_segment_has_data_when_live_output_fresh(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         output_file = tmp_path / "cache" / "last-status-output.txt"
         output_file.parent.mkdir(parents=True)
         output_file.write_text("live output")
@@ -202,7 +203,7 @@ class TestSegmentHasDataWithLiveOutput:
         assert StatusTab._segment_has_data("duration", {}) is True
         assert StatusTab._segment_has_data("daemon_health", {}) is True
 
-    def test_stdin_segment_no_data_when_live_output_missing(self, tmp_path, monkeypatch):
+    def test_stdin_segment_no_data_when_live_output_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         missing = tmp_path / "cache" / "last-status-output.txt"
         monkeypatch.setattr(
             "hookwise_tui.tabs.status._LAST_STATUS_OUTPUT_PATH", missing
