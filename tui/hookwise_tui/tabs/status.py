@@ -490,23 +490,23 @@ class StatusTab(Widget):
                 except (ValueError, KeyError):
                     pass
                 suffix = f" (+{len(events) - 1} more)" if len(events) > 1 else ""
-                return f"\U0001f4c5 {current.get('title', '?')}{ends_in}{suffix}"
-            if not isinstance(next_event, dict) or not next_event.get("title"):
+                return f"\U0001f4c5 {current.get('name', '?')}{ends_in}{suffix}"
+            if not isinstance(next_event, dict) or not next_event.get("name"):
                 return "\U0001f4c5 Free"
             try:
                 start_ms = int(datetime.fromisoformat(next_event["start"].replace("Z", "+00:00")).timestamp() * 1000)
             except (ValueError, KeyError):
-                return f"\U0001f4c5 {next_event['title']}"
+                return f"\U0001f4c5 {next_event['name']}"
             now_ms = int(time.time() * 1000)
             diff_min = round((start_ms - now_ms) / 60000)
             other_count = len(events) - 1 if len(events) > 1 else 0
             more_suffix = f" (+{other_count} more)" if other_count > 0 else ""
             if diff_min < 5:
-                text = f"\U0001f4c5 {next_event['title']} NOW"
+                text = f"\U0001f4c5 {next_event['name']} NOW"
             elif diff_min < 15:
-                text = f"\U0001f4c5 {next_event['title']} in {diff_min}min \u26a1"
+                text = f"\U0001f4c5 {next_event['name']} in {diff_min}min \u26a1"
             elif diff_min <= 60:
-                text = f"\U0001f4c5 {next_event['title']} in {diff_min}min"
+                text = f"\U0001f4c5 {next_event['name']} in {diff_min}min"
             else:
                 hours = round(diff_min / 60)
                 text = f"\U0001f4c5 Free for {hours}h"
