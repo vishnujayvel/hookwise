@@ -1728,6 +1728,131 @@ daemon:
 	}
 }
 
+func TestValidateConfig_MalformedGuardCondition(t *testing.T) {
+	validGuard := func(condKey, condVal string) map[string]interface{} {
+		return map[string]interface{}{
+			"match":  "Bash",
+			"action": "warn",
+			"reason": "x",
+			condKey:  condVal,
+		}
+	}
+
+	errorsForPath := func(raw map[string]interface{}, path string) []ValidationError {
+		result := ValidateConfig(raw)
+		var out []ValidationError
+		for _, e := range result.Errors {
+			if e.Path == path {
+				out = append(out, e)
+			}
+		}
+		return out
+	}
+
+	// Positive cases: malformed expressions must produce a "malformed" error.
+	positiveCases := []struct {
+		label   string
+		condKey string
+		expr    string
+	}{
+		{"operator typo when", "when", `command containss "x"`},
+		{"operator typo unless", "unless", `command containss "x"`},
+		{"missing field path when", "when", `contains "x"`},
+		{"garbage expression when", "when", `this is not a condition`},
+	}
+	for _, tc := range positiveCases {
+		path := "guards[0]." + tc.condKey
+		raw := map[string]interface{}{
+			"guards": []interface{}{validGuard(tc.condKey, tc.expr)},
+		}
+		errs := errorsForPath(raw, path)
+		if len(errs) == 0 {
+			t.Errorf("case=%q: expected ValidationError at path %q, got none", tc.label, path)
+			continue
+		}
+		msg := errs[0].Message
+		if !strings.Contains(msg, "malformed") {
+			t.Errorf("case=%q: expected message to mention 'malformed', got %q", tc.label, msg)
+		}
+		if errs[0].Suggestion == "" {
+			t.Errorf("case=%q: expected non-empty Suggestion", tc.label)
+		}
+	}
+
+	// Negative cases: valid and absent conditions must NOT produce a "malformed" error.
+	negativeCases := []struct {
+		label   string
+		condKey string
+		expr    string
+	}{
+		{"valid contains", "when", `command contains "rm"`},
+		{"valid equals", "when", `tool_input.command == "git"`},
+	}
+	for _, tc := range negativeCases {
+		path := "guards[0]." + tc.condKey
+		raw := map[string]interface{}{
+			"guards": []interface{}{validGuard(tc.condKey, tc.expr)},
+		}
+		errs := errorsForPath(raw, path)
+		for _, e := range errs {
+			if strings.Contains(e.Message, "malformed") {
+				t.Errorf("case=%q: expected no 'malformed' error, got %q", tc.label, e.Message)
+			}
+		}
+	}
+
+	// Guard with no "when" key at all — must not produce a malformed error.
+	{
+		noCondGuard := map[string]interface{}{
+			"match":  "Bash",
+			"action": "warn",
+			"reason": "x",
+		}
+		raw := map[string]interface{}{
+			"guards": []interface{}{noCondGuard},
+		}
+		for _, e := range ValidateConfig(raw).Errors {
+			if strings.Contains(e.Message, "malformed") {
+				t.Errorf("guard with no condition key: expected no 'malformed' error, got %q at %q", e.Message, e.Path)
+			}
+		}
+	}
+
+	// Guard with empty string "when" — not malformed (means "no condition").
+	{
+		emptyCondGuard := validGuard("when", "")
+		raw := map[string]interface{}{
+			"guards": []interface{}{emptyCondGuard},
+		}
+		for _, e := range ValidateConfig(raw).Errors {
+			if e.Path == "guards[0].when" && strings.Contains(e.Message, "malformed") {
+				t.Errorf("empty-string condition: expected no 'malformed' error, got %q", e.Message)
+			}
+		}
+	}
+
+	// The existing empty-substring case: "command contains """ should be flagged
+	// with "empty"/"match-all" message, NOT "malformed".
+	{
+		path := "guards[0].when"
+		raw := map[string]interface{}{
+			"guards": []interface{}{validGuard("when", `command contains ""`)},
+		}
+		errs := errorsForPath(raw, path)
+		if len(errs) == 0 {
+			t.Errorf("empty-substring case: expected at least one error at %q", path)
+		} else {
+			msg := errs[0].Message
+			if strings.Contains(msg, "malformed") {
+				t.Errorf("empty-substring case: message should not contain 'malformed', got %q", msg)
+			}
+			if !strings.Contains(msg, "empty") && !strings.Contains(msg, "match-all") {
+				t.Errorf("empty-substring case: expected message to mention 'empty' or 'match-all', got %q", msg)
+			}
+		}
+	}
+}
+
 // =============================================================================
 // Test helpers
 // =============================================================================

@@ -440,12 +440,21 @@ func ValidateConfig(raw map[string]interface{}) ValidationResult {
 				}
 				for _, condKey := range []string{"when", "unless"} {
 					condVal, hasKey := guard[condKey]
-					if !hasKey {
+					if !hasKey || condVal == nil {
 						continue
 					}
-					expr := fmt.Sprintf("%v", condVal)
+					expr := strings.TrimSpace(fmt.Sprintf("%v", condVal))
+					if expr == "" {
+						// empty/absent condition means "no condition" — not an error
+						continue
+					}
 					parsed := ParseCondition(expr)
 					if parsed == nil {
+						errors = append(errors, ValidationError{
+							Path:       fmt.Sprintf("guards[%d].%s", i, condKey),
+							Message:    "guard condition is malformed and will be silently ignored at runtime (the rule will not match as intended)",
+							Suggestion: "Use the form: field_path operator value (operators: contains, starts_with, ends_with, ==, equals, matches)",
+						})
 						continue
 					}
 					substringOps := map[string]bool{"contains": true, "starts_with": true, "ends_with": true}
