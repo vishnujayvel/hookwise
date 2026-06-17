@@ -36,17 +36,29 @@ target-version = "py311"
 # Adopted as a GATING baseline: the config passes on the current tree and so
 # guards every module plus all new code from new type errors — the same staged
 # shape used for ruff (#45) and golangci-lint (#44, errcheck disabled).
-# `disallow_untyped_defs` stays false (permissive start) per the #48 ratchet
-# plan. The #48 Phase 1 quarantine is now FULLY CLEARED: every module type-checks
-# clean, including the data.py Go→Python boundary file (union-attr narrowing on
-# Anthropic SDK block types) — so there is no longer an ignore_errors override.
-# prototypes/ is excluded to match the ruff config (throwaway code).
+# `disallow_untyped_defs` stays false at the top level (permissive start) per the
+# #48 ratchet plan. Phase 1 is FULLY CLEARED: every module type-checks clean,
+# including the data.py Go→Python boundary file (union-attr narrowing on Anthropic
+# SDK block types) — so there is no longer an ignore_errors override.
+#
+# Phase 2 (#48): `disallow_untyped_defs = true` is now enabled for the data.py
+# boundary module via the override below — every function there is already fully
+# annotated, so this locks that in and rejects any new untyped def in the file
+# mypy is most valuable for (the Go→JSON→Python seam, cf. Bug #29). The Python TUI
+# has no bridge.py (the bridge is Go: internal/bridge/), so data.py is the whole
+# boundary scope. Phase 3 (global strict) waits on the test suite (~144 untyped
+# test defs). prototypes/ is excluded to match the ruff config (throwaway code).
 [tool.mypy]
 python_version = "3.11"
 warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
 exclude = "prototypes"
+
+# Phase 2 ratchet: enforce full annotation on the boundary module (#48).
+[[tool.mypy.overrides]]
+module = "hookwise_tui.data"
+disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
