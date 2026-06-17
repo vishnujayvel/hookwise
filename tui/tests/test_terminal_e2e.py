@@ -19,7 +19,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 
 import pytest
 
@@ -70,7 +70,7 @@ def _clean_claude_env() -> dict[str, str | None]:
     return {var: None for var in _CLAUDE_STRIP_VARS}
 
 
-def _safe_cleanup(session) -> None:
+def _safe_cleanup(session: Any) -> None:
     """Safely send Ctrl+C and close a session, ignoring errors."""
     try:
         session.send_keys("Ctrl+C")
@@ -115,7 +115,7 @@ class TestStatusLineE2E:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_status_line_renders(self, terminal_session):
+    def test_status_line_renders(self, terminal_session: Any) -> None:
         """Spawn Claude Code, wait for render, assert status line is present."""
         session = terminal_session.create_session(
             "claude",
@@ -148,7 +148,7 @@ class TestStatusLineE2E:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_status_line_segment_format(self, terminal_session):
+    def test_status_line_segment_format(self, terminal_session: Any) -> None:
         """Verify status line segments have correct label: value format."""
         session = terminal_session.create_session(
             "claude",
@@ -182,7 +182,7 @@ class TestStatusLineE2E:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_status_line_has_real_data(self, terminal_session):
+    def test_status_line_has_real_data(self, terminal_session: Any) -> None:
         """E2E: the asserted status line segments must show real data, not '--'.
 
         This test validates the feature end-to-end: from feed producers
@@ -247,7 +247,7 @@ class TestStatusLineInsights:
     """
 
     @skipif_no_hookwise
-    def test_status_line_has_insights_data(self):
+    def test_status_line_has_insights_data(self) -> None:
         """hookwise status-line must include insights with real data.
 
         This is the PRIMARY EXIT CONDITION for the InsightsProducer fix.
@@ -279,7 +279,7 @@ class TestStatusLineInsights:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_insights_visible_in_claude_code(self, terminal_session):
+    def test_insights_visible_in_claude_code(self, terminal_session: Any) -> None:
         """Insights data visible in Claude Code's rendered status line.
 
         Full E2E: spawns Claude Code in a PTY and checks that the
@@ -308,7 +308,7 @@ class TestStatusLineCleanup:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_session_terminates_cleanly(self, terminal_session):
+    def test_session_terminates_cleanly(self, terminal_session: Any) -> None:
         """After /exit, Claude Code should exit and release PTY."""
         session = terminal_session.create_session(
             "claude",
@@ -373,7 +373,7 @@ class PollResult:
     error_detail: str | None = None
     timestamp: float = 0.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.timestamp == 0.0:
             self.timestamp = time.monotonic()
 
@@ -460,7 +460,7 @@ def detect_transient_error(screen_text: str) -> str | None:
 
 
 def poll_session_nonblocking(
-    session, actor_id: str, previous_state: ActorState
+    session: _SessionLike, actor_id: str, previous_state: ActorState
 ) -> PollResult:
     """Poll a single session's screen buffer without blocking.
 
@@ -498,7 +498,7 @@ def poll_session_nonblocking(
 
 
 def capture_session_artifact(
-    session, test_name: str, actor_id: str
+    session: Any, test_name: str, actor_id: str
 ) -> str:
     """Capture final screen state as a text artifact.
 
@@ -632,7 +632,7 @@ class TestMultiSessionActorSpawning:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_spawn_multiple_actors(self, terminal_session):
+    def test_spawn_multiple_actors(self, terminal_session: Any) -> None:
         """Spawn two Claude Code sessions via SessionManager and verify both are alive."""
         sessions = {}
         try:
@@ -673,7 +673,7 @@ class TestMultiSessionActorSpawning:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_inject_prompts_into_actors(self, terminal_session):
+    def test_inject_prompts_into_actors(self, terminal_session: Any) -> None:
         """Inject a task prompt into each Actor and confirm processing begins.
 
         Sends a simple, side-effect-free prompt to each Actor session
@@ -738,7 +738,7 @@ class TestMultiSessionActorSpawning:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_parallel_sessions_independent(self, terminal_session):
+    def test_parallel_sessions_independent(self, terminal_session: Any) -> None:
         """Verify parallel sessions operate independently (R6.7).
 
         Spawns two sessions and injects different prompts. Confirms each
@@ -810,7 +810,7 @@ class TestScreenPollingAndDetection:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_nonblocking_poll_reads_screen(self, terminal_session):
+    def test_nonblocking_poll_reads_screen(self, terminal_session: Any) -> None:
         """Poll a running session's screen without blocking (R6.3).
 
         Verifies that poll_session_nonblocking returns a PollResult
@@ -849,7 +849,7 @@ class TestScreenPollingAndDetection:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_completion_detection_on_exit(self, terminal_session):
+    def test_completion_detection_on_exit(self, terminal_session: Any) -> None:
         """Detect when an Actor completes by process exit (R6.4).
 
         Sends /exit to Claude Code, then polls until completion is detected
@@ -892,7 +892,7 @@ class TestScreenPollingAndDetection:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_director_poll_loop_completion(self, terminal_session):
+    def test_director_poll_loop_completion(self, terminal_session: Any) -> None:
         """DirectorPollLoop detects completion across multiple Actors (R6.4).
 
         Spawns two sessions, sends /exit to both, and runs the Director
@@ -901,7 +901,7 @@ class TestScreenPollingAndDetection:
         sessions = {}
         completion_notifications = []
 
-        def on_complete(result: PollResult):
+        def on_complete(result: PollResult) -> None:
             completion_notifications.append(result)
 
         try:
@@ -954,7 +954,7 @@ class TestScreenPollingAndDetection:
                 )
                 session.close()
 
-    def test_error_detection_patterns(self):
+    def test_error_detection_patterns(self) -> None:
         """Verify error detection recognises known error patterns (R6.5).
 
         This is a unit test of the detection logic — no Claude Code needed.
@@ -988,7 +988,7 @@ class TestScreenPollingAndDetection:
         # Empty screen
         assert detect_error("") is None
 
-    def test_completion_detection_patterns(self):
+    def test_completion_detection_patterns(self) -> None:
         """Verify completion detection recognises known markers (R6.4).
 
         Unit test of completion logic — no Claude Code needed.
@@ -1007,7 +1007,7 @@ class TestScreenPollingAndDetection:
         # No completion marker
         assert detect_completion("Still working on it...") is None
 
-    def test_transient_error_detection(self):
+    def test_transient_error_detection(self) -> None:
         """Verify transient error patterns are distinguished from hard errors.
 
         Unit test — no Claude Code needed.
@@ -1019,7 +1019,7 @@ class TestScreenPollingAndDetection:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_error_detection_on_bad_command(self, terminal_session):
+    def test_error_detection_on_bad_command(self, terminal_session: Any) -> None:
         """Detect error state when Actor runs an invalid command (R6.5).
 
         Sends a deliberately broken command and verifies the polling
@@ -1034,7 +1034,7 @@ class TestScreenPollingAndDetection:
         )
         error_notifications = []
 
-        def on_error(result: PollResult):
+        def on_error(result: PollResult) -> None:
             error_notifications.append(result)
 
         try:
@@ -1077,7 +1077,7 @@ class TestScreenPollingAndDetection:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_artifact_capture_on_completion(self, terminal_session):
+    def test_artifact_capture_on_completion(self, terminal_session: Any) -> None:
         """Capture final screen artifacts for post-execution analysis (R7.2).
 
         Spawns a session, lets it render, then captures the screen state
@@ -1119,7 +1119,7 @@ class TestScreenPollingAndDetection:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_poll_loop_respects_timeout(self, terminal_session):
+    def test_poll_loop_respects_timeout(self, terminal_session: Any) -> None:
         """DirectorPollLoop times out properly for long-running sessions (R6.6).
 
         Spawns a session with a short timeout and verifies the loop
@@ -1159,7 +1159,7 @@ class TestScreenPollingAndDetection:
 
     @skipif_no_claude
     @skipif_no_hookwise
-    def test_multiple_poll_snapshots_non_blocking(self, terminal_session):
+    def test_multiple_poll_snapshots_non_blocking(self, terminal_session: Any) -> None:
         """Multiple rapid polls don't block each other (R6.3).
 
         Takes several polls in quick succession and verifies each
@@ -1213,7 +1213,7 @@ class TestStatusLineCalendar:
     """EXIT CONDITION: hookwise status-line shows calendar event data."""
 
     @skipif_no_hookwise
-    def test_status_line_has_calendar_data(self):
+    def test_status_line_has_calendar_data(self) -> None:
         """hookwise status-line output should contain calendar emoji or relative time."""
         result = subprocess.run(
             ["hookwise", "status-line", "--project-dir", _PROJECT_ROOT],
