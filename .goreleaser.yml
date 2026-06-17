@@ -1,0 +1,69 @@
+# goreleaser release config — builds multi-platform hookwise binaries.
+# https://goreleaser.com  (schema v2)
+#
+# Local dry-run (no publish, no tag needed):
+#   goreleaser build --snapshot --clean
+#   goreleaser check
+#
+# Real release is triggered by pushing a tag (see .github/workflows). Because
+# release.draft is true, a pushed tag produces a DRAFT GitHub Release that a
+# human must review and publish — nothing goes live automatically.
+version: 2
+
+project_name: hookwise
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: hookwise
+    main: ./cmd/hookwise
+    binary: hookwise
+    env:
+      - CGO_ENABLED=0 # pure-Go (modernc.org/sqlite); no cgo, so cross-compile is trivial
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.buildDate={{ .Date }}
+
+archives:
+  - id: hookwise
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+
+release:
+  # A pushed tag creates a DRAFT release; a human publishes it. Nothing goes
+  # live automatically — this is the manual trigger for distribution.
+  draft: true
+  prerelease: auto
+  name_template: "v{{ .Version }}"

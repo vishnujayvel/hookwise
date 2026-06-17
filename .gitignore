@@ -60,6 +60,9 @@ node_modules
 # go-task runner checksum cache
 .task/
 
+# goreleaser build output
+dist/
+
 # openlore — local index/analysis stays out of git; decision records are tracked
 .openlore/*
 !.openlore/decisions/

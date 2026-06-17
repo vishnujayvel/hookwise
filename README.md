@@ -86,12 +86,17 @@ One file. Claude Code reads it, understands it, and can even help you write new 
 ## Quick Start
 
 ```bash
-# Download the latest binary from GitHub Releases
-# https://github.com/vishnujayvel/hookwise/releases
+# Install (macOS / Linux · arm64 or amd64):
+curl -fsSL https://raw.githubusercontent.com/vishnujayvel/hookwise/main/scripts/install.sh | sh
+
+# …or build/install with Go:
+go install github.com/vishnujayvel/hookwise/cmd/hookwise@latest
 
 hookwise init --preset minimal
 hookwise doctor
 ```
+
+> Prebuilt binaries (darwin/linux × amd64/arm64) are published to [GitHub Releases](https://github.com/vishnujayvel/hookwise/releases). The installer grabs the right one for your platform.
 
 <div align="center">
 <img src="screenshots/doctor-v1.3.png" alt="hookwise doctor output — all checks passed" width="600">
@@ -135,7 +140,7 @@ Every hook event passes through a three-phase execution engine. Guards protect, 
 
 <img src="screenshots/stats.png" alt="hookwise stats" width="600">
 
-**[Interactive TUI](docs/cli.md)** -- Full-screen dashboard with 8 tabs: dashboard, guards, coaching, analytics, feeds, insights, recipes, status. Auto-launches in a separate terminal when you start Claude Code.
+**[Interactive TUI](docs/cli.md)** _(optional · experimental)_ -- A full-screen Python/[Textual](https://textual.textualize.io) dashboard with 8 tabs. It ships **separately** from the core binary (the core CLI, guards, analytics, and status line need no Python). Install it from the `tui/` directory (e.g. `uv tool install ./tui`); once `hookwise-tui` is on your PATH and `tui.auto_launch: true` is set, it opens in a separate terminal on session start.
 
 <div align="center">
 <img src="screenshots/tui-insights.png" alt="hookwise TUI — Claude Code usage insights with session metrics, trends, and tool breakdown" width="700">
