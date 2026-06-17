@@ -2155,3 +2155,91 @@ func TestValidateConfig_InvalidGlobMatch(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateConfig_InvalidHandlerEvents(t *testing.T) {
+	makeRaw := func(eventsVal interface{}) map[string]interface{} {
+		return map[string]interface{}{
+			"handlers": []interface{}{
+				map[string]interface{}{
+					"name":   "h",
+					"type":   "builtin",
+					"events": eventsVal,
+				},
+			},
+		}
+	}
+
+	errorsForPath := func(raw map[string]interface{}, path string) []ValidationError {
+		result := ValidateConfig(raw)
+		var out []ValidationError
+		for _, e := range result.Errors {
+			if e.Path == path {
+				out = append(out, e)
+			}
+		}
+		return out
+	}
+
+	const path = "handlers[0].events"
+
+	// Positive cases: invalid event names must produce a ValidationError at
+	// handlers[0].events whose Message contains the bad token.
+	positiveCases := []struct {
+		label     string
+		eventsVal interface{}
+		badToken  string
+	}{
+		{"typo in slice", []interface{}{"PreToolUze"}, "PreToolUze"},
+		{"dead wildcard", []interface{}{"*"}, "*"},
+		{"scalar string typo", "PreToolUze", "PreToolUze"},
+	}
+	for _, tc := range positiveCases {
+		raw := makeRaw(tc.eventsVal)
+		errs := errorsForPath(raw, path)
+		var found bool
+		for _, e := range errs {
+			if strings.Contains(e.Message, tc.badToken) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("case=%q: expected ValidationError at %q mentioning %q, got errors: %v", tc.label, path, tc.badToken, errs)
+		}
+	}
+
+	// Mixed case: one valid event + one invalid; must flag the invalid one (Foo).
+	{
+		raw := makeRaw([]interface{}{"PreToolUse", "Foo"})
+		errs := errorsForPath(raw, path)
+		var found bool
+		for _, e := range errs {
+			if strings.Contains(e.Message, "Foo") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("mixed case: expected ValidationError at %q mentioning %q, got errors: %v", path, "Foo", errs)
+		}
+	}
+
+	// Negative cases: valid event names must NOT produce any error at handlers[0].events.
+	negativeCases := []struct {
+		label     string
+		eventsVal interface{}
+	}{
+		{"single valid slice", []interface{}{"PreToolUse"}},
+		{"multiple valid slice", []interface{}{"PreToolUse", "Stop", "SessionEnd"}},
+		{"scalar valid string", "Stop"},
+	}
+	for _, tc := range negativeCases {
+		raw := makeRaw(tc.eventsVal)
+		errs := errorsForPath(raw, path)
+		for _, e := range errs {
+			if strings.Contains(e.Message, "not a valid event") {
+				t.Errorf("case=%q: expected no invalid-event error at %q, got %q", tc.label, path, e.Message)
+			}
+		}
+	}
+}

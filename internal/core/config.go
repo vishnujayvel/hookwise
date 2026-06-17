@@ -529,8 +529,28 @@ func ValidateConfig(raw map[string]interface{}) ValidationResult {
 					errors = append(errors, ValidationError{
 						Path:       fmt.Sprintf("handlers[%d].events", i),
 						Message:    "handler must specify events",
-						Suggestion: "Set events: ['PreToolUse'] or events: '*'",
+						Suggestion: "Set events to one or more of: " + strings.Join(EventTypes, ", "),
 					})
+				}
+				if ev, ok := handler["events"]; ok && ev != nil {
+					var eventVals []string
+					switch t := ev.(type) {
+					case string:
+						eventVals = []string{t}
+					case []interface{}:
+						for _, e := range t {
+							eventVals = append(eventVals, fmt.Sprintf("%v", e))
+						}
+					}
+					for _, e := range eventVals {
+						if !IsEventType(e) {
+							errors = append(errors, ValidationError{
+								Path:       fmt.Sprintf("handlers[%d].events", i),
+								Message:    fmt.Sprintf("handler lists %q, which is not a valid event (the handler will never fire for it)", e),
+								Suggestion: "Use one of: " + strings.Join(EventTypes, ", "),
+							})
+						}
+					}
 				}
 			}
 		}
