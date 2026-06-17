@@ -664,6 +664,72 @@ func TestValidateConfig_GuardInvalidAction(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_EmptySubstringGuardValue(t *testing.T) {
+	validGuard := func(condKey, condVal string) map[string]interface{} {
+		return map[string]interface{}{
+			"match":  "Bash",
+			"action": "warn",
+			"reason": "x",
+			condKey:  condVal,
+		}
+	}
+
+	errorsForPath := func(raw map[string]interface{}, path string) []ValidationError {
+		result := ValidateConfig(raw)
+		var out []ValidationError
+		for _, e := range result.Errors {
+			if e.Path == path {
+				out = append(out, e)
+			}
+		}
+		return out
+	}
+
+	// Positive cases: each substring operator with empty value must produce an error.
+	for _, op := range []string{"contains", "starts_with", "ends_with"} {
+		for _, condKey := range []string{"when", "unless"} {
+			expr := `command ` + op + ` ""`
+			path := "guards[0]." + condKey
+			raw := map[string]interface{}{
+				"guards": []interface{}{validGuard(condKey, expr)},
+			}
+			errs := errorsForPath(raw, path)
+			if len(errs) == 0 {
+				t.Errorf("operator=%q condKey=%q: expected ValidationError at path %q, got none", op, condKey, path)
+				continue
+			}
+			msg := errs[0].Message
+			if !strings.Contains(msg, "empty") && !strings.Contains(msg, "match-all") {
+				t.Errorf("operator=%q condKey=%q: expected message to mention 'empty' or 'match-all', got %q", op, condKey, msg)
+			}
+			if errs[0].Suggestion == "" {
+				t.Errorf("operator=%q condKey=%q: expected non-empty Suggestion", op, condKey)
+			}
+		}
+	}
+
+	// Negative cases: must NOT produce empty-substring error.
+	negativeCases := []struct {
+		label   string
+		condKey string
+		expr    string
+	}{
+		{"non-empty contains", "when", `command contains "rm"`},
+		{"equals with empty value", "when", `command == ""`},
+		{"matches with empty value", "when", `command matches ""`},
+	}
+	for _, tc := range negativeCases {
+		path := "guards[0]." + tc.condKey
+		raw := map[string]interface{}{
+			"guards": []interface{}{validGuard(tc.condKey, tc.expr)},
+		}
+		errs := errorsForPath(raw, path)
+		if len(errs) > 0 {
+			t.Errorf("case=%q: expected no empty-substring error at path %q, got %v", tc.label, path, errs)
+		}
+	}
+}
+
 // =============================================================================
 // Unit Tests: GetDefaultConfig
 // =============================================================================
