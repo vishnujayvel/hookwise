@@ -57,7 +57,6 @@ exclude = "prototypes"
 [[tool.mypy.overrides]]
 module = [
     "tests.test_data",
-    "tests.test_status_live_output",
     "tests.test_terminal_e2e",
     "tests.test_weather",
 ]
