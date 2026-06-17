@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,6 +19,11 @@ import (
 func testdataPath(name string) string {
 	return filepath.Join("testdata", name)
 }
+
+// assistantLineSeq gives each assistantLine call a unique message id, so helper
+// lines model distinct assistant responses (which carry distinct ids in real
+// transcripts) and are not collapsed by SumUsage's (message.id, requestId) dedup.
+var assistantLineSeq atomic.Int64
 
 // assistantLine builds a minimal assistant JSONL line as a string.
 func assistantLine(model string, input, output, cacheRead, cacheWrite int64) string {
@@ -41,7 +47,7 @@ func assistantLine(model string, input, output, cacheRead, cacheWrite int64) str
 	line := lineJSON{
 		Type: "assistant",
 		Message: msgJSON{
-			ID:    "msg_test",
+			ID:    fmt.Sprintf("msg_test_%d", assistantLineSeq.Add(1)),
 			Model: model,
 			Role:  "assistant",
 			Usage: usageJSON{
@@ -246,6 +252,39 @@ func TestLineOverBufferLimitNotFatal(t *testing.T) {
 	assert.Equal(t, int64(4), sonnet.OutputTokens)
 	assert.Equal(t, int64(0), sonnet.CacheReadTokens)
 	assert.Equal(t, int64(0), sonnet.CacheCreationTokens)
+}
+
+// TestSumUsage_DedupsByMessageID verifies that duplicate assistant streaming snapshots sharing
+// the same (message.id, requestId) pair are counted exactly once, not once per snapshot.
+func TestSumUsage_DedupsByMessageID(t *testing.T) {
+	result, err := transcript.SumUsage(testdataPath("duplicate_message.jsonl"))
+	require.NoError(t, err)
+
+	u, ok := result["claude-opus-4-8"]
+	require.True(t, ok, "expected key 'claude-opus-4-8' in result")
+	// msg_dup appears 3x but must be counted once (input=10, output=20, cacheRead=5, cacheCreate=3)
+	// msg_other appears once (input=1, output=2, cacheRead=0, cacheCreate=0)
+	// Total: input=11, output=22, cacheRead=5, cacheCreate=3
+	assert.Equal(t, int64(11), u.InputTokens, "dedup: msg_dup x1 + msg_other x1 = 11 input tokens")
+	assert.Equal(t, int64(22), u.OutputTokens, "dedup: 20 + 2 = 22 output tokens")
+	assert.Equal(t, int64(5), u.CacheReadTokens, "dedup: 5 + 0 = 5 cache read tokens")
+	assert.Equal(t, int64(3), u.CacheCreationTokens, "dedup: 3 + 0 = 3 cache creation tokens")
+}
+
+// TestSumUsage_DistinctRequestIDsBothCount verifies that the same message.id arriving under
+// two different requestIds represents two genuinely-billed responses and both are counted.
+func TestSumUsage_DistinctRequestIDsBothCount(t *testing.T) {
+	result, err := transcript.SumUsage(testdataPath("same_id_diff_request.jsonl"))
+	require.NoError(t, err)
+
+	u, ok := result["claude-haiku-4-5"]
+	require.True(t, ok, "expected key 'claude-haiku-4-5' in result")
+	// req_A/msg_same and req_B/msg_same are distinct (different requestId) — both must be counted.
+	// Total: input=8, output=16, cacheRead=0, cacheCreate=0
+	assert.Equal(t, int64(8), u.InputTokens, "both requestIds counted: 4+4=8 input tokens")
+	assert.Equal(t, int64(16), u.OutputTokens, "both requestIds counted: 8+8=16 output tokens")
+	assert.Equal(t, int64(0), u.CacheReadTokens)
+	assert.Equal(t, int64(0), u.CacheCreationTokens)
 }
 
 // TestResultTypeIsPricingUsage is a compile-time assertion that SumUsage returns map[string]pricing.Usage.

@@ -15,13 +15,15 @@ import (
 // transcriptLine is the top-level shape of each JSONL line.
 // Only the fields we care about are decoded; everything else is silently ignored.
 type transcriptLine struct {
-	Type    string          `json:"type"`
-	Message transcriptMsg   `json:"message"`
+	Type      string        `json:"type"`
+	RequestID string        `json:"requestId"` // top-level request identifier (used for dedup key)
+	Message   transcriptMsg `json:"message"`
 }
 
 // transcriptMsg holds the assistant message fields we need.
 type transcriptMsg struct {
-	Model string         `json:"model"`
+	ID    string           `json:"id"`    // message identifier (used for dedup key)
+	Model string           `json:"model"`
 	Usage *transcriptUsage `json:"usage"` // pointer so we can detect absent usage (nil)
 }
 
@@ -49,6 +51,9 @@ const maxLineBytes = 50 * 1024 * 1024 // 50 MiB
 //   - Lines where type != "assistant" are skipped.
 //   - Assistant lines with no usage block are skipped.
 //   - Lines longer than maxLineBytes are skipped (not fatal).
+//   - Duplicate assistant snapshots sharing the same (message.id, requestId) pair
+//     are counted exactly once — Claude Code streams repeated usage snapshots per
+//     response, summing them all overcounts ~2x on real transcripts.
 //   - All other lines contribute their token counts to the per-model accumulator.
 //
 // A missing file returns a non-nil error.
@@ -62,6 +67,7 @@ func SumUsage(path string) (map[string]pricing.Usage, error) {
 	defer f.Close()
 
 	result := make(map[string]pricing.Usage)
+	seen := make(map[string]struct{}) // dedup set: key is (message.id + \x00 + requestId)
 
 	r := bufio.NewReader(f)
 	for {
@@ -76,6 +82,26 @@ func SumUsage(path string) (map[string]pricing.Usage, error) {
 				var tl transcriptLine
 				if jsonErr := json.Unmarshal([]byte(line), &tl); jsonErr == nil {
 					if tl.Type == "assistant" && tl.Message.Usage != nil && tl.Message.Model != "" {
+						// Dedup by (message.id, requestId): Claude Code streams repeated usage
+						// snapshots for the same response; each carries identical usage, so
+						// counting all would overcount ~2x on real transcripts.
+						// If BOTH ids are empty we cannot form a reliable key — fall through
+						// and count the line (better to over-count one ambiguous line than drop it).
+						if tl.Message.ID != "" || tl.RequestID != "" {
+							key := tl.Message.ID + "\x00" + tl.RequestID
+							if _, ok := seen[key]; ok {
+								// duplicate snapshot — skip accumulation, continue to EOF check
+								if err != nil {
+									if err == io.EOF {
+										break
+									}
+									return nil, err
+								}
+								continue
+							}
+							seen[key] = struct{}{}
+						}
+
 						u := tl.Message.Usage
 						existing := result[tl.Message.Model]
 						result[tl.Message.Model] = pricing.Usage{
