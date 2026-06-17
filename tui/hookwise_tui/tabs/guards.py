@@ -64,7 +64,7 @@ class GuardsTab(Widget):
             )
 
         # Guard rules table
-        table: DataTable = DataTable()
+        table: DataTable[str] = DataTable()
         table.add_columns("#", "Match", "Action", "Reason", "Condition")
 
         for i, guard in enumerate(guards):

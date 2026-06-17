@@ -59,7 +59,7 @@ FEATURES: list[dict[str, Any]] = [
 ]
 
 
-def _is_enabled(config: dict, feature: dict) -> bool:
+def _is_enabled(config: dict[str, Any], feature: dict[str, Any]) -> bool:
     """Check if a feature is enabled in the config."""
     if feature["config_path"] is None:
         key = feature["key"]
@@ -83,7 +83,7 @@ def _is_enabled(config: dict, feature: dict) -> bool:
     return False
 
 
-def _get_detail(config: dict, feature: dict) -> str:
+def _get_detail(config: dict[str, Any], feature: dict[str, Any]) -> str:
     """Get extra detail text for a feature."""
     key = feature["key"]
     if key == "guards":

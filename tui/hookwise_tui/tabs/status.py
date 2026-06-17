@@ -6,6 +6,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from textual.app import ComposeResult
 from textual.containers import Container
@@ -202,7 +203,7 @@ class StatusTab(Widget):
                 yield SegmentRow(seg, seg in active_set, has_data)
 
     @staticmethod
-    def _segment_has_data(seg: str, cache: dict) -> bool:
+    def _segment_has_data(seg: str, cache: dict[str, Any]) -> bool:
         """Check if a segment has real data available in the cache."""
         if seg in STDIN_SEGMENTS:
             # These get data from live stdin; check if live output is fresh
@@ -353,7 +354,7 @@ class StatusTab(Widget):
     }
 
     @staticmethod
-    def _top_friction_tip(friction_counts: dict) -> str:
+    def _top_friction_tip(friction_counts: dict[str, Any]) -> str:
         """Find the top friction category and return its tip."""
         if not isinstance(friction_counts, dict):
             return ""
@@ -370,7 +371,7 @@ class StatusTab(Widget):
         return f"{human_name} \u2192 {tip}" if tip else human_name
 
     @staticmethod
-    def _render_segment(seg: str, cache: dict) -> str:
+    def _render_segment(seg: str, cache: dict[str, Any]) -> str:
         """Render a segment from cache data with real rendering logic."""
         # Segments that need live stdin data — skip in cache-only mode
         if seg in STDIN_SEGMENTS:

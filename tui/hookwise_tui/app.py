@@ -30,7 +30,7 @@ _CONDITION_TO_WEATHER = {
 }
 
 
-class HookwiseTUI(App):
+class HookwiseTUI(App[None]):
     """Hookwise — Claude Code hooks dashboard with animated weather background."""
 
     TITLE = "Hookwise"

@@ -90,7 +90,7 @@ class AnalyticsTab(Widget):
         # Tool breakdown
         if data.tools:
             yield Static("Top Tools", classes="section-title")
-            table: DataTable = DataTable()
+            table: DataTable[str] = DataTable()
             table.add_columns("Tool", "Calls", "Lines +", "Lines -")
             for t in data.tools[:10]:
                 table.add_row(t.tool_name, str(t.count), str(t.lines_added), str(t.lines_removed))

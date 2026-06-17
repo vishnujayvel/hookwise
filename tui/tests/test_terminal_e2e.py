@@ -384,7 +384,7 @@ class PollResult:
 
 # Shell prompt patterns that indicate Claude Code has finished and returned
 # to the input prompt (the React/Ink ">" prompt or a shell prompt).
-COMPLETION_PATTERNS: list[re.Pattern] = [
+COMPLETION_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"^\s*>\s*$", re.MULTILINE),   # Claude Code empty input prompt
     re.compile(r"\$\s*$", re.MULTILINE),       # Shell prompt returned
 ]
@@ -401,7 +401,7 @@ OUTPUT_COMPLETION_MARKERS: list[str] = [
 # These patterns identify hard failures (crashes, panics, missing commands)
 # vs. transient issues (rate limits, timeouts) that may be retryable.
 
-ERROR_PATTERNS: list[re.Pattern] = [
+ERROR_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"Traceback \(most recent call last\)", re.IGNORECASE),
     re.compile(r"panic:", re.IGNORECASE),
     re.compile(r"FATAL|fatal error", re.IGNORECASE),
@@ -413,7 +413,7 @@ ERROR_PATTERNS: list[re.Pattern] = [
 ]
 
 # Patterns that indicate a transient/retryable issue (not a hard error)
-TRANSIENT_PATTERNS: list[re.Pattern] = [
+TRANSIENT_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"rate limit", re.IGNORECASE),
     re.compile(r"timeout", re.IGNORECASE),
     re.compile(r"connection refused", re.IGNORECASE),
