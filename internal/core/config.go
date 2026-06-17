@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gobwas/glob"
 	"gopkg.in/yaml.v3"
 )
 
@@ -423,6 +424,18 @@ func ValidateConfig(raw map[string]interface{}) ValidationResult {
 						Message:    "guard rule must have a 'match' string",
 						Suggestion: "Add match: 'tool_name:Bash' or similar glob pattern",
 					})
+				}
+				if match, ok := guard["match"]; ok && match != nil {
+					matchStr := fmt.Sprintf("%v", match)
+					if matchStr != "" && hasGlobChars(matchStr) {
+						if _, gErr := glob.Compile(matchStr); gErr != nil {
+							errors = append(errors, ValidationError{
+								Path:       fmt.Sprintf("guards[%d].match", i),
+								Message:    fmt.Sprintf("guard match %q is an invalid glob pattern: %v (the rule will never match any tool at runtime)", matchStr, gErr),
+								Suggestion: "Fix the glob pattern (e.g. close '[' and '{' groups), or use a plain tool name for an exact match",
+							})
+						}
+					}
 				}
 				action, actionOk := guard["action"]
 				if !actionOk || !isValidGuardAction(fmt.Sprintf("%v", action)) {

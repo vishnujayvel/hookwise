@@ -2079,3 +2079,79 @@ func TestGetDefaultConfig_StructIntegrity(t *testing.T) {
 		t.Errorf("expected struct, got %v", v.Kind())
 	}
 }
+
+// =============================================================================
+// Unit Tests: ValidateConfig — invalid glob in guard match
+// =============================================================================
+
+func TestValidateConfig_InvalidGlobMatch(t *testing.T) {
+	makeRaw := func(matchVal string) map[string]interface{} {
+		return map[string]interface{}{
+			"guards": []interface{}{
+				map[string]interface{}{
+					"match":  matchVal,
+					"action": "warn",
+					"reason": "x",
+				},
+			},
+		}
+	}
+
+	errorsForPath := func(raw map[string]interface{}, path string) []ValidationError {
+		result := ValidateConfig(raw)
+		var out []ValidationError
+		for _, e := range result.Errors {
+			if e.Path == path {
+				out = append(out, e)
+			}
+		}
+		return out
+	}
+
+	const path = "guards[0].match"
+
+	// Positive cases: invalid glob patterns that contain glob metacharacters must
+	// produce a ValidationError at guards[0].match mentioning "glob".
+	positiveCases := []struct {
+		label string
+		match string
+	}{
+		{"unclosed char class", "Bash["},
+		{"unclosed char class with content", "Edit[0-9"},
+	}
+	for _, tc := range positiveCases {
+		raw := makeRaw(tc.match)
+		errs := errorsForPath(raw, path)
+		var globErrs []ValidationError
+		for _, e := range errs {
+			if strings.Contains(e.Message, "glob") {
+				globErrs = append(globErrs, e)
+			}
+		}
+		if len(globErrs) == 0 {
+			t.Errorf("case=%q match=%q: expected ValidationError mentioning 'glob' at %q, got none (all errors at path: %v)", tc.label, tc.match, path, errs)
+		}
+	}
+
+	// Negative cases: valid patterns (plain exact or valid globs) must NOT produce
+	// a ValidationError mentioning "glob" at guards[0].match.
+	negativeCases := []struct {
+		label string
+		match string
+	}{
+		{"plain exact", "Bash"},
+		{"pipe in value (no glob metachar)", "Edit|Write"},
+		{"wildcard star", "*"},
+		{"prefix glob", "tool_*"},
+		{"valid brace group", "Bash{a,b}"},
+	}
+	for _, tc := range negativeCases {
+		raw := makeRaw(tc.match)
+		errs := errorsForPath(raw, path)
+		for _, e := range errs {
+			if strings.Contains(e.Message, "glob") {
+				t.Errorf("case=%q match=%q: expected no 'glob' error, got %q", tc.label, tc.match, e.Message)
+			}
+		}
+	}
+}
