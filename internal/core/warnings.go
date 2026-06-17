@@ -105,12 +105,6 @@ func ReadWarnings(stateDir string) []Warning {
 	return active
 }
 
-// warningsFilePath returns the path to warnings.json for a given state dir.
-// Exported for testing convenience.
-func warningsFilePath(stateDir string) string {
-	return filepath.Join(stateDir, "state", "warnings.json")
-}
-
 // FormatWarningAge returns a human-readable age string for a warning timestamp.
 func FormatWarningAge(timestamp string) string {
 	ts, err := ParseTimeFlex(timestamp)

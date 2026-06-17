@@ -60,14 +60,18 @@ func (m *Hookwise) pythonContainer(src *dagger.Directory, pythonVersion string) 
 
 // ----- Tier 0: Check -----
 
-// Check runs fast pre-commit checks: go vet, go build, and ruff lint — all in parallel.
+// Check runs fast pre-commit checks: golangci-lint, go build, and ruff lint — all in parallel.
 func (m *Hookwise) Check(ctx context.Context, src *dagger.Directory) error {
 	var g errgroup.Group
 
-	// Go vet
+	// golangci-lint (replaces bare go vet; errcheck disabled — see .golangci.yml / #44).
+	// Pinned to v2.12.2 and installed via `go install` so it is built with the
+	// container's go1.25 toolchain — the last v1 release (v1.64.8) is built with
+	// go1.24 and refuses to lint this go1.25 module.
 	g.Go(func() error {
 		_, err := m.goContainer(src).
-			WithExec([]string{"go", "vet", "./..."}).
+			WithExec([]string{"go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2"}).
+			WithExec([]string{"sh", "-c", "$(go env GOPATH)/bin/golangci-lint run ./..."}).
 			Sync(ctx)
 		return err
 	})

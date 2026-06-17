@@ -1,0 +1,18 @@
+# golangci-lint configuration (v2 schema).
+#
+# errcheck is intentionally disabled for now: hookwise is fail-open (ARCH-1)
+# infrastructure where many unchecked errors are deliberate swallows (side
+# effects must never block dispatch). Enabling errcheck requires per-call
+# triage (intentional-swallow vs real-bug) and is a supervised follow-up — see
+# issue #44. The remaining standard linters (govet, staticcheck, unused,
+# ineffassign) replace the previous bare `go vet`.
+#
+# Pinned to golangci-lint v2.x: the module targets go 1.25, and the last v1
+# release (v1.64.8) is built with go1.24 and refuses to lint a go1.25 module.
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: standard
+  disable:
+    - errcheck

@@ -51,6 +51,13 @@ tasks:
     sources:
       - "**/*.go"
 
+  lint:go:
+    desc: "Run golangci-lint (requires: brew install golangci-lint). errcheck disabled — see .golangci.yml"
+    cmds:
+      - golangci-lint run ./...
+    sources:
+      - "**/*.go"
+
   compile:
     desc: "Verify all packages compile"
     cmds:
