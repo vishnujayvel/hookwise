@@ -90,6 +90,14 @@ tasks:
     sources:
       - "tui/**/*.py"
 
+  lint:types:
+    desc: "Type-check Python TUI code with mypy (baseline gating — see #48)"
+    dir: tui
+    cmds:
+      - "{{.TUI_VENV}}/python -m mypy ."
+    sources:
+      - "tui/**/*.py"
+
   staleness:
     desc: "Check if installed binary matches source HEAD"
     cmds:

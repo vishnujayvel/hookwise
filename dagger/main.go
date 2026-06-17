@@ -60,8 +60,8 @@ func (m *Hookwise) pythonContainer(src *dagger.Directory, pythonVersion string) 
 
 // ----- Tier 0: Check -----
 
-// Check runs fast pre-commit checks: golangci-lint, go build, ruff lint, and
-// ls-lint naming conventions — all in parallel.
+// Check runs fast pre-commit checks: golangci-lint, go build, ruff lint,
+// ls-lint naming conventions, and mypy type checking — all in parallel.
 func (m *Hookwise) Check(ctx context.Context, src *dagger.Directory) error {
 	var g errgroup.Group
 
@@ -101,6 +101,16 @@ func (m *Hookwise) Check(ctx context.Context, src *dagger.Directory) error {
 	g.Go(func() error {
 		_, err := m.goContainer(src).
 			WithExec([]string{"sh", "-c", "ARCH=$(dpkg --print-architecture); curl -sSfL -o /usr/local/bin/ls-lint https://github.com/loeffel-io/ls-lint/releases/download/v2.3.1/ls-lint-linux-${ARCH} && chmod +x /usr/local/bin/ls-lint && ls-lint"}).
+			Sync(ctx)
+		return err
+	})
+
+	// Python mypy type check (#48). mypy==1.14.1 is pinned in tui/pyproject.toml
+	// dev deps, so pythonContainer's `.[dev]` install provides it. Gating on a
+	// documented per-module baseline (see [tool.mypy] in pyproject.toml).
+	g.Go(func() error {
+		_, err := m.pythonContainer(src, "3.13").
+			WithExec([]string{"python", "-m", "mypy", "."}).
 			Sync(ctx)
 		return err
 	})

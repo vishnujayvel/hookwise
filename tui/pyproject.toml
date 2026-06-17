@@ -23,11 +23,45 @@ dev = [
     "pytest-asyncio>=0.24",
     "pytest-textual-snapshot>=1.0.0",
     "ruff==0.15.17",
+    "mypy==1.14.1",
+    "types-PyYAML>=6.0",
 ]
 
 [tool.ruff]
 exclude = ["prototypes", ".venv"]
 target-version = "py311"
+
+# mypy static type checking (#48).
+#
+# Adopted as a GATING baseline: the config passes on the current tree and so
+# guards every already-clean module plus all new code from new type errors —
+# the same staged shape used for ruff (#45) and golangci-lint (#44, errcheck
+# disabled). `disallow_untyped_defs` stays false (permissive start) per the #48
+# ratchet plan. The modules listed under the ignore_errors override below carry
+# a pre-existing error backlog (32 errors, mostly in the data.py Go→Python
+# boundary file); they are quarantined here and fixed incrementally — see #48
+# Phase 1. prototypes/ is excluded to match the ruff config (throwaway code).
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+exclude = "prototypes"
+
+# Quarantined baseline — ratchet down one module at a time (#48 Phase 1),
+# starting with the data.py / boundary files mypy is most valuable for.
+[[tool.mypy.overrides]]
+module = [
+    "hookwise_tui.data",
+    "hookwise_tui.tabs.insights",
+    "hookwise_tui.tabs.analytics",
+    "hookwise_tui.tabs.dashboard",
+    "hookwise_tui.tabs.status",
+    "hookwise_tui.tabs.guards",
+    "hookwise_tui.widgets.weather_data",
+    "tests.test_terminal_e2e",
+]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
