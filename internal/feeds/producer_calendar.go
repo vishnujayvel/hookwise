@@ -126,12 +126,10 @@ func writeBackToken(tokenPath string, tok *oauth2.Token, cfg *oauth2.Config) {
 		ptf.Expiry = tok.Expiry.UTC().Format(time.RFC3339)
 	}
 
-	data, err := json.MarshalIndent(ptf, "", "  ")
-	if err != nil {
-		core.Logger().Debug("calendar: failed to marshal token for write-back", "error", err)
-		return
-	}
-	if err := os.WriteFile(tokenPath, data, 0600); err != nil {
+	// Atomic write (temp file + rename) so a crash or kill mid-write cannot
+	// truncate the credential file and force a full re-auth. AtomicWriteJSON
+	// also writes 0600, matching the prior permissions.
+	if err := core.AtomicWriteJSON(tokenPath, ptf); err != nil {
 		core.Logger().Debug("calendar: failed to write-back token", "error", err)
 	}
 }
