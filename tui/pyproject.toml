@@ -59,7 +59,6 @@ module = [
     "tests.test_data",
     "tests.test_snapshots",
     "tests.test_status_live_output",
-    "tests.test_status_segments",
     "tests.test_terminal_e2e",
     "tests.test_weather",
 ]
