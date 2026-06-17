@@ -56,7 +56,6 @@ exclude = "prototypes"
 # is fully strict; only these test files stay permissive.
 [[tool.mypy.overrides]]
 module = [
-    "tests.test_app",
     "tests.test_data",
     "tests.test_snapshots",
     "tests.test_status_live_output",
