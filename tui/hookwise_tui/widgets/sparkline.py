@@ -1,6 +1,5 @@
 """Sparkline widget for trend visualization using Rich Sparkline."""
 
-from rich.text import Text
 from textual.app import ComposeResult
 from textual.widget import Widget
 from textual.widgets import Static

@@ -1,7 +1,6 @@
 """Tests for hookwise_tui.app — Textual pilot tests."""
 
 import pytest
-from textual.pilot import Pilot
 
 from hookwise_tui.app import HookwiseTUI
 
@@ -14,7 +13,7 @@ def app():
 class TestHookwiseTUI:
     async def test_app_launches(self, app):
         """App starts without error and shows header."""
-        async with app.run_test() as pilot:
+        async with app.run_test():
             assert app.title == "Hookwise"
             assert app.sub_title == "Claude Code Hooks Dashboard"
 
@@ -52,7 +51,7 @@ class TestHookwiseTUI:
 
     async def test_dashboard_has_feature_cards(self, app):
         """Dashboard tab contains FeatureCard widgets."""
-        async with app.run_test() as pilot:
+        async with app.run_test():
             from hookwise_tui.widgets.feature_card import FeatureCard
             cards = app.query(FeatureCard)
             # Should have at least the 7 features from dashboard

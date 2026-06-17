@@ -9,7 +9,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
 
 from hookwise_tui.tabs.status import StatusTab, _LAST_STATUS_OUTPUT_PATH, _LIVE_OUTPUT_MAX_AGE
 

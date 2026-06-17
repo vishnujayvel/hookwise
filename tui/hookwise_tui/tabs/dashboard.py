@@ -135,9 +135,6 @@ class DashboardTab(Widget):
     def compose(self) -> ComposeResult:
         config = read_config()
 
-        enabled_count = sum(1 for f in FEATURES if _is_enabled(config, f))
-        total = len(FEATURES)
-
         yield Container(
             *[
                 FeatureCard(

@@ -51,7 +51,7 @@ class RecipesTab(Widget):
         includes = config.get("includes", [])
         if isinstance(includes, list) and includes:
             yield Static("Active Includes", classes="section-title")
-            with Static(classes="includes-section") as s:
+            with Static(classes="includes-section"):
                 pass
             for inc in includes:
                 yield Static(f"  [green]●[/green] {inc}")
@@ -73,7 +73,7 @@ class RecipesTab(Widget):
                 for recipe in categories[cat]:
                     status = "[green]●[/green]" if recipe.active else "[dim]○[/dim]"
                     label = f"{status} {recipe.name}"
-                    leaf = cat_node.add_leaf(label)
+                    cat_node.add_leaf(label)
                     if recipe.description:
                         cat_node.add_leaf(
                             f"  [dim italic]{recipe.description[:80]}[/dim italic]"

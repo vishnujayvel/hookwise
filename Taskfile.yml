@@ -74,7 +74,7 @@ tasks:
     desc: "Lint Python TUI code with ruff"
     dir: tui
     cmds:
-      - "{{.TUI_VENV}}/ruff check . || true"
+      - "{{.TUI_VENV}}/ruff check ."
     sources:
       - "tui/**/*.py"
 
