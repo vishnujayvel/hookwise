@@ -438,6 +438,25 @@ func ValidateConfig(raw map[string]interface{}) ValidationResult {
 						Message: "guard rule must have a 'reason' string",
 					})
 				}
+				for _, condKey := range []string{"when", "unless"} {
+					condVal, hasKey := guard[condKey]
+					if !hasKey {
+						continue
+					}
+					expr := fmt.Sprintf("%v", condVal)
+					parsed := ParseCondition(expr)
+					if parsed == nil {
+						continue
+					}
+					substringOps := map[string]bool{"contains": true, "starts_with": true, "ends_with": true}
+					if substringOps[parsed.Operator] && parsed.Value == "" {
+						errors = append(errors, ValidationError{
+							Path:       fmt.Sprintf("guards[%d].%s", i, condKey),
+							Message:    fmt.Sprintf("guard condition uses %q with an empty value, which matches every field (likely an unintended match-all)", parsed.Operator),
+							Suggestion: "Provide a non-empty substring value, or use a different operator if a catch-all is truly intended",
+						})
+					}
+				}
 			}
 		}
 	}
