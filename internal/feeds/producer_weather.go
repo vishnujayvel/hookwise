@@ -53,6 +53,8 @@ func wmoCodeToEmoji(code int) string {
 		return "\u2744\ufe0f" // snow
 	case code >= 80 && code <= 82:
 		return "\U0001f326\ufe0f" // sun behind rain cloud
+	case code >= 85 && code <= 86:
+		return "\u2744\ufe0f" // snow showers
 	case code >= 95 && code <= 99:
 		return "\u26c8\ufe0f" // thunderstorm
 	default:
@@ -83,6 +85,8 @@ func wmoCodeToDescription(code int) string {
 		return "Snow Grains"
 	case code >= 80 && code <= 82:
 		return "Showers"
+	case code >= 85 && code <= 86:
+		return "Snow Showers"
 	case code >= 95 && code <= 99:
 		return "Thunderstorm"
 	default:
