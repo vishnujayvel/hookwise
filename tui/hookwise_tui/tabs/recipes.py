@@ -4,7 +4,7 @@ from textual.app import ComposeResult
 from textual.widget import Widget
 from textual.widgets import Static, Tree
 
-from hookwise_tui.data import read_config, read_recipes
+from hookwise_tui.data import Recipe, read_config, read_recipes
 
 
 class RecipesTab(Widget):
@@ -64,7 +64,7 @@ class RecipesTab(Widget):
             tree.root.expand()
 
             # Group by category
-            categories: dict[str, list] = {}
+            categories: dict[str, list[Recipe]] = {}
             for r in recipes:
                 categories.setdefault(r.category, []).append(r)
 

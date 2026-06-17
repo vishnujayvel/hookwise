@@ -44,10 +44,12 @@ target-version = "py311"
 # drained the per-module test quarantine one file at a time (#187–#193); the
 # override block is now gone, so EVERY module (production AND test) is strict.
 # New code cannot regress. prototypes/ is excluded (throwaway code).
+# Full strict = true (gold standard) enabled — all strict checks now pass,
+# including disallow_any_generics (bare generics must carry type parameters).
 [tool.mypy]
 python_version = "3.11"
 warn_unused_configs = true
-disallow_untyped_defs = true
+strict = true
 ignore_missing_imports = true
 exclude = "prototypes"
 
