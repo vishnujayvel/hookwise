@@ -202,9 +202,11 @@ func renderWarningSegment(stateDir string) string {
 	if len(warnings) == 0 {
 		return ""
 	}
-	// Most recent warning is last in the slice.
+	// Most recent warning is last in the slice. Label the count with a noun and
+	// parenthesise the source so "2 cost" can't be misread as a quantity (#181).
 	mostRecentSource := warnings[len(warnings)-1].Source
-	return fmt.Sprintf("%s\u26a0 %d %s%s", ansiYellow, len(warnings), mostRecentSource, ansiReset)
+	return fmt.Sprintf("%s\u26a0 %d warning%s (%s)%s",
+		ansiYellow, len(warnings), pluralS(len(warnings)), mostRecentSource, ansiReset)
 }
 
 // pluralS returns "s" when count != 1, "" otherwise.
