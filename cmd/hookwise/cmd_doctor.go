@@ -106,6 +106,14 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "INFO  legacy-dolt: %s present (archived; safe to remove)\n", doltDir)
 	}
 
+	// Check 8: Cost-tracking honesty. DailySummary aggregates per-session
+	// estimated_cost_usd from the SAME UTC day `hookwise stats` and the
+	// status-line read, so doctor agrees with what the user sees there. If
+	// sessions were recorded today but $0 was computed, the cost writer is
+	// likely dead -- the exact failure that kept stats/status-line silently at
+	// $0. Mirrors the feed zero-liveness principle (cache-fresh != data-present).
+	warnings += checkCostHonesty(w, dbPath)
+
 	// Check 4: Daemon liveness via socket dial (replaces PID file check).
 	// Use GetStateDir() to respect HOOKWISE_STATE_DIR env override.
 	socketPath := filepath.Join(core.GetStateDir(), "daemon.sock")
@@ -397,6 +405,44 @@ func feedZeroLivenessReason(feedName string, dataMap map[string]interface{}) str
 		}
 	}
 	return ""
+}
+
+// checkCostHonesty reports a doctor warning when sessions were recorded today
+// but the computed cost is still $0 -- the signature of a dead cost writer
+// (sessions present but the cost value absent). It reads DailySummary for the
+// current UTC day, the same source `hookwise stats` and the status-line use, so
+// doctor stays consistent with what the user sees there. Returns the number of
+// warnings emitted (0 or 1). Absent or unopenable DBs are silent no-ops -- the
+// analytics check (Check 3) already owns reporting those.
+func checkCostHonesty(w io.Writer, dbPath string) int {
+	if _, err := os.Stat(dbPath); err != nil {
+		return 0
+	}
+	db, err := analytics.Open(dbPath)
+	if err != nil {
+		return 0
+	}
+	defer db.Close()
+
+	today := time.Now().UTC().Format("2006-01-02")
+	summary, err := analytics.NewAnalytics(db).DailySummary(context.Background(), today)
+	if err != nil {
+		return 0
+	}
+
+	switch {
+	case summary.TotalSessions == 0:
+		fmt.Fprintln(w, "INFO  cost: no sessions recorded today yet")
+		return 0
+	case summary.EstimatedCostUSD == 0:
+		fmt.Fprintf(w, "WARN  cost: %d session(s) today but $0.00 computed "+
+			"(cost tracking may be dead -- see 'hookwise stats')\n", summary.TotalSessions)
+		return 1
+	default:
+		fmt.Fprintf(w, "PASS  cost: $%.2f across %d session(s) today\n",
+			summary.EstimatedCostUSD, summary.TotalSessions)
+		return 0
+	}
 }
 
 // getFeedInterval returns the configured interval_seconds for a feed name.
