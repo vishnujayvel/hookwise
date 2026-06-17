@@ -181,7 +181,7 @@ func (p *WeatherProducer) fallbackResult(reason string) map[string]interface{} {
 	return NewEnvelope("weather", map[string]interface{}{
 		"temperature":     nil,
 		"temperatureUnit": unit,
-		"windSpeed":       0,
+		"windSpeed":       nil,
 		"weatherCode":     nil,
 		"emoji":           "\U0001f324\ufe0f",
 		"description":     "Unavailable",
