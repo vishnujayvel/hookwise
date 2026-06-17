@@ -20,7 +20,7 @@ from hookwise_tui.tabs.status import StatusTab
 class TestCalendarSegment:
     """The calendar producer emits event 'name'; the renderer must read it."""
 
-    def test_current_event_renders_producer_name(self):
+    def test_current_event_renders_producer_name(self) -> None:
         # Mirrors feeds.CalendarTestFixture(): events carry 'name', not 'title'.
         cache = {
             "calendar": {
@@ -43,7 +43,7 @@ class TestCalendarSegment:
         )
         assert "?" not in out
 
-    def test_next_event_renders_producer_name_not_free(self):
+    def test_next_event_renders_producer_name_not_free(self) -> None:
         # No current event, one upcoming ~30min out (inside the <=60min naming
         # window) -> must show its name. Reading 'title' here returned "Free"
         # because next_event.get("title") was falsy (issue #155).
@@ -67,7 +67,7 @@ class TestProjectSegment:
     """The project producer emits name/branch/last_commit/dirty/last_commit_ts;
     the renderer must read those, not repo/detached (issue #155)."""
 
-    def test_renders_repo_name_from_producer_name_field(self):
+    def test_renders_repo_name_from_producer_name_field(self) -> None:
         # Mirrors feeds.ProjectTestFixture(): the repo identity key is 'name'.
         cache = {
             "project": {
@@ -84,19 +84,19 @@ class TestProjectSegment:
         )
         assert "main" in out
 
-    def test_marks_dirty_working_tree(self):
+    def test_marks_dirty_working_tree(self) -> None:
         # The producer emits 'dirty' (working-tree state), not 'detached'.
         cache = {"project": {"name": "hookwise", "branch": "main", "dirty": True}}
         out = StatusTab._render_segment("project", cache)
         assert "hookwise" in out
         assert "*" in out, "a dirty working tree must show a '*' marker (issue #155)"
 
-    def test_clean_tree_has_no_dirty_marker(self):
+    def test_clean_tree_has_no_dirty_marker(self) -> None:
         cache = {"project": {"name": "hookwise", "branch": "main", "dirty": False}}
         out = StatusTab._render_segment("project", cache)
         assert "*" not in out, "a clean tree must not show the dirty marker"
 
-    def test_renders_commit_age_from_last_commit_ts(self):
+    def test_renders_commit_age_from_last_commit_ts(self) -> None:
         # The producer now emits 'last_commit_ts' (committer epoch); the renderer
         # turns it into an "Xm ago" suffix. Binds the new producer field name to
         # its consumer so it can't silently drift (issue #155).
