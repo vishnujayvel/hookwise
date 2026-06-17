@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import urllib.request
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from hookwise_tui.data import read_cache

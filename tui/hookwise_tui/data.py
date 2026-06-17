@@ -505,7 +505,7 @@ def read_insights(
         start_time = session.get("start_time", "")
         if isinstance(start_time, str) and len(start_time) >= 10:
             try:
-                from datetime import datetime as _dt, timezone as _tz
+                from datetime import datetime as _dt
                 utc_dt = _dt.fromisoformat(start_time.replace("Z", "+00:00"))
                 local_dt = utc_dt.astimezone()
                 date_str = local_dt.strftime("%Y-%m-%d")

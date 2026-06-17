@@ -16,7 +16,7 @@ from rich.text import Text as RichText
 from textual.reactive import reactive
 from textual.widget import Widget
 
-from hookwise_tui.widgets.weather_data import WeatherInfo, get_weather
+from hookwise_tui.widgets.weather_data import WeatherInfo
 
 
 # --- Particle Types ---

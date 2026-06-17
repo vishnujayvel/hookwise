@@ -22,7 +22,12 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "pytest-textual-snapshot>=1.0.0",
+    "ruff==0.15.17",
 ]
+
+[tool.ruff]
+exclude = ["prototypes", ".venv"]
+target-version = "py311"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

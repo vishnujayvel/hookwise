@@ -80,11 +80,11 @@ func (m *Hookwise) Check(ctx context.Context, src *dagger.Directory) error {
 		return err
 	})
 
-	// Python ruff lint (advisory — doesn't fail the build, matches Taskfile behavior)
+	// Python ruff lint (gating — fails the build on violations)
 	g.Go(func() error {
 		_, err := m.pythonContainer(src, "3.13").
-			WithExec([]string{"pip", "install", "--quiet", "ruff"}).
-			WithExec([]string{"sh", "-c", "ruff check . || true"}).
+			WithExec([]string{"pip", "install", "--quiet", "ruff==0.15.17"}).
+			WithExec([]string{"ruff", "check", "."}).
 			Sync(ctx)
 		return err
 	})
