@@ -9,12 +9,19 @@ from __future__ import annotations
 
 import os
 import time
+from typing import Any, Callable, cast
+from textual.css.query import DOMQuery
 
 import pytest
 from textual.css.query import NoMatches
+from textual.pilot import Pilot
 from textual.widgets import Static
 
 from hookwise_tui.app import HookwiseTUI
+
+# Type alias for the snap_compare fixture callable (matches the plugin's inner
+# compare() signature: app + keyword args → bool).
+SnapCompare = Callable[..., bool]
 
 TERMINAL_SIZE = (80, 24)
 
@@ -34,7 +41,7 @@ TAB_SPECS: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 
-async def _stabilise_feeds(pilot) -> None:
+async def _stabilise_feeds(pilot: Pilot[Any]) -> None:
     """Replace dynamic content in the Feeds tab with deterministic text.
 
     The Feeds tab refreshes every 3 seconds and includes:
@@ -57,7 +64,7 @@ async def _stabilise_feeds(pilot) -> None:
         pass  # Tab not visible / widget not yet mounted — safe to skip
 
 
-async def _stabilise_insights(pilot) -> None:
+async def _stabilise_insights(pilot: Pilot[Any]) -> None:
     """Pin TZ to UTC before rendering the Insights tab.
 
     The ``peak_hour`` metric is computed from UTC hours offset by the local
@@ -68,7 +75,7 @@ async def _stabilise_insights(pilot) -> None:
     time.tzset()
 
 
-async def _stabilise_analytics(pilot) -> None:
+async def _stabilise_analytics(pilot: Pilot[Any]) -> None:
     """Pin the Analytics tab's live database-driven content to deterministic values.
 
     The Analytics tab reads from the live ``~/.hookwise/analytics.db`` SQLite
@@ -84,6 +91,7 @@ async def _stabilise_analytics(pilot) -> None:
     """
     from textual.css.query import NoMatches as _NoMatches
     from hookwise_tui.tabs.analytics import AnalyticsTab
+    from hookwise_tui.widgets.sparkline import SparklineWidget
     from textual.widgets import DataTable
 
     try:
@@ -97,11 +105,11 @@ async def _stabilise_analytics(pilot) -> None:
         "Tool Calls\n[bold cyan]0[/bold cyan]",
         "Lines Added\n[bold cyan]0[/bold cyan]",
     ]
-    for widget, text in zip(tab.query(".metric-box"), fixed_metrics):
+    for widget, text in zip(cast(DOMQuery[Static], tab.query(".metric-box")), fixed_metrics):
         widget.update(text)
 
     # Pin each SparklineWidget's label and bar to fixed placeholder content
-    for spark in tab.query("SparklineWidget"):
+    for spark in tab.query(SparklineWidget):
         try:
             spark.query_one(".spark-label", Static).update(
                 f"{spark._label}: [bold cyan]0[/bold cyan]"
@@ -118,7 +126,7 @@ async def _stabilise_analytics(pilot) -> None:
         pass  # No data → "no analytics data" Static is shown instead
 
 
-async def _stabilise_status(pilot) -> None:
+async def _stabilise_status(pilot: Pilot[Any]) -> None:
     """Pin the clock segment and preview to fixed content to avoid snapshot flakiness.
 
     The status tab includes a live clock segment and an auto-refreshing preview
@@ -137,7 +145,7 @@ async def _stabilise_status(pilot) -> None:
 
 
 @pytest.mark.parametrize("tab_id, keys", TAB_SPECS, ids=[t[0] for t in TAB_SPECS])
-def test_tab_snapshot(snap_compare, tab_id, keys):
+def test_tab_snapshot(snap_compare: SnapCompare, tab_id: str, keys: tuple[str, ...]) -> None:
     """Each TUI tab renders correctly at 80x24."""
     if tab_id == "analytics":
         run_before = _stabilise_analytics
