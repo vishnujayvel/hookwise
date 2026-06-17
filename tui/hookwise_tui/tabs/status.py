@@ -456,12 +456,12 @@ class StatusTab(Widget):
             return str(entry.get("text", ""))
 
         if seg == "project":
-            repo = entry.get("repo", "")
+            repo = entry.get("name", "")
             if not repo:
                 return ""
             branch = entry.get("branch", "unknown")
-            if entry.get("detached"):
-                branch = "detached"
+            if entry.get("dirty"):
+                branch = f"{branch}*"
             parts = [f"\U0001f4e6 {repo} ({branch})"]
             ts = entry.get("last_commit_ts")
             if ts is not None:
