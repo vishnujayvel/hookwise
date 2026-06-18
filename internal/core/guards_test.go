@@ -238,6 +238,40 @@ func TestEvaluateCondition_ContainsNoMatch(t *testing.T) {
 	assert.False(t, *result)
 }
 
+// An empty substring value must NOT match every field (#147). strings.Contains/
+// HasPrefix/HasSuffix all return true for an empty needle, which would silently
+// turn a narrow guard into a match-all (e.g. an accidentally-empty `command
+// contains ""` blocking every tool call). Neutralize to a non-match instead.
+func TestEvaluateCondition_EmptyContains_DoesNotMatchAll(t *testing.T) {
+	data := map[string]interface{}{"command": "git pull"}
+	result := EvaluateCondition(`command contains ""`, data)
+	require.NotNil(t, result, "empty-value condition still parses; it just never matches")
+	assert.False(t, *result, `contains "" must not match every field`)
+}
+
+func TestEvaluateCondition_EmptyStartsWith_DoesNotMatchAll(t *testing.T) {
+	data := map[string]interface{}{"path": "/etc/passwd"}
+	result := EvaluateCondition(`path starts_with ""`, data)
+	require.NotNil(t, result)
+	assert.False(t, *result, `starts_with "" must not match every field`)
+}
+
+func TestEvaluateCondition_EmptyEndsWith_DoesNotMatchAll(t *testing.T) {
+	data := map[string]interface{}{"file": "config.env"}
+	result := EvaluateCondition(`file ends_with ""`, data)
+	require.NotNil(t, result)
+	assert.False(t, *result, `ends_with "" must not match every field`)
+}
+
+// == with an empty value is a genuine emptiness test and must be left intact:
+// it should still match a field that is actually empty.
+func TestEvaluateCondition_EmptyEquals_StillTestsEmptiness(t *testing.T) {
+	data := map[string]interface{}{"command": ""}
+	result := EvaluateCondition(`command == ""`, data)
+	require.NotNil(t, result)
+	assert.True(t, *result, `== "" must still match a genuinely empty field`)
+}
+
 func TestEvaluateCondition_StartsWith(t *testing.T) {
 	data := map[string]interface{}{
 		"path": "/etc/passwd",

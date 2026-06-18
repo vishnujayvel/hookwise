@@ -116,6 +116,19 @@ func EvaluateCondition(expression string, data map[string]interface{}) *bool {
 		return &f
 	}
 
+	// An empty substring value makes Contains/HasPrefix/HasSuffix return true for
+	// every field, silently turning a narrow guard into a match-all (#147) — e.g.
+	// an accidentally-empty `command contains ""` would fire on every tool call.
+	// Neutralize it to a non-match. (== and matches are intentionally unaffected:
+	// `== ""` is a genuine emptiness test, and `matches ""` is a valid regex.)
+	if parsed.Value == "" {
+		switch parsed.Operator {
+		case "contains", "starts_with", "ends_with":
+			f := false
+			return &f
+		}
+	}
+
 	var result bool
 
 	switch parsed.Operator {
