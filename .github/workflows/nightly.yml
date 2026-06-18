@@ -1,0 +1,33 @@
+name: Nightly Validate
+
+# The required per-PR `CI` workflow runs only Tier 0 (vet/compile/lint) + Tier 1
+# (unit/contract/arch/PBT/TUI) via `dagger call test`. The chaos (integration)
+# and mutation tiers are expensive — mutation runs the suite per mutant — so
+# they are unsuitable for a per-PR gate. This scheduled workflow runs the full
+# `dagger call validate` (Tier 2: integration/chaos + mutation + snapshots)
+# once a day so regressions in failure-mode handling or a weakened
+# mutant-killing suite surface as a failed run, instead of merging green
+# unnoticed (#123). Resource-safety (retro-009) is handled inside the Dagger
+# pipeline (-p 2 + GOMEMLIMIT), not here.
+
+on:
+  schedule:
+    # 02:00 UTC daily.
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Dagger Validate (Tier 2 — chaos + mutation + snapshots)
+        uses: dagger/dagger-for-github@v8.4.0
+        with:
+          verb: call
+          args: validate --src=.
+          version: "v0.20.1"
