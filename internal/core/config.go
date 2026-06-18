@@ -474,7 +474,7 @@ func ValidateConfig(raw map[string]interface{}) ValidationResult {
 					if substringOps[parsed.Operator] && parsed.Value == "" {
 						errors = append(errors, ValidationError{
 							Path:       fmt.Sprintf("guards[%d].%s", i, condKey),
-							Message:    fmt.Sprintf("guard condition uses %q with an empty value, which matches every field (likely an unintended match-all)", parsed.Operator),
+							Message:    fmt.Sprintf("guard condition uses %q with an empty value; an empty substring is treated as a non-match and the rule will never fire (likely an accidental empty value)", parsed.Operator),
 							Suggestion: "Provide a non-empty substring value, or use a different operator if a catch-all is truly intended",
 						})
 					}
