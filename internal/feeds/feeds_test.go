@@ -521,6 +521,39 @@ func TestDaemon_IntervalFor(t *testing.T) {
 	assert.Equal(t, defaultInterval, d.intervalFor("project")) // 0 -> default
 }
 
+// A wired custom feed (#124) must be polled on its configured interval, not the
+// 60s default. intervalFor resolves a custom name via config.Feeds.Custom.
+func TestDaemon_IntervalFor_Custom(t *testing.T) {
+	r := NewRegistry()
+	d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{
+		Custom: []core.CustomFeedConfig{
+			{Name: "my-feed", Command: "echo {}", IntervalSeconds: 300, Enabled: true},
+			{Name: "no-interval", Command: "echo {}", Enabled: true},
+		},
+	}, r)
+
+	assert.Equal(t, 300*time.Second, d.intervalFor("my-feed"))
+	assert.Equal(t, defaultInterval, d.intervalFor("no-interval")) // 0 -> default
+	assert.Equal(t, defaultInterval, d.intervalFor("not-configured"))
+}
+
+// A custom feed's enabled flag must gate whether it runs (#124). isEnabled
+// resolves a custom name via config.Feeds.Custom; truly-unknown names stay
+// fail-open (enabled).
+func TestDaemon_IsEnabled_Custom(t *testing.T) {
+	r := NewRegistry()
+	d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{
+		Custom: []core.CustomFeedConfig{
+			{Name: "on", Command: "echo {}", Enabled: true},
+			{Name: "off", Command: "echo {}", Enabled: false},
+		},
+	}, r)
+
+	assert.True(t, d.isEnabled("on"))
+	assert.False(t, d.isEnabled("off"), "a custom feed with enabled:false must not run")
+	assert.True(t, d.isEnabled("truly-unknown"), "unknown feeds remain fail-open enabled")
+}
+
 // ---------------------------------------------------------------------------
 // Test 18: Custom producer default timeout
 // ---------------------------------------------------------------------------
