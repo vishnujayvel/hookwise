@@ -33,7 +33,7 @@ hookwise operates under the following trust boundaries:
 
 | Input | Trust Level | Rationale |
 |-------|-------------|-----------|
-| `hookwise.yaml` | **Trusted** | User-authored local config, equivalent to a Makefile or package.json scripts |
+| `hookwise.yaml` | **Trusted** | User-authored local config, equivalent to a Makefile or package.json scripts. Note: `feeds.custom` entries are executed via `sh -c` with the user's privileges (see Process Execution below) |
 | CLI arguments | **Trusted** | Provided by the local user |
 | Environment variables | **Trusted** | Set by the local user or system |
 | Claude Code hook payloads | **Semi-trusted** | JSON from Claude Code's hook system; parsed with Go's `encoding/json` (no code execution) |
@@ -49,8 +49,9 @@ The codebase enforces the following security practices by design:
 - **JSON-only deserialization** -- All external data is parsed with Go's `encoding/json`, which cannot execute code.
 
 ### Process Execution
-- **No `eval()` or dynamic code execution** -- Go's type system prevents this by design.
-- **`exec.Command` without shell** -- The dispatcher passes handler arguments as array elements, preventing shell injection.
+- **No code execution from untrusted or semi-trusted input** -- External API responses and Claude Code hook payloads are parsed as data only (`encoding/json`) and are never evaluated as code.
+- **Handler dispatch uses no shell** -- The dispatcher runs handler executables via `exec.Command` with arguments passed as array elements (not a shell string), so a hook payload cannot inject shell commands.
+- **Custom feeds run a shell *by design*, scoped to trusted config** -- The optional `feeds.custom` mechanism executes its configured `command` via `sh -c` (`internal/feeds/custom.go`). This is intentional and is scoped to the **Trusted** `hookwise.yaml` -- the same trust level as a Makefile target or an npm `scripts` entry. A custom feed command runs with your privileges, so only configure commands you would run yourself; treat a project's `hookwise.yaml` the way you would treat its build scripts before enabling custom feeds. hookwise never derives a shell command from any semi-trusted or untrusted input.
 
 ### File System
 - **Restrictive permissions** -- Database files use `0o600`; directories use `0o700` (owner-only).
