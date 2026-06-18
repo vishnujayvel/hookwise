@@ -47,6 +47,11 @@ screenshots/01-before-after-results.png
 # Social media drafts (unpublished, internal only)
 docs/social-media-drafts.md
 
+# Private reports & internal working docs (never publish — keep out of git)
+docs/audit/
+docs/dev-journal.md
+docs/design/
+
 # Excalidraw
 excalidraw.log
 
