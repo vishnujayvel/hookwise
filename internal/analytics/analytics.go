@@ -90,26 +90,40 @@ func (a *Analytics) StartSession(ctx context.Context, sessionID string, startedA
 	return nil
 }
 
-// EndSession updates the session row with end timestamp and summary stats.
-// If the session does not exist, the UPDATE is a no-op (0 rows affected),
-// which is treated as success (upsert-safe behaviour).
+// EndSession records the end timestamp and summary stats for a session,
+// upserting so the row is created when no prior StartSession fired (#169 —
+// the install-mid-session first-run case, where Stop arrives without a
+// matching SessionStart). Without the upsert, an UPDATE matched 0 rows and
+// the session's cost was silently dropped from `hookwise stats` while
+// cost_state still captured it, diverging the two cost views.
+//
+// On the INSERT path started_at falls back to endedAt (we don't know the real
+// start), yielding a 0-duration orphan rather than a lost session. On the
+// conflict path started_at is intentionally excluded from DO UPDATE SET so a
+// real prior start time is preserved.
 func (a *Analytics) EndSession(ctx context.Context, sessionID string, endedAt time.Time, stats SessionStats) error {
+	endedAtStr := endedAt.UTC().Format(time.RFC3339)
 	_, err := a.db.Exec(ctx,
-		`UPDATE sessions SET
-			ended_at = ?,
-			total_tool_calls = ?,
-			file_edits_count = ?,
-			ai_authored_lines = ?,
-			human_verified_lines = ?,
-			estimated_cost_usd = ?
-		WHERE id = ?`,
-		endedAt.UTC().Format(time.RFC3339),
+		`INSERT INTO sessions (
+			id, started_at, ended_at,
+			total_tool_calls, file_edits_count,
+			ai_authored_lines, human_verified_lines, estimated_cost_usd
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			ended_at = excluded.ended_at,
+			total_tool_calls = excluded.total_tool_calls,
+			file_edits_count = excluded.file_edits_count,
+			ai_authored_lines = excluded.ai_authored_lines,
+			human_verified_lines = excluded.human_verified_lines,
+			estimated_cost_usd = excluded.estimated_cost_usd`,
+		sessionID,
+		endedAtStr, // started_at fallback (INSERT path only)
+		endedAtStr,
 		stats.TotalToolCalls,
 		stats.FileEditsCount,
 		stats.AIAuthoredLines,
 		stats.HumanVerifiedLines,
 		stats.EstimatedCostUSD,
-		sessionID,
 	)
 	if err != nil {
 		return fmt.Errorf("analytics: end session: %w", err)
