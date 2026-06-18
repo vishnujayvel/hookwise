@@ -90,7 +90,6 @@ type HooksConfig struct {
 	Sounds           SoundsConfig          `yaml:"sounds" json:"sounds"`
 	StatusLine       StatusLineConfig      `yaml:"status_line" json:"statusLine"`
 	CostTracking     CostTrackingConfig    `yaml:"cost_tracking" json:"costTracking"`
-	TranscriptBackup TranscriptConfig      `yaml:"transcript_backup" json:"transcriptBackup"`
 	Handlers         []CustomHandlerConfig `yaml:"handlers" json:"handlers"`
 	Settings         SettingsConfig        `yaml:"settings" json:"settings"`
 	Includes         []string              `yaml:"includes" json:"includes"`
@@ -148,12 +147,6 @@ type CostTrackingConfig struct {
 	Rates       map[string]float64 `yaml:"rates" json:"rates"`
 	DailyBudget float64            `yaml:"daily_budget" json:"dailyBudget"`
 	Enforcement string             `yaml:"enforcement" json:"enforcement"` // "warn" or "enforce"
-}
-
-type TranscriptConfig struct {
-	Enabled   bool   `yaml:"enabled" json:"enabled"`
-	BackupDir string `yaml:"backup_dir" json:"backupDir"`
-	MaxSizeMB int    `yaml:"max_size_mb" json:"maxSizeMb"`
 }
 
 type SettingsConfig struct {

@@ -119,7 +119,6 @@ func buildConfig(fc FixtureConfig) core.HooksConfig {
 	cfg.Sounds.Enabled = false
 	cfg.StatusLine.Enabled = false
 	cfg.CostTracking.Enabled = false
-	cfg.TranscriptBackup.Enabled = false
 	cfg.Greeting.Enabled = false
 	// No custom handlers for contract tests (guards-only)
 	cfg.Handlers = nil

@@ -19,9 +19,6 @@ var (
 	// DefaultLogPath is ~/.hookwise/logs/
 	DefaultLogPath = filepath.Join(DefaultStateDir, "logs")
 
-	// DefaultTranscriptDir is ~/.hookwise/transcripts/
-	DefaultTranscriptDir = filepath.Join(DefaultStateDir, "transcripts")
-
 	// GlobalConfigPath is ~/.hookwise/config.yaml
 	GlobalConfigPath = filepath.Join(DefaultStateDir, "config.yaml")
 

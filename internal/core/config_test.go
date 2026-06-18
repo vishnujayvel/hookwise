@@ -425,6 +425,27 @@ func TestValidateConfig_UnknownSection(t *testing.T) {
 	}
 }
 
+// transcript_backup was a dead config block (parse-only, never read; the
+// "transcript backup" feature was never ported to Go). After removal it must
+// be reported as an unknown section so a config still carrying it is flagged
+// honestly rather than silently accepted as a no-op.
+func TestValidateConfig_TranscriptBackupIsUnknownSection(t *testing.T) {
+	raw := map[string]interface{}{
+		"version":           1,
+		"transcript_backup": map[string]interface{}{"enabled": true},
+	}
+	result := ValidateConfig(raw)
+	found := false
+	for _, e := range result.Errors {
+		if strings.Contains(e.Message, "Unknown config section") && e.Path == "transcript_backup" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected transcript_backup to be reported as an unknown config section after removal")
+	}
+}
+
 func TestValidateConfig_InvalidVersion(t *testing.T) {
 	raw := map[string]interface{}{
 		"version": "not-a-number",
@@ -799,16 +820,6 @@ func TestGetDefaultConfig_CostTracking(t *testing.T) {
 	}
 	if cfg.CostTracking.Enforcement != "warn" {
 		t.Errorf("expected enforcement=warn, got %q", cfg.CostTracking.Enforcement)
-	}
-}
-
-func TestGetDefaultConfig_TranscriptBackup(t *testing.T) {
-	cfg := GetDefaultConfig()
-	if cfg.TranscriptBackup.Enabled {
-		t.Error("expected transcript backup disabled by default")
-	}
-	if cfg.TranscriptBackup.MaxSizeMB != 100 {
-		t.Errorf("expected max size=100, got %d", cfg.TranscriptBackup.MaxSizeMB)
 	}
 }
 
@@ -1333,36 +1344,6 @@ cost_tracking:
 	}
 	if cfg.CostTracking.Enforcement != "enforce" {
 		t.Errorf("expected enforcement=enforce, got %q", cfg.CostTracking.Enforcement)
-	}
-}
-
-func TestLoadConfig_TranscriptBackupSnakeCase(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, "global"))
-
-	projectConfig := `
-version: 1
-transcript_backup:
-  enabled: true
-  backup_dir: "/custom/transcripts"
-  max_size_mb: 200
-`
-	if err := os.WriteFile(filepath.Join(tmpDir, "hookwise.yaml"), []byte(projectConfig), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := LoadConfig(tmpDir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !cfg.TranscriptBackup.Enabled {
-		t.Error("expected transcript_backup.enabled=true")
-	}
-	if cfg.TranscriptBackup.BackupDir != "/custom/transcripts" {
-		t.Errorf("expected backup_dir=/custom/transcripts, got %q", cfg.TranscriptBackup.BackupDir)
-	}
-	if cfg.TranscriptBackup.MaxSizeMB != 200 {
-		t.Errorf("expected max_size_mb=200, got %d", cfg.TranscriptBackup.MaxSizeMB)
 	}
 }
 
