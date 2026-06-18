@@ -168,6 +168,14 @@ func (d *Daemon) intervalFor(name string) time.Duration {
 		seconds = d.feeds.Memories.IntervalSeconds
 	case "insights":
 		seconds = d.feeds.Insights.IntervalSeconds
+	default:
+		// Custom feeds (#124) carry their interval in config.Feeds.Custom.
+		for _, c := range d.feeds.Custom {
+			if c.Name == name {
+				seconds = c.IntervalSeconds
+				break
+			}
+		}
 	}
 
 	if seconds > 0 {
@@ -194,7 +202,13 @@ func (d *Daemon) isEnabled(name string) bool {
 	case "insights":
 		return d.feeds.Insights.Enabled
 	default:
-		// Unknown feeds (custom, etc.) are enabled by default (fail-open).
+		// Custom feeds (#124) carry their enabled flag in config.Feeds.Custom.
+		for _, c := range d.feeds.Custom {
+			if c.Name == name {
+				return c.Enabled
+			}
+		}
+		// Truly unknown feeds are enabled by default (fail-open).
 		return true
 	}
 }

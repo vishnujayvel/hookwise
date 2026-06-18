@@ -17,6 +17,27 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/feeds"
 )
 
+// registerCustomFeeds registers user-defined custom feed producers (#124) from
+// config so the daemon polls them alongside the built-ins. Entries with an
+// empty name or command are skipped (a malformed entry must not register a
+// no-op producer). Enabled/interval gating happens in the daemon poll loop via
+// config.Feeds.Custom (mirroring how built-ins are gated), so producers are
+// registered here regardless of their Enabled flag. Returns the number
+// registered.
+func registerCustomFeeds(registry *feeds.Registry, customs []core.CustomFeedConfig) int {
+	count := 0
+	for _, c := range customs {
+		if c.Name == "" || c.Command == "" {
+			continue
+		}
+		registry.Register(feeds.NewCustomProducer(
+			c.Name, c.Command, time.Duration(c.TimeoutSeconds)*time.Second,
+		))
+		count++
+	}
+	return count
+}
+
 func newDaemonCmd() *cobra.Command {
 	daemonCmd := &cobra.Command{
 		Use:   "daemon",
@@ -110,6 +131,7 @@ func newDaemonRunCmd() *cobra.Command {
 
 			registry := feeds.NewRegistry()
 			feeds.RegisterBuiltins(registry)
+			registerCustomFeeds(registry, config.Feeds.Custom)
 
 			daemon := feeds.NewDaemon(config.Daemon, config.Feeds, registry)
 			if socketPath != "" {

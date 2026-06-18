@@ -16,13 +16,11 @@ import (
 //
 // Entries are added deliberately, never to silence a freshly-introduced dead
 // producer. Each value is the tracking issue for wiring (or removing) it.
-var producerWiringAllowlist = map[string]string{
-	// CustomProducer is constructed via NewCustomProducer, but that constructor
-	// is currently called only from tests — custom feeds appear unwired from the
-	// daemon/config path. Tracked separately; do not remove until wiring is
-	// verified or the surface is removed.
-	"CustomProducer": "#124",
-}
+// Intentionally empty: CustomProducer was wired into the daemon/config path
+// (#124 — registerCustomFeeds in cmd/hookwise/cmd_daemon.go constructs each
+// config.Feeds.Custom entry via NewCustomProducer), so it no longer needs an
+// exception. Add an entry here only to track a deliberately-deferred wiring.
+var producerWiringAllowlist = map[string]string{}
 
 // TestArch_ProducerTypesAreWired enforces the WRITER AUDIT (#99) lesson for the
 // feed platform: a Producer type that is declared but never registered or
