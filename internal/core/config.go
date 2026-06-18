@@ -23,7 +23,6 @@ var knownSections = map[string]bool{
 	"sounds":            true,
 	"status_line":       true,
 	"cost_tracking":     true,
-	"transcript_backup": true,
 	"handlers":          true,
 	"settings":          true,
 	"includes":          true,
@@ -60,11 +59,6 @@ func GetDefaultConfig() HooksConfig {
 			Rates:       map[string]float64{},
 			DailyBudget: 10,
 			Enforcement: "warn",
-		},
-		TranscriptBackup: TranscriptConfig{
-			Enabled:   false,
-			BackupDir: DefaultTranscriptDir,
-			MaxSizeMB: 100,
 		},
 		Handlers: []CustomHandlerConfig{},
 		Settings: SettingsConfig{
