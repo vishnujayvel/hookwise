@@ -87,6 +87,15 @@ func TestInitCreatesConfig(t *testing.T) {
 		t.Error("created config should contain 'version: 1'")
 	}
 
+	// The generated header must point at the real repo, not the 404ing
+	// hookwise/hookwise org (#10).
+	if !strings.Contains(string(data), "https://github.com/vishnujayvel/hookwise") {
+		t.Error("created config should reference the real docs URL github.com/vishnujayvel/hookwise")
+	}
+	if strings.Contains(string(data), "github.com/hookwise/hookwise") {
+		t.Error("created config must not reference the broken hookwise/hookwise URL")
+	}
+
 	if !strings.Contains(output, "Created") {
 		t.Error("init output should say 'Created'")
 	}
@@ -209,7 +218,7 @@ func TestDoctorWithValidConfig(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Status-line disabled shows message
+// 6. Status-line disabled renders nothing
 // ---------------------------------------------------------------------------
 
 func TestStatusLineDisabled(t *testing.T) {
@@ -235,8 +244,11 @@ func TestStatusLineDisabled(t *testing.T) {
 		t.Fatalf("status-line failed: %v\noutput: %s", err, output)
 	}
 
-	if !strings.Contains(output, "disabled") {
-		t.Errorf("status-line should show 'disabled' message, got: %s", output)
+	// Claude Code pipes this command's stdout into the status bar, so a disabled
+	// status line must emit nothing — not a literal "(status line disabled)"
+	// diagnostic (#11). Output must be empty (allowing only trailing whitespace).
+	if strings.TrimSpace(output) != "" {
+		t.Errorf("disabled status-line should render nothing, got: %q", output)
 	}
 }
 

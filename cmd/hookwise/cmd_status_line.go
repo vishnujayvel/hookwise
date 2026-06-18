@@ -72,7 +72,10 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 	}
 
 	if !config.StatusLine.Enabled {
-		fmt.Fprintln(cmd.OutOrStdout(), ansiGray+"(status line disabled)"+ansiReset)
+		// Render nothing when disabled. Claude Code pipes this command's stdout
+		// straight into the status bar, so emitting a diagnostic string would
+		// surface literal "(status line disabled)" to the user (#11). Silence is
+		// the honest representation of a disabled status line.
 		return nil
 	}
 
