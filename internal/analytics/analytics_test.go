@@ -440,24 +440,63 @@ func TestRecordEvent_MissingOptionalFields(t *testing.T) {
 // Test 11: EndSession for non-existent session (upsert-safe)
 // ---------------------------------------------------------------------------
 
-func TestEndSession_NonExistent_NoError(t *testing.T) {
+// EndSession on a session that was never started (no prior StartSession)
+// must UPSERT a row so the session's cost is not silently dropped from
+// `hookwise stats` (#169 — the install-mid-session first-run case). The
+// inserted row's started_at falls back to ended_at (we don't know the real
+// start), giving a 0-duration orphan rather than a lost session.
+func TestEndSession_NoPriorStart_UpsertsRowWithCost(t *testing.T) {
 	a, cleanup := testAnalytics(t)
 	defer cleanup()
 
 	ctx := context.Background()
 	end := time.Date(2025, 3, 6, 12, 0, 0, 0, time.UTC)
 
-	// Ending a session that was never started should not error.
-	err := a.EndSession(ctx, "does-not-exist", end, SessionStats{
-		TotalToolCalls: 5,
+	err := a.EndSession(ctx, "no-prior-start", end, SessionStats{
+		TotalToolCalls:   5,
+		EstimatedCostUSD: 0.42,
 	})
 	require.NoError(t, err)
 
-	// Verify nothing was inserted.
-	var count int
-	err = a.db.QueryRow(ctx, "SELECT COUNT(*) FROM sessions WHERE id = ?", "does-not-exist").Scan(&count)
+	var startedAt, endedAt string
+	var toolCalls int
+	var cost float64
+	err = a.db.QueryRow(ctx,
+		`SELECT started_at, ended_at, total_tool_calls, estimated_cost_usd
+		 FROM sessions WHERE id = ?`, "no-prior-start").
+		Scan(&startedAt, &endedAt, &toolCalls, &cost)
+	require.NoError(t, err, "EndSession without a prior start must insert a row")
+
+	// started_at falls back to ended_at (0-duration orphan), cost preserved.
+	assert.Equal(t, "2025-03-06T12:00:00Z", startedAt)
+	assert.Equal(t, "2025-03-06T12:00:00Z", endedAt)
+	assert.Equal(t, 5, toolCalls)
+	assert.InDelta(t, 0.42, cost, 0.001)
+}
+
+// When a prior StartSession row exists, EndSession's upsert must NOT clobber
+// the real started_at with ended_at — the conflict path preserves it.
+func TestEndSession_PreservesStartedAtOnUpsert(t *testing.T) {
+	a, cleanup := testAnalytics(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	start := time.Date(2025, 3, 6, 9, 0, 0, 0, time.UTC)
+	end := time.Date(2025, 3, 6, 10, 15, 0, 0, time.UTC)
+
+	require.NoError(t, a.StartSession(ctx, "has-start", start))
+	require.NoError(t, a.EndSession(ctx, "has-start", end, SessionStats{EstimatedCostUSD: 1.5}))
+
+	var startedAt, endedAt string
+	var cost float64
+	err := a.db.QueryRow(ctx,
+		"SELECT started_at, ended_at, estimated_cost_usd FROM sessions WHERE id = ?", "has-start").
+		Scan(&startedAt, &endedAt, &cost)
 	require.NoError(t, err)
-	assert.Equal(t, 0, count)
+
+	assert.Equal(t, "2025-03-06T09:00:00Z", startedAt, "real start time must be preserved, not overwritten by ended_at")
+	assert.Equal(t, "2025-03-06T10:15:00Z", endedAt)
+	assert.InDelta(t, 1.5, cost, 0.001)
 }
 
 // ---------------------------------------------------------------------------
