@@ -107,11 +107,18 @@ pkg/hookwise/testing/   # Test utility exports (hwtesting)
 
 | Tool | Type | Prevents |
 |------|------|----------|
-| **pytest-textual-snapshot** | TUI visual regression (SVG snapshots) | Layout bugs |
+| **pytest-textual-snapshot** | TUI visual regression (SVG snapshots) | Layout bugs (local-only — see note) |
 | **go/packages** (internal/arch) | Architecture linting (import graph rules) | Package dependency violations |
 | **pgregory.net/rapid** (internal/proptest) | Property-based testing (random input generation) | Scoring invariant violations |
 | **internal/mutation** | Mutation testing (3 operators, 93.3% kill rate) | Weak test assertions |
 | **internal/chaos** | Chaos/failure mode testing (12+ scenarios) | Unhandled failure paths |
+
+> **Snapshot tests do not gate CI.** Container rendering (terminal size, fonts)
+> differs from local macOS, so committed baselines won't match in CI; the dagger
+> pipeline runs snapshots with `--snapshot-update`, which regenerates rather than
+> asserts. They catch regressions only when run locally and diffed by a human.
+> Making visual regressions fail CI (committed container-rendered baselines) is a
+> roadmap item — see `docs/roadmap.md`.
 
 ## Layer 5: Documentation
 
