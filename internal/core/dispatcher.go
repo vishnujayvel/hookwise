@@ -290,6 +290,14 @@ func buildPermissionJSON(decision, reason string) string {
 	return string(b)
 }
 
+// BuildPermissionDenyJSON builds the PreToolUse "deny" permission JSON, byte-
+// identical to a declarative block guard's output. Exported so the command
+// layer can emit a deny for cost-budget enforcement (which needs the analytics
+// DB and therefore cannot live inside the pure dispatch engine).
+func BuildPermissionDenyJSON(reason string) string {
+	return buildPermissionJSON("deny", reason)
+}
+
 // buildContextJSON builds the JSON output for additionalContext injection.
 func buildContextJSON(contextStr string) string {
 	type hookOutput struct {

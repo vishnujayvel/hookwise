@@ -74,6 +74,18 @@ func newDispatchCmd() *cobra.Command {
 				// Run the three-phase dispatch engine
 				dispatchResult := core.Dispatch(ctx, eventType, payload, config)
 
+				// Budget enforcement (PreToolUse only, opt-in via
+				// cost_tracking.enforcement: enforce). A deny here is the hardest
+				// gate, so it overrides whatever dispatch decided. Off by default,
+				// so normal users incur no extra read. The DB read lives here in
+				// the command layer (not the pure engine) because core.Dispatch
+				// has no analytics dependency.
+				if eventType == core.EventPreToolUse {
+					if override := enforceBudget(ctx, config); override != nil {
+						dispatchResult = *override
+					}
+				}
+
 				if ctx.Err() == context.DeadlineExceeded {
 					elapsed := time.Since(dispatchStart)
 					core.Logger().Warn("dispatch timeout",
@@ -137,6 +149,61 @@ func newDispatchCmd() *cobra.Command {
 	cmd.Flags().StringVar(&projectDir, "project-dir", "", "Project directory (defaults to cwd)")
 
 	return cmd
+}
+
+// budgetDenyReason returns a non-empty deny reason when daily-budget enforcement
+// is active and today's spend has reached the budget, or "" otherwise. Pure: the
+// caller supplies today's total so this is trivially testable without a DB.
+//
+// Enforcement is opt-in — it only triggers when cost_tracking.enforcement is set
+// to "enforce" (the default is "warn", which never blocks). This is what makes
+// the cost-tracking recipe's advertised "budget enforcement" real (previously
+// the Enforcement field was defined, defaulted, and read nowhere).
+func budgetDenyReason(cc core.CostTrackingConfig, totalToday float64) string {
+	if !cc.Enabled || cc.Enforcement != "enforce" || cc.DailyBudget <= 0 {
+		return ""
+	}
+	if totalToday < cc.DailyBudget {
+		return ""
+	}
+	return fmt.Sprintf(
+		"Daily budget reached: $%.2f spent today (budget $%.2f). Set cost_tracking.enforcement to \"warn\" to allow tool calls.",
+		totalToday, cc.DailyBudget,
+	)
+}
+
+// enforceBudget reads today's cost state and, when daily-budget enforcement is
+// active and exceeded, returns a PreToolUse "deny" override. Returns nil
+// (allow) on any error or when not over budget — fail-open per ARCH-1.
+//
+// The cheap gate is checked BEFORE opening the DB, so default (warn) users pay
+// no extra hot-path read. Only opt-in enforce users incur one singleton cost-
+// state read per PreToolUse.
+func enforceBudget(ctx context.Context, config core.HooksConfig) *core.DispatchResult {
+	cc := config.CostTracking
+	if !cc.Enabled || cc.Enforcement != "enforce" || cc.DailyBudget <= 0 {
+		return nil
+	}
+
+	db, err := analytics.Open(config.Analytics.DBPath)
+	if err != nil {
+		core.Logger().Warn("budget enforcement: failed to open DB (fail-open)", "error", err)
+		return nil
+	}
+	defer db.Close()
+
+	cs, err := db.ReadCostState(ctx)
+	if err != nil || cs == nil {
+		core.Logger().Warn("budget enforcement: failed to read cost state (fail-open)", "error", err)
+		return nil
+	}
+
+	reason := budgetDenyReason(cc, cs.TotalToday)
+	if reason == "" {
+		return nil
+	}
+	stdout := core.BuildPermissionDenyJSON(reason)
+	return &core.DispatchResult{Stdout: &stdout, ExitCode: 0}
 }
 
 // analyticsRecordTimeout bounds how long dispatch waits for the analytics write
