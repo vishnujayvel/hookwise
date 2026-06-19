@@ -567,6 +567,65 @@ func TestRun_LiveMigration(t *testing.T) {
 	assert.Contains(t, output, "hookwise upgrade")
 }
 
+// TestRun_Idempotent_SecondRunSkipsImport proves `hookwise upgrade` is safe to
+// re-run: the first run imports, the second is a no-op. Without the idempotency
+// marker the second run errored on duplicate session PKs (sessions.id is a TEXT
+// PK) and double-imported events (AUTOINCREMENT, no natural key).
+func TestRun_Idempotent_SecondRunSkipsImport(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, ".hookwise-state"))
+
+	hwDir := filepath.Join(tmpDir, ".hookwise")
+	require.NoError(t, os.MkdirAll(filepath.Join(hwDir, "state"), 0o700))
+
+	sqlitePath := filepath.Join(hwDir, "analytics.db")
+	sqliteDB := createTestSQLite(t, sqlitePath)
+	seedSQLiteData(t, sqliteDB, 2, 3, 2)
+	sqliteDB.Close()
+	createCostStateJSON(t, hwDir)
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "hookwise.yaml"),
+		[]byte("version: 1\nguards: []\n"), 0o644))
+
+	dataDir := filepath.Join(tmpDir, "data")
+	opts := MigrationOpts{HomeDir: tmpDir, DryRun: false, DoltDataDir: dataDir, ProjectDir: tmpDir}
+
+	// First run imports everything.
+	var buf1 bytes.Buffer
+	opts.Writer = &buf1
+	r1 := Run(opts)
+	require.Empty(t, r1.Errors)
+	require.Equal(t, 2, r1.SessionsImported)
+	require.Equal(t, 3, r1.EventsImported)
+
+	eventsAfter1 := countRows(t, dataDir, "events")
+
+	// Second run must be a no-op: no PK-conflict errors, nothing re-imported.
+	var buf2 bytes.Buffer
+	opts.Writer = &buf2
+	r2 := Run(opts)
+	assert.Empty(t, r2.Errors, "second upgrade must not error on duplicate session PKs")
+	assert.Equal(t, 0, r2.SessionsImported, "second upgrade must not re-import sessions")
+	assert.Equal(t, 0, r2.EventsImported, "second upgrade must not re-import events")
+	assert.True(t, r2.AlreadyMigrated, "second upgrade must report already-migrated")
+	assert.Contains(t, buf2.String(), "Already migrated")
+
+	// Events must not be duplicated.
+	assert.Equal(t, eventsAfter1, countRows(t, dataDir, "events"),
+		"a second upgrade must not duplicate events")
+}
+
+// countRows opens the target analytics DB and returns the row count of a table.
+func countRows(t *testing.T, dataDir, table string) int {
+	t.Helper()
+	db, err := analytics.Open(dataDir)
+	require.NoError(t, err)
+	defer db.Close()
+	var n int
+	require.NoError(t, db.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM "+table).Scan(&n))
+	return n
+}
+
 // ---------------------------------------------------------------------------
 // Test 17: Original SQLite file is not modified
 // ---------------------------------------------------------------------------
