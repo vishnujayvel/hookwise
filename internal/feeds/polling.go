@@ -108,6 +108,13 @@ func (d *Daemon) runProducer(ctx context.Context, p Producer, interval time.Dura
 	if err := core.AtomicWriteJSON(cachePath, data); err != nil {
 		core.Logger().Error("feeds: cache write error", "producer", p.Name(), "error", err)
 	}
+
+	// Regenerate the merged TUI cache so the Python TUI sees the fresh feed.
+	// Wired by the cmd layer (bridge.WriteTUICacheTo) to avoid a feeds→bridge
+	// import cycle. Panics are already covered by this function's recover().
+	if d.postPollHook != nil {
+		d.postPollHook(d.cacheDir)
+	}
 }
 
 // runAllFeeds launches goroutines for all registered producers with

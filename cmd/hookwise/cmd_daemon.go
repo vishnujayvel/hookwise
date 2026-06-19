@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vishnujayvel/hookwise/internal/analytics"
+	"github.com/vishnujayvel/hookwise/internal/bridge"
 	"github.com/vishnujayvel/hookwise/internal/core"
 	"github.com/vishnujayvel/hookwise/internal/feeds"
 )
@@ -137,6 +138,19 @@ func newDaemonRunCmd() *cobra.Command {
 			if socketPath != "" {
 				daemon.SetSocketPath(socketPath)
 			}
+
+			// Wire the merged TUI cache regeneration. This lives in the cmd
+			// layer (not internal/feeds) because internal/bridge's test package
+			// imports internal/feeds, so a feeds→bridge import would cycle. After
+			// each producer writes its per-feed file, regenerate the single
+			// merged status-line-cache.json the Python TUI reads (audit #5).
+			daemon.SetPostPollHook(func(cacheDir string) {
+				outPath := filepath.Join(cacheDir, bridge.TUICacheFileName)
+				if err := bridge.WriteTUICacheTo(cacheDir, outPath); err != nil {
+					core.Logger().Error("daemon: TUI cache write error", "error", err)
+				}
+			})
+
 			if err := daemon.Start(); err != nil {
 				return fmt.Errorf("daemon: %w", err)
 			}
