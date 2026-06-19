@@ -52,6 +52,7 @@ type MigrationResult struct {
 	AuthorshipImported int
 	CostStateImported bool
 	ConfigValid      bool
+	AlreadyMigrated  bool
 	Errors           []string
 }
 
@@ -498,22 +499,47 @@ func Run(opts MigrationOpts) MigrationResult {
 		defer db.Close()
 	}
 
-	// Step 3: Migrate SQLite.
-	if result.SQLiteDetected {
-		fmt.Fprintln(w, "\nMigrating SQLite data...")
-		sessions, events, authorship, errs := MigrateSQLite(ctx, db, sqlitePath, opts.DryRun, w)
-		result.SessionsImported = sessions
-		result.EventsImported = events
-		result.AuthorshipImported = authorship
-		result.Errors = append(result.Errors, errs...)
+	// Idempotency guard: if a prior live run already migrated this DB, skip the
+	// data import. Re-importing would error on duplicate session primary keys
+	// (sessions.id is a TEXT PK) and double-count events (AUTOINCREMENT, no
+	// natural key). Dry-run never writes the marker, so it always previews the
+	// full import.
+	if !opts.DryRun && db != nil {
+		if done, derr := db.TSMigrationDone(ctx); derr == nil && done {
+			result.AlreadyMigrated = true
+		}
 	}
 
-	// Step 4: Migrate cost state.
-	if result.CostStateDetected {
-		fmt.Fprintln(w, "\nMigrating cost state...")
-		imported, errs := MigrateCostState(ctx, db, costStatePath, opts.DryRun, w)
-		result.CostStateImported = imported
-		result.Errors = append(result.Errors, errs...)
+	if result.AlreadyMigrated {
+		fmt.Fprintln(w, "\n  Already migrated — skipping data import (hookwise upgrade is idempotent).")
+	} else {
+		// Step 3: Migrate SQLite.
+		if result.SQLiteDetected {
+			fmt.Fprintln(w, "\nMigrating SQLite data...")
+			sessions, events, authorship, errs := MigrateSQLite(ctx, db, sqlitePath, opts.DryRun, w)
+			result.SessionsImported = sessions
+			result.EventsImported = events
+			result.AuthorshipImported = authorship
+			result.Errors = append(result.Errors, errs...)
+		}
+
+		// Step 4: Migrate cost state.
+		if result.CostStateDetected {
+			fmt.Fprintln(w, "\nMigrating cost state...")
+			imported, errs := MigrateCostState(ctx, db, costStatePath, opts.DryRun, w)
+			result.CostStateImported = imported
+			result.Errors = append(result.Errors, errs...)
+		}
+
+		// Record the idempotency marker after a live import pass so a re-run is a
+		// no-op. Marked regardless of per-row errors: re-importing the same rows
+		// would only re-trigger the same PK conflicts, so retry never helps.
+		if !opts.DryRun && db != nil {
+			if merr := db.MarkTSMigrationDone(ctx, time.Now()); merr != nil {
+				result.Errors = append(result.Errors,
+					fmt.Sprintf("failed to record migration marker: %v", merr))
+			}
+		}
 	}
 
 	// Step 5: Validate config.
