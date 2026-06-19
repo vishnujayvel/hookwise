@@ -41,6 +41,15 @@ type Daemon struct {
 	idleTimer       *time.Timer
 	idleMu          sync.Mutex
 	idleTimeoutOverride time.Duration // test-only: overrides InactivityTimeoutMinutes
+
+	// postPollHook, if set, runs after each producer writes its per-feed cache
+	// file. It receives the cache directory. The cmd layer wires this to
+	// bridge.WriteTUICacheTo so the merged TUI cache is regenerated whenever a
+	// feed updates. It lives here (not as a direct feeds→bridge import) because
+	// internal/bridge's test package imports internal/feeds, so a feeds→bridge
+	// import would cycle (mirrors the ARCH-3 reason the snapshot scheduler lives
+	// in cmd: feeds cannot import analytics either).
+	postPollHook func(cacheDir string)
 }
 
 // NewDaemon creates a new daemon with the given configuration and registry.
@@ -77,6 +86,14 @@ func (d *Daemon) SetSocketPath(path string) {
 // (used in tests to speed up execution).
 func (d *Daemon) SetStaggerOffset(offset time.Duration) {
 	d.staggerOffset = offset
+}
+
+// SetPostPollHook registers a callback invoked after each producer writes its
+// per-feed cache file, receiving the cache directory. The cmd layer wires this
+// to regenerate the merged TUI cache (bridge.WriteTUICacheTo). Must be called
+// before Start().
+func (d *Daemon) SetPostPollHook(fn func(cacheDir string)) {
+	d.postPollHook = fn
 }
 
 // SetIdleTimeout overrides the idle timeout duration (used in tests).

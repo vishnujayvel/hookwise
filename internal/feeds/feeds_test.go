@@ -258,6 +258,35 @@ func TestDaemon_PollFeedWritesCache(t *testing.T) {
 	assert.Equal(t, "F", parsed["unit"])
 }
 
+// TestDaemon_PostPollHookFiresWithCacheDir verifies the post-poll hook runs
+// after a producer writes its per-feed cache, receiving the cache directory.
+// This is the seam the cmd layer uses to regenerate the merged TUI cache
+// (audit #5) without a feeds→bridge import.
+func TestDaemon_PostPollHookFiresWithCacheDir(t *testing.T) {
+	r := NewRegistry()
+	mp := newMockProducer("weather", map[string]interface{}{"temperature": 72})
+	r.Register(mp)
+
+	d, tmpDir := newTestDaemon(t, r)
+	d.feeds.Weather.Enabled = true
+	cacheDir := filepath.Join(tmpDir, "cache")
+	d.SetCacheDir(cacheDir)
+
+	var hookCalls atomic.Int64
+	var gotDir atomic.Value
+	d.SetPostPollHook(func(dir string) {
+		hookCalls.Add(1)
+		gotDir.Store(dir)
+	})
+
+	require.NoError(t, d.Start())
+	time.Sleep(300 * time.Millisecond)
+	require.NoError(t, d.Stop())
+
+	assert.Positive(t, hookCalls.Load(), "post-poll hook should fire at least once")
+	assert.Equal(t, cacheDir, gotDir.Load(), "hook should receive the cache directory")
+}
+
 // ---------------------------------------------------------------------------
 // Test 7: Staggered start timing
 // ---------------------------------------------------------------------------

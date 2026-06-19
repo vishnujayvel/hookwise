@@ -22,9 +22,19 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
 
+// TUICacheFileName is the name of the merged TUI cache file that WriteTUICache
+// produces. It lives in the same directory as the per-feed envelopes, so
+// CollectFeedCache must exclude it by name — otherwise the merged output would
+// be re-ingested as a phantom "status-line-cache" feed and nest unboundedly on
+// every poll cycle.
+const TUICacheFileName = "status-line-cache.json"
+
 // CollectFeedCache reads all *.json files from cacheDir and merges them into
 // a single map keyed by feed name (the filename stem, e.g. "pulse" from
 // "pulse.json"). Each value is the parsed JSON content of that file.
+//
+// The merged TUI output file (TUICacheFileName) is excluded so that writing it
+// back into the same directory does not re-ingest it as a phantom feed.
 //
 // Files that cannot be read or contain invalid JSON are silently skipped.
 // An empty or nonexistent directory returns an empty (non-nil) map and no error.
@@ -46,6 +56,9 @@ func CollectFeedCache(cacheDir string) (map[string]interface{}, error) {
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".json") {
 			continue
+		}
+		if name == TUICacheFileName {
+			continue // never re-ingest our own merged output
 		}
 
 		feedName := strings.TrimSuffix(name, ".json")

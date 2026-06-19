@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/vishnujayvel/hookwise/internal/core"
 	"github.com/vishnujayvel/hookwise/internal/feeds"
 )
 
@@ -25,6 +27,26 @@ func writeFeedFile(t *testing.T, dir, name string, data interface{}) {
 	require.NoError(t, err)
 	content = append(content, '\n')
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name+".json"), content, 0o600))
+}
+
+// TestCollectFeedCache_ExcludesMergedTUICache guards against self-ingestion: the
+// merged TUI cache (status-line-cache.json) lives in the same directory as the
+// per-feed envelopes, so CollectFeedCache must NOT treat it as a feed. Otherwise
+// each merge cycle would nest the previous merged blob under a "status-line-cache"
+// key, growing the cache unboundedly.
+func TestCollectFeedCache_ExcludesMergedTUICache(t *testing.T) {
+	dir := t.TempDir()
+	writeFeedFile(t, dir, "weather", makeFeedEntry("weather", map[string]interface{}{"temp": 20}))
+	// The merged output file in the same dir must be ignored by collection.
+	writeFeedFile(t, dir, "status-line-cache", map[string]interface{}{
+		"weather": map[string]interface{}{"temp": 20, "updated_at": "x", "ttl_seconds": 300},
+	})
+
+	merged, err := CollectFeedCache(dir)
+	require.NoError(t, err)
+	assert.Contains(t, merged, "weather")
+	assert.NotContains(t, merged, "status-line-cache",
+		"the merged TUI cache must not be collected as a feed")
 }
 
 // makeFeedEntry builds a feed entry in the Go-envelope format produced by
@@ -991,4 +1013,73 @@ func TestIsEnvelopeFresh_YesterdayData(t *testing.T) {
 		},
 	}
 	assert.False(t, IsEnvelopeFresh(envelope), "yesterday's calendar data should be stale")
+}
+
+// ---------------------------------------------------------------------------
+// End-to-end: daemon poll → post-poll hook → merged TUI cache
+// ---------------------------------------------------------------------------
+
+// e2eProducer is a minimal feeds.Producer that emits a Go-envelope payload.
+type e2eProducer struct {
+	name string
+	data map[string]interface{}
+}
+
+func (p *e2eProducer) Name() string { return p.name }
+func (p *e2eProducer) Produce(_ context.Context) (interface{}, error) {
+	return map[string]interface{}{
+		"type":      p.name,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"data":      p.data,
+	}, nil
+}
+
+// TestDaemonPostPollHook_WritesMergedTUICacheWithoutSelfKey wires the real
+// bridge.WriteTUICacheTo into a live daemon (as cmd/hookwise does) and asserts
+// the merged TUI cache is written with flattened keys AND contains no
+// "status-line-cache" self-key — proving the daemon→bridge seam is wired
+// (audit #5) and immune to self-ingestion.
+func TestDaemonPostPollHook_WritesMergedTUICacheWithoutSelfKey(t *testing.T) {
+	r := feeds.NewRegistry()
+	// Use an unknown feed name so isEnabled defaults true (fail-open).
+	r.Register(&e2eProducer{name: "e2efeed", data: map[string]interface{}{"temperature": float64(72)}})
+
+	tmpDir := t.TempDir()
+	cacheDir := filepath.Join(tmpDir, "cache")
+
+	// Socket paths must be short (macOS 104-byte limit), so use /tmp.
+	sockDir, err := os.MkdirTemp("/tmp", "hw-br-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(sockDir) })
+
+	d := feeds.NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, r)
+	d.SetPIDFile(filepath.Join(tmpDir, "daemon.pid"))
+	d.SetCacheDir(cacheDir)
+	d.SetSocketPath(filepath.Join(sockDir, "d.sock"))
+
+	mergedPath := filepath.Join(cacheDir, TUICacheFileName)
+	d.SetPostPollHook(func(dir string) {
+		require.NoError(t, WriteTUICacheTo(dir, filepath.Join(dir, TUICacheFileName)))
+	})
+
+	require.NoError(t, d.Start())
+	time.Sleep(300 * time.Millisecond)
+	require.NoError(t, d.Stop())
+
+	// The merged TUI cache exists and is flattened.
+	raw, err := os.ReadFile(mergedPath)
+	require.NoError(t, err)
+	var merged map[string]interface{}
+	require.NoError(t, json.Unmarshal(raw, &merged))
+
+	require.Contains(t, merged, "e2efeed", "the per-feed entry must be merged into the TUI cache")
+	entry, ok := merged["e2efeed"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, float64(72), entry["temperature"], "data fields must be spread to top level")
+	assert.Contains(t, entry, "updated_at", "flattened entry must have updated_at")
+	assert.Contains(t, entry, "ttl_seconds", "flattened entry must have ttl_seconds")
+
+	// Critically: the merged file must NOT re-ingest itself as a feed.
+	assert.NotContains(t, merged, "status-line-cache",
+		"the merged TUI cache must not contain itself as a feed (no self-ingestion)")
 }
