@@ -33,7 +33,7 @@ func TestRenderNotificationSegment_MultibyteTruncation(t *testing.T) {
 	db := openTestDB(t, dbPath)
 	ns := notifications.NewNotificationService(db)
 	require.NoError(t, ns.Create(context.Background(),
-		notifications.ProducerGuard, notifications.TypeGuardEffectiveness, content))
+		notifications.ProducerBudget, notifications.TypeBudgetThreshold, content))
 	db.Close()
 
 	out := renderNotificationSegment(dbPath)
