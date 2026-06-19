@@ -98,8 +98,10 @@ func GetDefaultConfig() HooksConfig {
 			Weather: WeatherFeedConfig{
 				Enabled:         false,
 				IntervalSeconds: 600,
-				Latitude:        37.7749,
-				Longitude:       -122.4194,
+				// Latitude/Longitude deliberately left unset (0,0): a user who
+				// enables weather without coordinates gets an actionable "set
+				// location" signal rather than silent San Francisco weather
+				// (audit NICE-TO-HAVE #15).
 				TemperatureUnit: "fahrenheit",
 			},
 			Memories: MemoriesFeedConfig{
