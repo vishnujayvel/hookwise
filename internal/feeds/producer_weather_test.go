@@ -1,10 +1,13 @@
 package feeds
 
 import (
+	"context"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/vishnujayvel/hookwise/internal/core"
 )
 
 // TestWeatherProducer_FallbackNoCache_NilNumerics pins the documented contract of
@@ -30,6 +33,49 @@ func TestWeatherProducer_FallbackNoCache_NilNumerics(t *testing.T) {
 	// The unit label is descriptive, not a numeric reading — it stays populated.
 	assert.Equal(t, "fahrenheit", data["temperatureUnit"])
 	assert.Equal(t, "Unavailable", data["description"])
+}
+
+// TestWeatherProducer_UnconfiguredCoords_NoSilentSF pins audit NICE-TO-HAVE #15:
+// when weather is enabled but no coordinates are configured (lat==0 && lon==0),
+// the producer must emit an actionable "set your location" envelope rather than
+// silently fetching San Francisco weather (which reads as a real reading the user
+// never asked for). Numerics are nil so the TUI renders "--", and the description
+// is distinct from the generic API-down "Unavailable" so the user knows to act.
+// Produce must short-circuit BEFORE any HTTP call: the failing client below would
+// error if reached, proving no network fetch happens for unset coordinates.
+func TestWeatherProducer_UnconfiguredCoords_NoSilentSF(t *testing.T) {
+	p := &WeatherProducer{
+		client: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			t.Fatalf("Produce must not hit the network when coordinates are unset")
+			return nil, nil
+		})},
+	}
+	// feedsCfg left zero-valued: Latitude==0, Longitude==0.
+
+	env, err := p.Produce(context.Background())
+	require.NoError(t, err)
+	data, ok := env.(map[string]interface{})["data"].(map[string]interface{})
+	require.True(t, ok, "envelope must carry a data map")
+
+	assert.Nil(t, data["temperature"], "temperature must be nil when location is unset")
+	assert.Nil(t, data["windSpeed"], "windSpeed must be nil when location is unset")
+	assert.Nil(t, data["weatherCode"], "weatherCode must be nil when location is unset")
+	assert.Equal(t, "Set location", data["description"],
+		"unset coordinates must surface an actionable message, not silent SF weather")
+}
+
+// roundTripFunc adapts a function to http.RoundTripper for hermetic client tests.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// TestGetDefaultConfig_WeatherCoordsUnset guards that the default config no longer
+// bakes in San Francisco coordinates — a fresh user who enables weather without
+// setting coords hits the honest "set location" path, not silent SF weather.
+func TestGetDefaultConfig_WeatherCoordsUnset(t *testing.T) {
+	cfg := core.GetDefaultConfig()
+	assert.Zero(t, cfg.Feeds.Weather.Latitude, "default weather latitude must be unset (not SF)")
+	assert.Zero(t, cfg.Feeds.Weather.Longitude, "default weather longitude must be unset (not SF)")
 }
 
 // TestWmoCodeToEmoji pins the WMO weather-code → emoji mapping across every

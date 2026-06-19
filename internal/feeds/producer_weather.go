@@ -99,12 +99,13 @@ func (p *WeatherProducer) Produce(ctx context.Context) (interface{}, error) {
 	cfg := p.feedsCfg.Weather
 	p.mu.Unlock()
 
-	// Default coordinates (San Francisco) if not configured.
+	// No coordinates configured: emit an actionable "set your location" signal
+	// rather than silently fetching San Francisco weather, which would read as a
+	// real reading the user never asked for (audit NICE-TO-HAVE #15).
 	lat := cfg.Latitude
 	lon := cfg.Longitude
 	if lat == 0 && lon == 0 {
-		lat = 37.7749
-		lon = -122.4194
+		return p.unconfiguredResult(), nil
 	}
 
 	tempUnit := "fahrenheit"
@@ -189,6 +190,29 @@ func (p *WeatherProducer) fallbackResult(reason string) map[string]interface{} {
 		"weatherCode":     nil,
 		"emoji":           "\U0001f324\ufe0f",
 		"description":     "Unavailable",
+	})
+}
+
+// unconfiguredResult signals that the weather feed is enabled but no coordinates
+// are set, so the producer cannot fetch real data. It is distinct from
+// fallbackResult ("Unavailable", a transient API failure) so the user sees an
+// actionable "set your location" message rather than silent San Francisco
+// weather. Numerics are nil so consumers render "--" instead of a literal 0.
+func (p *WeatherProducer) unconfiguredResult() map[string]interface{} {
+	p.mu.Lock()
+	unit := "fahrenheit"
+	if p.feedsCfg.Weather.TemperatureUnit == "celsius" {
+		unit = "celsius"
+	}
+	p.mu.Unlock()
+
+	return NewEnvelope("weather", map[string]interface{}{
+		"temperature":     nil,
+		"temperatureUnit": unit,
+		"windSpeed":       nil,
+		"weatherCode":     nil,
+		"emoji":           "\U0001f4cd", // 📍 round pushpin — prompt to set a location
+		"description":     "Set location",
 	})
 }
 
