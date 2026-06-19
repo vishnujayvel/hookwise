@@ -81,8 +81,10 @@ func Dispatch(ctx context.Context, eventType string, payload HookPayload, config
 		}
 	}
 
-	// Phase 1b: Handler-based guards (handlers with phase: "guard")
-	guardPhaseResult := executeGuardPhase(ctx, handlers, payload)
+	// Phase 1b: Handler-based guards (handlers with phase: "guard").
+	// A block/confirm decision is terminal; warn decisions accumulate into
+	// guardWarnContext and merge with the injected context below.
+	guardPhaseResult, guardWarnContext := executeGuardPhase(ctx, handlers, payload)
 	if guardPhaseResult != nil {
 		return *guardPhaseResult
 	}
@@ -93,8 +95,9 @@ func Dispatch(ctx context.Context, eventType string, payload HookPayload, config
 	// Phase 3: Side Effects (non-blocking goroutines)
 	fireSideEffects(ctx, handlers, payload)
 
-	// Merge warn context with Phase 2 context output
-	finalContext := mergeContext(warnContext, contextOutput)
+	// Merge warn context (declarative Phase 1a + handler-phase 1b) with the
+	// Phase 2 context output.
+	finalContext := mergeContext(mergeContext(warnContext, guardWarnContext), contextOutput)
 
 	// Build final result
 	if finalContext != "" {
@@ -107,13 +110,23 @@ func Dispatch(ctx context.Context, eventType string, payload HookPayload, config
 
 // --- Phase 1b: Guard Handlers ---
 
-// executeGuardPhase runs guard-phase handlers synchronously.
-// On first block decision, short-circuits and returns the block result.
-// Returns nil if no guard blocked.
-func executeGuardPhase(ctx context.Context, handlers []ResolvedHandler, payload HookPayload) *DispatchResult {
+// executeGuardPhase runs guard-phase handlers synchronously, honoring all three
+// guard decisions advertised to recipe authors (docs/guide/creating-a-recipe.md):
+//
+//   - block   → terminal; emits the handler block JSON ({"decision":"block"})
+//   - confirm → terminal; emits an "ask" permission decision (mirrors the
+//     declarative confirm guard in Phase 1a) so Claude Code prompts the user
+//   - warn    → non-terminal; the reason is accumulated and returned as warn
+//     context for the caller to merge into additionalContext
+//
+// It returns the terminal result (block/confirm) on the first such decision, or
+// nil with the accumulated warn context if no handler was terminal. Previously
+// only block was honored and confirm/warn were silently dropped.
+func executeGuardPhase(ctx context.Context, handlers []ResolvedHandler, payload HookPayload) (*DispatchResult, string) {
+	var warnContext string
 	for i := range handlers {
 		if ctx.Err() != nil {
-			return nil
+			return nil, warnContext
 		}
 		if handlers[i].Phase != PhaseGuard {
 			continue
@@ -127,23 +140,40 @@ func executeGuardPhase(ctx context.Context, handlers []ResolvedHandler, payload 
 			}()
 
 			hr := ExecuteHandler(ctx, handlers[i], payload)
+			if hr.Decision == nil {
+				return nil
+			}
 
-			if hr.Decision != nil && *hr.Decision == ActionBlock {
+			switch *hr.Decision {
+			case ActionBlock:
 				reason := "Blocked by guard rule"
 				if hr.Reason != nil {
 					reason = *hr.Reason
 				}
 				stdout := buildGuardBlockJSON(reason)
 				return &DispatchResult{Stdout: &stdout, ExitCode: 0}
+
+			case ActionConfirm:
+				reason := "Requires confirmation"
+				if hr.Reason != nil && *hr.Reason != "" {
+					reason = *hr.Reason
+				}
+				stdout := buildPermissionJSON("ask", reason)
+				return &DispatchResult{Stdout: &stdout, ExitCode: 0}
+
+			case ActionWarn:
+				if hr.Reason != nil && *hr.Reason != "" {
+					warnContext = mergeContext(warnContext, "Guard warning: "+*hr.Reason)
+				}
 			}
 			return nil
 		}()
 
 		if result != nil {
-			return result
+			return result, warnContext
 		}
 	}
-	return nil
+	return nil, warnContext
 }
 
 // --- Phase 2: Context Injection ---

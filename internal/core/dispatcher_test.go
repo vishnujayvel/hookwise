@@ -1061,6 +1061,106 @@ func TestIntegration_HandlerBasedGuard_Blocks(t *testing.T) {
 	assert.Equal(t, "inline guard blocked", output["reason"])
 }
 
+func TestIntegration_HandlerBasedGuard_Confirm_AskJSON(t *testing.T) {
+	// A guard-phase handler returning {"decision":"confirm"} must surface an
+	// "ask" permission decision, mirroring declarative confirm guards
+	// (dispatcher.go Phase 1a). Previously confirm was silently dropped even
+	// though docs/guide/creating-a-recipe.md advertises it as valid.
+	config := configWithHandlers([]CustomHandlerConfig{
+		{
+			Name:   "inline-confirm-guard",
+			Type:   "inline",
+			Events: []string{EventPreToolUse},
+			Phase:  "guard",
+			Action: map[string]interface{}{
+				"decision": "confirm",
+				"reason":   "please confirm this action",
+			},
+		},
+	})
+	payload := preToolUsePayload("Bash", nil)
+
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
+
+	require.NotNil(t, result.Stdout, "confirm guard must produce stdout")
+	ho := parseHookOutput(t, result.Stdout)
+	assert.Equal(t, "ask", ho["permissionDecision"])
+	assert.Equal(t, "please confirm this action", ho["permissionDecisionReason"])
+}
+
+func TestIntegration_HandlerBasedGuard_Confirm_DefaultReason(t *testing.T) {
+	config := configWithHandlers([]CustomHandlerConfig{
+		{
+			Name:   "inline-confirm-guard",
+			Type:   "inline",
+			Events: []string{EventPreToolUse},
+			Phase:  "guard",
+			Action: map[string]interface{}{"decision": "confirm"},
+		},
+	})
+
+	result := Dispatch(context.Background(), EventPreToolUse, preToolUsePayload("Bash", nil), config)
+
+	require.NotNil(t, result.Stdout)
+	ho := parseHookOutput(t, result.Stdout)
+	assert.Equal(t, "ask", ho["permissionDecision"])
+	assert.Equal(t, "Requires confirmation", ho["permissionDecisionReason"])
+}
+
+func TestIntegration_HandlerBasedGuard_Warn_AdditionalContext(t *testing.T) {
+	// A guard-phase handler returning {"decision":"warn"} must inject its reason
+	// as additionalContext (not block, not ask), mirroring declarative warn.
+	config := configWithHandlers([]CustomHandlerConfig{
+		{
+			Name:   "inline-warn-guard",
+			Type:   "inline",
+			Events: []string{EventPreToolUse},
+			Phase:  "guard",
+			Action: map[string]interface{}{
+				"decision": "warn",
+				"reason":   "this looks risky",
+			},
+		},
+	})
+	payload := preToolUsePayload("Bash", nil)
+
+	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
+
+	require.NotNil(t, result.Stdout, "warn guard must inject context")
+	ho := parseHookOutput(t, result.Stdout)
+	// Not a block/ask — context injection only.
+	assert.Nil(t, ho["permissionDecision"], "warn must not emit a permission decision")
+	assert.Contains(t, ho["additionalContext"], "this looks risky")
+}
+
+func TestIntegration_HandlerBasedGuard_Warn_DoesNotBlock(t *testing.T) {
+	// Warn is non-terminal: a warn handler followed by a context handler must
+	// let dispatch proceed and merge both into additionalContext.
+	config := configWithHandlers([]CustomHandlerConfig{
+		{
+			Name:   "warn-guard",
+			Type:   "inline",
+			Events: []string{EventPreToolUse},
+			Phase:  "guard",
+			Action: map[string]interface{}{"decision": "warn", "reason": "heads up"},
+		},
+		{
+			Name:   "ctx-handler",
+			Type:   "inline",
+			Events: []string{EventPreToolUse},
+			Phase:  "context",
+			Action: map[string]interface{}{"additionalContext": "extra info"},
+		},
+	})
+
+	result := Dispatch(context.Background(), EventPreToolUse, preToolUsePayload("Bash", nil), config)
+
+	require.NotNil(t, result.Stdout)
+	ho := parseHookOutput(t, result.Stdout)
+	assert.Contains(t, ho["additionalContext"], "heads up")
+	assert.Contains(t, ho["additionalContext"], "extra info")
+}
+
 func TestIntegration_DeclarativeGuardBeforeHandlerGuard(t *testing.T) {
 	config := configWithGuards([]GuardRuleConfig{
 		{Match: "Bash", Action: "block", Reason: "declarative block"},
