@@ -137,6 +137,14 @@ func runStatusLine(cmd *cobra.Command, projectDir string) error {
 		segments = append(segments, warnSegment)
 	}
 
+	// Surface a cross-session fleet badge when 2+ sessions are live (#211).
+	// Self-suppresses for a solo session, so it adds nothing for single-session
+	// users. Read-only and fail-open.
+	fleetSegment := renderFleetSegment(config.Analytics.DBPath, time.Now().UTC(), fleetStalenessWindow)
+	if fleetSegment != "" {
+		segments = append(segments, fleetSegment)
+	}
+
 	line := strings.Join(segments, ansiGray+delimiter+ansiReset)
 	fmt.Fprintln(cmd.OutOrStdout(), line)
 
