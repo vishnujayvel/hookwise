@@ -78,11 +78,6 @@ cost_tracking:
   daily_budget: 10.00    # daily spending limit in USD
   enforcement: warn      # "warn" or "enforce"
 
-# Transcript backup: save session transcripts for review
-transcript_backup:
-  enabled: true
-  max_size_mb: 100       # maximum backup directory size in MB
-
 # Status line: comprehensive metrics display
 status_line:
   enabled: true

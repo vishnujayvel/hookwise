@@ -59,6 +59,16 @@ class TestHookwiseTUI:
             # Should have at least the 7 features from dashboard
             assert len(list(cards)) >= 1
 
+    def test_dashboard_omits_removed_transcript_backup(self) -> None:
+        """transcript_backup was deleted from the config schema (Go #200); the
+        dashboard must not advertise a feature that no longer exists, otherwise
+        it shows a card whose config key can never be present."""
+        from hookwise_tui.tabs.dashboard import FEATURES
+        keys = {f["key"] for f in FEATURES}
+        assert "transcript_backup" not in keys, (
+            "dashboard still lists the removed transcript_backup feature"
+        )
+
     async def test_feeds_tab_has_timer(self, app: HookwiseTUI) -> None:
         """Feeds tab shows refresh timer."""
         async with app.run_test() as pilot:
