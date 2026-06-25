@@ -5,12 +5,26 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishnujayvel/hookwise/internal/notifications"
 )
+
+// TestNotifications_HelpTextHonest guards against advertising a deleted producer.
+// #207 removed the guard-effectiveness producer (and coaching is gone too); budget
+// is the only producer that still runs (producers.go RunAll -> CheckBudget). The
+// command's Long help must not promise "guard effectiveness" output that can never
+// appear — the exact "advertise vaporware" honesty gap the relaunch audit flagged.
+func TestNotifications_HelpTextHonest(t *testing.T) {
+	long := strings.ToLower(newNotificationsCmd().Long)
+	assert.NotContains(t, long, "guard effectiveness",
+		"help must not advertise the deleted guard-effectiveness producer")
+	assert.Contains(t, long, "budget",
+		"help should describe the budget producer that actually exists")
+}
 
 // TestNotifications_ReadsConfigDBPath is the #109 regression test: when a project
 // config sets a custom analytics.db_path, `notifications` (with no --data-dir flag)

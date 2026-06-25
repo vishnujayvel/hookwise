@@ -1,6 +1,6 @@
 // Package notifications provides a notification service for hookwise.
 //
-// Notifications are created by producers (budget, guard effectiveness)
+// Notifications are created by producers (currently the budget producer)
 // and stored in the SQLite notifications table. They can be queried for
 // display via the CLI or surfaced in the status line.
 package notifications

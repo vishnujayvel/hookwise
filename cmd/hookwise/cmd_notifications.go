@@ -21,8 +21,8 @@ func newNotificationsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "notifications",
 		Short: "Display notification history",
-		Long: `Shows recent notifications from budget and guard effectiveness
-producers. Notifications are stored in the SQLite analytics database and
+		Long: `Shows recent notifications from the budget producer.
+Notifications are stored in the SQLite analytics database and
 surfaced via the status line or this command.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runNotifications(cmd, dataDir, limit)
