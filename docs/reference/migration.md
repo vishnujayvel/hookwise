@@ -111,7 +111,6 @@ hookwise v2.0 accepts both snake_case (YAML convention) and camelCase. The confi
 | `handler_timeout_seconds` | `handlerTimeoutSeconds` |
 | `status_line` | `statusLine` |
 | `cost_tracking` | `costTracking` |
-| `transcript_backup` | `transcriptBackup` |
 
 Write your YAML in snake_case -- it is the convention and hookwise handles the conversion.
 

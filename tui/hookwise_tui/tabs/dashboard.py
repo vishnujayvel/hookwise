@@ -50,12 +50,6 @@ FEATURES: list[dict[str, Any]] = [
         "description": "Random motivational quote at session start to set the right mindset",
         "config_path": ("greeting", "enabled"),
     },
-    {
-        "key": "transcript_backup",
-        "title": "Transcript Backup",
-        "description": "Auto-save session transcripts for later reference and auditing",
-        "config_path": ("transcript_backup", "enabled"),
-    },
 ]
 
 
