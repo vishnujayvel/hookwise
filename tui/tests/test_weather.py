@@ -122,6 +122,28 @@ class TestReadWeatherFromCache:
         result = read_weather_from_cache(cache)
         assert result is None
 
+    def test_returns_none_for_unconfigured_location_envelope(self) -> None:
+        """The Go producer emits a "Set location" placeholder (no coordinates set,
+        #210) with a description/emoji but NO numeric weather fields. Without a
+        guard, code defaults to 0 -> WMO 0 -> "clear", so the widget would render a
+        spurious sunny animation for a location that was never configured. The
+        unconfigured envelope must yield None (render nothing)."""
+        cache = {
+            "weather": {
+                "description": "Set location",
+                "emoji": "\U0001f4cd",
+            }
+        }
+        assert read_weather_from_cache(cache) is None
+
+    def test_preserves_legitimate_zero_temperature(self) -> None:
+        """A real 0-degree reading is weather data, not an empty envelope — the
+        unconfigured guard must distinguish absent fields from a valid 0."""
+        cache = {"weather": {"condition": "clear", "code": 0, "temp_c": 0, "temp_f": 32}}
+        result = read_weather_from_cache(cache)
+        assert result is not None
+        assert result.temp_c == 0.0
+
     def test_returns_none_when_weather_not_dict(self) -> None:
         cache = {"weather": "rain"}
         result = read_weather_from_cache(cache)
