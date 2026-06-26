@@ -116,6 +116,19 @@ def read_weather_from_cache(
     description = weather_entry.get("description", "")
     city = weather_entry.get("city", "")
 
+    # An unconfigured-location placeholder (the producer's "Set location" envelope
+    # when no coordinates are set, #210) carries a description/emoji but no numeric
+    # weather signal. Without this guard, code defaults to 0 -> WMO 0 -> "clear",
+    # so the widget renders a spurious sunny animation for a location that was
+    # never configured. Treat "no numeric signal and no condition" as nothing to
+    # show. `is not None` distinguishes an absent field from a legitimate 0.
+    has_weather_signal = any(
+        weather_entry.get(key) is not None
+        for key in ("weatherCode", "code", "temperature", "temp_c", "temp_f")
+    ) or bool(weather_entry.get("condition"))
+    if not has_weather_signal:
+        return None
+
     # Derive condition from description or WMO code
     condition = weather_entry.get("condition", "")
     if not condition and description:
