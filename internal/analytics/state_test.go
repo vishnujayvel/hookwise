@@ -104,6 +104,43 @@ func TestCostState_DateBoundaryReset(t *testing.T) {
 	assert.InDelta(t, 5.00, loaded.SessionCosts["old-sess"], 0.01)
 }
 
+// TestUpdateCostState_ResetsTotalTodayOnNewDay pins the midnight-boundary fix:
+// ReadCostState normalizes the day (resets TotalToday when the stored date is
+// stale), but UpdateCostState reads the RAW row via scanCostStateRow. Without the
+// same normalization, the first Stop after midnight does `TotalToday += delta`
+// onto yesterday's total, so the new day permanently over-reports — and the #204
+// budget enforcement that reads TotalToday can falsely deny at the day boundary.
+func TestUpdateCostState_ResetsTotalTodayOnNewDay(t *testing.T) {
+	db, cleanup := testOpen(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Stored state belongs to yesterday with a non-zero running total.
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	require.NoError(t, db.WriteCostState(ctx, &CostState{
+		DailyCosts:   map[string]float64{yesterday: 5.00},
+		SessionCosts: map[string]float64{"old-sess": 5.00},
+		Today:        yesterday,
+		TotalToday:   5.00,
+	}))
+
+	// A new-day session adds $2 using the same += pattern the dispatch closure uses.
+	today := time.Now().Format("2006-01-02")
+	require.NoError(t, db.UpdateCostState(ctx, func(s *CostState) {
+		s.TotalToday += 2.00
+		s.DailyCosts[today] += 2.00
+		s.Today = today
+	}))
+
+	loaded, err := db.ReadCostState(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, today, loaded.Today)
+	assert.InDelta(t, 2.00, loaded.TotalToday, 0.01,
+		"TotalToday must reset at the date boundary, not carry yesterday's 5.00")
+	assert.InDelta(t, 2.00, loaded.DailyCosts[today], 0.01)
+	assert.InDelta(t, 5.00, loaded.DailyCosts[yesterday], 0.01, "prior day preserved")
+}
+
 // Test 9: Cost state with empty maps
 func TestCostState_EmptyMaps(t *testing.T) {
 	db, cleanup := testOpen(t)
