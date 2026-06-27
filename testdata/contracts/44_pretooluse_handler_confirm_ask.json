@@ -1,0 +1,27 @@
+{
+  "name": "PreToolUse handler-phase guard confirm emits ask",
+  "event_type": "PreToolUse",
+  "config": {
+    "handlers": [
+      {
+        "name": "inline-guard",
+        "type": "inline",
+        "events": ["PreToolUse"],
+        "phase": "guard",
+        "action": {
+          "decision": "confirm",
+          "reason": "handler asks about Bash"
+        }
+      }
+    ]
+  },
+  "stdin": {
+    "session_id": "contract-session-h2",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo hello"
+    }
+  },
+  "expected_stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"handler asks about Bash\"}}",
+  "expected_exit_code": 0
+}

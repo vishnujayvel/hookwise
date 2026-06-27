@@ -41,9 +41,11 @@ type ContractFixture struct {
 }
 
 // FixtureConfig is the subset of HooksConfig used in fixtures.
-// Guards are the primary focus; handlers/other fields use defaults.
+// Guards are the primary focus; handler-phase guards are also supported so the
+// contract can pin handler-based block/confirm output shape (ARCH-6).
 type FixtureConfig struct {
-	Guards []core.GuardRuleConfig `json:"guards"`
+	Guards   []core.GuardRuleConfig     `json:"guards"`
+	Handlers []core.CustomHandlerConfig `json:"handlers"`
 }
 
 // =============================================================================
@@ -120,8 +122,8 @@ func buildConfig(fc FixtureConfig) core.HooksConfig {
 	cfg.StatusLine.Enabled = false
 	cfg.CostTracking.Enabled = false
 	cfg.Greeting.Enabled = false
-	// No custom handlers for contract tests (guards-only)
-	cfg.Handlers = nil
+	// Handler-phase guards are exercised by handler fixtures; default is none.
+	cfg.Handlers = fc.Handlers
 	return cfg
 }
 
