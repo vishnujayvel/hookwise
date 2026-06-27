@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -262,10 +264,24 @@ func tuiPIDPath() string {
 	return filepath.Join(core.DefaultStateDir, "tui.pid")
 }
 
-// isTUIRunning checks if a TUI process is already running by reading the PID file,
-// checking if the process exists, and verifying it's actually hookwise-tui
-// (not a stale PID reused by an unrelated process).
+// tuiLaunchCooldown is how long a recorded launch suppresses re-launch. It only
+// has to bridge the open->Terminal->python-exec handoff (~1-3s), because once
+// python has exec'd, listTUIProcs() detects the TUI by comm well before the
+// python TUI writes its PID file on mount. 30s is generous, self-healing slack.
+const tuiLaunchCooldown = 30 * time.Second
+
+// isTUIRunning reports whether a TUI is already up. It first trusts the PID file
+// (written by the python TUI on mount), then falls back to comm-filtered process
+// detection so a TUI that has exec'd but not yet written its PID is still seen.
 func isTUIRunning() bool {
+	if tuiPIDFileAlive() {
+		return true
+	}
+	return len(listTUIProcs()) > 0
+}
+
+// tuiPIDFileAlive checks the PID file points at a live hookwise-tui process.
+func tuiPIDFileAlive() bool {
 	data, err := os.ReadFile(tuiPIDPath())
 	if err != nil {
 		return false
@@ -282,29 +298,176 @@ func isTUIRunning() bool {
 	if err := process.Signal(syscall.Signal(0)); err != nil {
 		return false
 	}
-	// Verify the PID belongs to hookwise-tui, not a stale PID reused by
-	// an unrelated process. Uses `ps` which works on macOS and Linux.
+	// Verify the PID belongs to the TUI, not a stale PID reused by an
+	// unrelated process. Uses `ps` which works on macOS and Linux.
 	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
 	if err != nil {
 		return false
 	}
-	comm := strings.TrimSpace(string(out))
-	return strings.Contains(comm, "hookwise-tui") || strings.Contains(comm, "python") || strings.Contains(comm, "Python")
+	return isTUIComm(strings.TrimSpace(string(out)))
 }
 
-// acquireTUILaunchLock atomically creates a lock file to prevent concurrent
-// TUI launches (TOCTOU race between isTUIRunning check and TUI PID write).
-// Returns a cleanup function and true on success, or nil and false if another
-// dispatch already holds the lock.
-func acquireTUILaunchLock() (unlock func(), ok bool) {
-	lockPath := filepath.Join(core.DefaultStateDir, "tui.launch.lock")
-	_ = os.MkdirAll(filepath.Dir(lockPath), core.DefaultDirMode)
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-	if err != nil {
-		return nil, false
+// tuiCandidate is one `pgrep -f hookwise-tui` hit with its comm (argv[0]).
+type tuiCandidate struct {
+	pid  int
+	comm string
+}
+
+// isTUIComm reports whether a process command (argv[0] basename, from `ps -o
+// comm=`) belongs to a real TUI process. `pgrep -f hookwise-tui` matches the
+// full command line, so the transient `open -a Terminal …/hookwise-tui`
+// launcher and stray `grep`/`sh`/`find …hookwise-tui` all match — but their
+// comm is open/grep/sh/find, which does NOT contain the token. Filtering on
+// comm (not the full cmdline) rejects those launchers and keeps only the TUI,
+// whose comm is the hookwise-tui wrapper or the python interpreter running it.
+func isTUIComm(comm string) bool {
+	comm = strings.TrimSpace(comm)
+	if comm == "" {
+		return false
 	}
-	f.Close()
-	return func() { os.Remove(lockPath) }, true
+	base := comm
+	if idx := strings.LastIndex(base, "/"); idx >= 0 {
+		base = base[idx+1:]
+	}
+	lower := strings.ToLower(base)
+	return strings.Contains(lower, "hookwise-tui") || strings.Contains(lower, "python")
+}
+
+// filterTUICandidates keeps only the PIDs whose comm is a real TUI process
+// (pure — the testable heart of the comm filter).
+func filterTUICandidates(cands []tuiCandidate) []int {
+	var out []int
+	for _, c := range cands {
+		if isTUIComm(c.comm) {
+			out = append(out, c.pid)
+		}
+	}
+	return out
+}
+
+// listTUIProcs returns the PIDs of live TUI processes via `pgrep -f hookwise-tui`
+// filtered by comm. Shared by the launch guard and the watchdog (PR2).
+func listTUIProcs() []int {
+	out, err := exec.Command("pgrep", "-f", "hookwise-tui").Output()
+	if err != nil {
+		return nil
+	}
+	var cands []tuiCandidate
+	for _, field := range strings.Fields(string(out)) {
+		pid, err := strconv.Atoi(field)
+		if err != nil {
+			continue
+		}
+		commOut, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
+		if err != nil {
+			continue
+		}
+		cands = append(cands, tuiCandidate{pid: pid, comm: strings.TrimSpace(string(commOut))})
+	}
+	return filterTUICandidates(cands)
+}
+
+// tuiLauncher carries the dependencies of the singleton launch guard so the
+// decision logic is unit-testable without opening Terminal or touching
+// ~/.hookwise. Production wires real deps in launchTUIIfNeeded.
+type tuiLauncher struct {
+	stateDir  string
+	cooldown  time.Duration
+	now       func() time.Time
+	isRunning func() bool
+	spawn     func(method string) error
+}
+
+func (l *tuiLauncher) markerPath() string {
+	return filepath.Join(l.stateDir, "tui.launch.marker")
+}
+
+func (l *tuiLauncher) removeMarker() {
+	_ = os.Remove(l.markerPath())
+}
+
+// claimMarker atomically claims the launch window. The marker's MTIME is its
+// timestamp (no content is parsed — this avoids the empty-file read race). It
+// returns true iff this caller won the claim and should proceed to spawn:
+//
+//   - absent marker  -> O_EXCL create wins -> true
+//   - fresh marker   -> a launch is in flight -> false (suppress)
+//   - stale marker   -> remove + re-claim via O_EXCL (exactly one winner)
+//   - any I/O error  -> false (FAIL TOWARD SUPPRESS; pile-up is the bug we fix)
+func (l *tuiLauncher) claimMarker() bool {
+	path := l.markerPath()
+	_ = core.EnsureDir(filepath.Dir(path), core.DefaultDirMode)
+	for attempt := 0; attempt < 3; attempt++ {
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err == nil {
+			_ = f.Close()
+			return true
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return false // I/O error (ENOTDIR, ENOSPC, EPERM, …) -> suppress
+		}
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			// Vanished between Open and Stat (another dispatch removed it) — retry.
+			continue
+		}
+		if l.now().Sub(info.ModTime()) < l.cooldown {
+			return false // fresh -> a launch is in flight -> suppress
+		}
+		// Stale -> drop it and retry the O_EXCL create so exactly one wins.
+		_ = os.Remove(path)
+	}
+	return false
+}
+
+// launchIfNeeded is the testable core of the singleton guard.
+func (l *tuiLauncher) launchIfNeeded(method string) (spawned bool, err error) {
+	if l.isRunning() {
+		return false, nil
+	}
+	if !l.claimMarker() {
+		return false, nil
+	}
+	// Double-check: a TUI may have appeared between the first isRunning check
+	// and winning the claim. If so, release the marker and skip.
+	if l.isRunning() {
+		l.removeMarker()
+		return false, nil
+	}
+	if err := l.spawn(method); err != nil {
+		l.removeMarker() // unclaim so the next dispatch can retry immediately
+		return false, err
+	}
+	return true, nil
+}
+
+// realTUISpawn finds and starts the hookwise-tui process (the only impure,
+// untested part — exec wiring identical to the previous implementation).
+func realTUISpawn(method string) error {
+	tuiCmd, err := exec.LookPath("hookwise-tui")
+	if err != nil {
+		core.Logger().Debug("hookwise-tui not found in PATH, skipping auto-launch")
+		return err
+	}
+
+	var cmd *exec.Cmd
+	switch method {
+	case "newWindow":
+		cmd = exec.Command("open", "-a", "Terminal", tuiCmd) // macOS: new Terminal window
+	default:
+		cmd = exec.Command(tuiCmd) // background process
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+
+	if err := cmd.Start(); err != nil {
+		core.Logger().Warn("failed to launch TUI", "method", method, "error", err)
+		return err
+	}
+	core.Logger().Info("TUI launched", "method", method, "pid", cmd.Process.Pid)
+	return nil
 }
 
 // launchTUIIfNeeded launches the TUI if it's not already running.
@@ -316,54 +479,16 @@ func launchTUIIfNeeded(launchMethod string) {
 		}
 	}()
 
-	if isTUIRunning() {
-		core.Logger().Debug("TUI already running, skipping launch")
-		return
+	l := &tuiLauncher{
+		stateDir:  core.DefaultStateDir,
+		cooldown:  tuiLaunchCooldown,
+		now:       time.Now,
+		isRunning: isTUIRunning,
+		spawn:     realTUISpawn,
 	}
-
-	// Atomic lock prevents TOCTOU race: two concurrent SessionStart dispatches
-	// could both pass isTUIRunning() before either TUI writes its PID file.
-	unlock, ok := acquireTUILaunchLock()
-	if !ok {
-		core.Logger().Debug("another dispatch is launching TUI, skipping")
-		return
+	if _, err := l.launchIfNeeded(launchMethod); err != nil {
+		core.Logger().Debug("TUI launch suppressed/failed (fail-open)", "error", err)
 	}
-	defer unlock()
-
-	// Re-check after acquiring lock (double-check pattern)
-	if isTUIRunning() {
-		core.Logger().Debug("TUI started between check and lock, skipping")
-		return
-	}
-
-	// Find hookwise-tui executable
-	tuiCmd, err := exec.LookPath("hookwise-tui")
-	if err != nil {
-		core.Logger().Debug("hookwise-tui not found in PATH, skipping auto-launch")
-		return
-	}
-
-	var cmd *exec.Cmd
-	switch launchMethod {
-	case "newWindow":
-		// macOS: open in a new Terminal window
-		cmd = exec.Command("open", "-a", "Terminal", tuiCmd)
-	default:
-		// background: launch directly as a background process
-		cmd = exec.Command(tuiCmd)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	}
-
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.Stdin = nil
-
-	if err := cmd.Start(); err != nil {
-		core.Logger().Warn("failed to launch TUI", "method", launchMethod, "error", err)
-		return
-	}
-
-	core.Logger().Info("TUI launched", "method", launchMethod, "pid", cmd.Process.Pid)
 }
 
 // ---------------------------------------------------------------------------
