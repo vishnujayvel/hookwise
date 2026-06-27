@@ -164,6 +164,13 @@ func newDaemonRunCmd() *cobra.Command {
 			// The scheduler stops when the daemon's stop channel closes.
 			startSnapshotScheduler(config.Analytics, daemon.StopCh())
 
+			// Start the TUI watchdog: a daemon-side backstop that reaps
+			// duplicate / runaway TUIs the singleton launch guard cannot fix
+			// retroactively (older binaries, manual launches, wedged render
+			// loops). Signals processes only (ARCH-3 untouched); stops when the
+			// daemon's stop channel closes.
+			startTUIWatchdog(daemon.StopCh())
+
 			// Block until the daemon stops.
 			// The daemon handles SIGTERM/SIGINT and /shutdown internally.
 			<-daemon.StopCh()

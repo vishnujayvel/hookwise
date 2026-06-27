@@ -135,6 +135,29 @@ func Test_launchIfNeeded_AlreadyRunning_NoSpawn(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&spawns))
 }
 
+// Test 5b — the post-claim double-check: a TUI that appears AFTER the first
+// isRunning() check but BEFORE we spawn (e.g. another dispatch's TUI finished
+// mounting) must abort the spawn and release the marker. isRunning returns
+// false on the first call (we proceed to claim) and true on the second.
+func Test_launchIfNeeded_TUIAppearsAfterClaim_NoSpawn(t *testing.T) {
+	dir := t.TempDir()
+	var spawns int32
+	l := newTestLauncher(dir, func(string) error {
+		atomic.AddInt32(&spawns, 1)
+		return nil
+	})
+	var checks int32
+	l.isRunning = func() bool {
+		return atomic.AddInt32(&checks, 1) >= 2 // false first, true thereafter
+	}
+
+	spawned, err := l.launchIfNeeded("newWindow")
+	require.NoError(t, err)
+	assert.False(t, spawned)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&spawns), "spawn aborted when a TUI appears after the claim")
+	assert.NoFileExists(t, filepath.Join(dir, "tui.launch.marker"), "marker released on the double-check abort")
+}
+
 // Test 6 — THE Grok-BLOCKER-#1 guard. `pgrep -f hookwise-tui` matches the
 // `open -a Terminal …/hookwise-tui` launcher and stray grep/sh/find that carry
 // the token in argv. Filtering on comm (argv[0] basename) must REJECT those and
