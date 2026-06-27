@@ -150,7 +150,11 @@ func executeGuardPhase(ctx context.Context, handlers []ResolvedHandler, payload 
 				if hr.Reason != nil {
 					reason = *hr.Reason
 				}
-				stdout := buildGuardBlockJSON(reason)
+				// Emit the canonical PreToolUse deny shape, identical to the
+				// declarative block guard (line 60) and the confirm->ask path
+				// below. The previous top-level {"decision":"block"} form is
+				// deprecated for PreToolUse and may be ignored by Claude Code.
+				stdout := buildPermissionJSON("deny", reason)
 				return &DispatchResult{Stdout: &stdout, ExitCode: 0}
 
 			case ActionConfirm:
@@ -317,20 +321,6 @@ func buildContextJSON(contextStr string) string {
 	if err != nil {
 		Logger().Error("failed to marshal context JSON", "error", err)
 		return ""
-	}
-	return string(b)
-}
-
-// buildGuardBlockJSON builds JSON output for a handler-based guard block.
-func buildGuardBlockJSON(reason string) string {
-	type blockOutput struct {
-		Decision string `json:"decision"`
-		Reason   string `json:"reason"`
-	}
-	data := blockOutput{Decision: "block", Reason: reason}
-	b, err := json.Marshal(data)
-	if err != nil {
-		return `{"decision":"block","reason":"Blocked by guard rule"}`
 	}
 	return string(b)
 }

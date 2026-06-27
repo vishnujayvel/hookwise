@@ -1053,12 +1053,18 @@ func TestIntegration_HandlerBasedGuard_Blocks(t *testing.T) {
 	result := Dispatch(context.Background(), EventPreToolUse, payload, config)
 
 	require.NotNil(t, result.Stdout)
-	// Handler-based guard block produces different JSON format (decision/reason, not hookSpecificOutput)
+	// Handler-phase guard block emits the canonical PreToolUse deny shape — the
+	// same hookSpecificOutput.permissionDecision="deny" as a declarative block
+	// guard (dispatcher.go:60) and the confirm->ask path, not the deprecated
+	// top-level {"decision":"block"} (which Claude Code deprecated for PreToolUse).
 	var output map[string]interface{}
 	err := json.Unmarshal([]byte(*result.Stdout), &output)
 	require.NoError(t, err)
-	assert.Equal(t, "block", output["decision"])
-	assert.Equal(t, "inline guard blocked", output["reason"])
+	hso, ok := output["hookSpecificOutput"].(map[string]interface{})
+	require.True(t, ok, "expected hookSpecificOutput, got %s", *result.Stdout)
+	assert.Equal(t, "PreToolUse", hso["hookEventName"])
+	assert.Equal(t, "deny", hso["permissionDecision"])
+	assert.Equal(t, "inline guard blocked", hso["permissionDecisionReason"])
 }
 
 func TestIntegration_HandlerBasedGuard_Confirm_AskJSON(t *testing.T) {
@@ -1519,7 +1525,12 @@ echo '{"decision":"block","reason":"script guard blocked"}'
 	var output map[string]interface{}
 	err = json.Unmarshal([]byte(*result.Stdout), &output)
 	require.NoError(t, err)
-	assert.Equal(t, "block", output["decision"])
+	// The script handler's protocol output is {"decision":"block"}, but the
+	// dispatcher emits the canonical PreToolUse deny shape to Claude Code.
+	hso, ok := output["hookSpecificOutput"].(map[string]interface{})
+	require.True(t, ok, "expected hookSpecificOutput, got %s", *result.Stdout)
+	assert.Equal(t, "deny", hso["permissionDecision"])
+	assert.Equal(t, "script guard blocked", hso["permissionDecisionReason"])
 }
 
 func TestIntegration_FullDispatch_ScriptContextHandler(t *testing.T) {
