@@ -26,13 +26,35 @@ func TestCheckCostHonesty_SessionsButZeroCost(t *testing.T) {
 	db.Close()
 
 	buf := &bytes.Buffer{}
-	warnings := checkCostHonesty(buf, dbPath)
+	// Cost tracking ENABLED: $0-despite-sessions is the dead-writer signal → WARN.
+	warnings := checkCostHonesty(buf, dbPath, true)
 
 	out := buf.String()
-	assert.Equal(t, 1, warnings, "a recorded session with $0 cost must produce exactly one warning")
+	assert.Equal(t, 1, warnings, "a recorded session with $0 cost (tracking enabled) must produce exactly one warning")
 	assert.Contains(t, out, "WARN  cost:")
 	assert.Contains(t, out, "$0.00 computed",
 		"warning must name the zero-cost-despite-sessions condition")
+}
+
+// TestCheckCostHonesty_DisabledTrackingZeroCost is the regression for the
+// false-positive "cost tracking may be dead" warning: with cost tracking
+// DISABLED (the default), a $0 total despite recorded sessions is expected, not
+// a malfunction. doctor must report a benign INFO, not a WARN.
+func TestCheckCostHonesty_DisabledTrackingZeroCost(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "analytics.db")
+	db := openTestDB(t, dbPath)
+	a := analytics.NewAnalytics(db)
+	require.NoError(t, a.StartSession(context.Background(), "cost-disabled-zero", time.Now().UTC()))
+	db.Close()
+
+	buf := &bytes.Buffer{}
+	warnings := checkCostHonesty(buf, dbPath, false) // tracking disabled
+
+	out := buf.String()
+	assert.Equal(t, 0, warnings, "disabled cost tracking with $0 must not warn")
+	assert.Contains(t, out, "INFO  cost: tracking disabled",
+		"disabled tracking must be reported as benign INFO")
+	assert.NotContains(t, out, "WARN", "disabled tracking must never emit a cost WARN")
 }
 
 // TestCheckCostHonesty_SessionsWithCost verifies the healthy path: sessions
@@ -50,7 +72,7 @@ func TestCheckCostHonesty_SessionsWithCost(t *testing.T) {
 	db.Close()
 
 	buf := &bytes.Buffer{}
-	warnings := checkCostHonesty(buf, dbPath)
+	warnings := checkCostHonesty(buf, dbPath, true)
 
 	out := buf.String()
 	assert.Equal(t, 0, warnings, "a session with non-zero cost must not warn")
@@ -68,7 +90,7 @@ func TestCheckCostHonesty_NoSessions(t *testing.T) {
 	db.Close() // schema created, but no sessions recorded
 
 	buf := &bytes.Buffer{}
-	warnings := checkCostHonesty(buf, dbPath)
+	warnings := checkCostHonesty(buf, dbPath, false)
 
 	out := buf.String()
 	assert.Equal(t, 0, warnings, "no sessions today must not warn")
@@ -84,7 +106,7 @@ func TestCheckCostHonesty_NoDB(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "does-not-exist.db")
 
 	buf := &bytes.Buffer{}
-	warnings := checkCostHonesty(buf, dbPath)
+	warnings := checkCostHonesty(buf, dbPath, false)
 
 	assert.Equal(t, 0, warnings)
 	assert.Empty(t, buf.String(), "absent DB must produce no cost output (analytics check owns that report)")
