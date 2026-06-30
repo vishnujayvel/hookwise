@@ -130,6 +130,9 @@ func (d *Daemon) Start() error {
 	d.server = NewSocketServer(d.socketPath, func() {
 		d.triggerShutdown()
 	}, d.startedAt)
+	// Expose the daemon's effective feed config over GET /feeds so doctor reports
+	// against what is actually polling (#1).
+	d.server.SetFeedsProvider(d.EffectiveFeeds)
 
 	if err := d.server.Start(); err != nil {
 		return fmt.Errorf("feeds: daemon already running: %w", err)

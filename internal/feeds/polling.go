@@ -37,7 +37,7 @@ type ConfigAware interface {
 
 // defaultInterval is the fallback polling interval when a producer has no
 // explicit configuration.
-const defaultInterval = 60 * time.Second
+const defaultInterval = DefaultIntervalSeconds * time.Second
 
 // defaultStaggerOffset is the delay between starting successive feed goroutines,
 // preventing a thundering-herd of simultaneous fetches.
@@ -158,64 +158,16 @@ func (d *Daemon) runAllFeeds() {
 }
 
 // intervalFor returns the configured polling interval for the named feed,
-// falling back to defaultInterval if not configured.
+// falling back to defaultInterval if not configured. Delegates to the shared
+// EffectiveIntervalSeconds so the daemon and doctor resolve intervals
+// identically (#1).
 func (d *Daemon) intervalFor(name string) time.Duration {
-	var seconds int
-
-	switch name {
-	case "project":
-		seconds = d.feeds.Project.IntervalSeconds
-	case "calendar":
-		seconds = d.feeds.Calendar.IntervalSeconds
-	case "news":
-		seconds = d.feeds.News.IntervalSeconds
-	case "weather":
-		seconds = d.feeds.Weather.IntervalSeconds
-	case "memories":
-		seconds = d.feeds.Memories.IntervalSeconds
-	case "insights":
-		seconds = d.feeds.Insights.IntervalSeconds
-	default:
-		// Custom feeds (#124) carry their interval in config.Feeds.Custom.
-		for _, c := range d.feeds.Custom {
-			if c.Name == name {
-				seconds = c.IntervalSeconds
-				break
-			}
-		}
-	}
-
-	if seconds > 0 {
-		return time.Duration(seconds) * time.Second
-	}
-	return defaultInterval
+	return time.Duration(EffectiveIntervalSeconds(d.feeds, name)) * time.Second
 }
 
-// isEnabled returns true if the named feed is enabled in the config.
-// Feeds that have no explicit Enabled field default to true (fail-open:
-// unrecognised feeds are also considered enabled).
+// isEnabled returns true if the named feed is enabled in the config. Delegates
+// to the shared FeedEnabled so the daemon and doctor agree on enabled-state
+// (#1); unrecognised feeds default to enabled (fail-open).
 func (d *Daemon) isEnabled(name string) bool {
-	switch name {
-	case "project":
-		return d.feeds.Project.Enabled
-	case "calendar":
-		return d.feeds.Calendar.Enabled
-	case "news":
-		return d.feeds.News.Enabled
-	case "weather":
-		return d.feeds.Weather.Enabled
-	case "memories":
-		return d.feeds.Memories.Enabled
-	case "insights":
-		return d.feeds.Insights.Enabled
-	default:
-		// Custom feeds (#124) carry their enabled flag in config.Feeds.Custom.
-		for _, c := range d.feeds.Custom {
-			if c.Name == name {
-				return c.Enabled
-			}
-		}
-		// Truly unknown feeds are enabled by default (fail-open).
-		return true
-	}
+	return FeedEnabled(d.feeds, name)
 }

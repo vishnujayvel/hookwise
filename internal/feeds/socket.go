@@ -19,10 +19,18 @@ type SocketServer struct {
 	socketPath   string
 	listener     net.Listener
 	server       *http.Server
-	shutdownFn   func() // triggers daemon shutdown
+	shutdownFn   func()              // triggers daemon shutdown
+	feedsFn      func() []FeedStatus // returns the daemon's effective feed config
 	shutdownOnce sync.Once
 	startedAt    time.Time
 	mu           sync.Mutex
+}
+
+// SetFeedsProvider wires the function that GET /feeds calls to report the
+// daemon's effective feed config (#1). Must be called before Start. If unset,
+// GET /feeds returns an empty list.
+func (s *SocketServer) SetFeedsProvider(fn func() []FeedStatus) {
+	s.feedsFn = fn
 }
 
 // NewSocketServer creates a new SocketServer.
@@ -81,6 +89,7 @@ func (s *SocketServer) Start() error {
 	// Register routes.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/feeds", s.handleFeeds)
 	mux.HandleFunc("/shutdown", s.handleShutdown)
 
 	s.server = &http.Server{
@@ -145,6 +154,27 @@ func (s *SocketServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// handleFeeds responds to GET /feeds with the daemon's effective feed config
+// (#1): the per-feed enabled flag + interval the daemon is actually polling
+// with. doctor queries this so it reports against the daemon's real state
+// rather than re-deriving from possibly-divergent on-disk config.
+func (s *SocketServer) handleFeeds(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	statuses := []FeedStatus{}
+	if s.feedsFn != nil {
+		if got := s.feedsFn(); got != nil {
+			statuses = got
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"feeds": statuses})
 }
 
 // handleShutdown responds to POST /shutdown and triggers the shutdown function
