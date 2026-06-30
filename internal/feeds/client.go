@@ -213,3 +213,30 @@ func (c *DaemonClient) Health() (map[string]interface{}, error) {
 
 	return result, nil
 }
+
+// EffectiveFeeds sends GET /feeds to the daemon and returns its effective
+// per-feed config — what the daemon is actually polling with (#1). Callers
+// should treat any error as "daemon view unavailable" and fall back to the
+// on-disk global config.
+func (c *DaemonClient) EffectiveFeeds() ([]FeedStatus, error) {
+	resp, err := c.httpClient.Get("http://unix/feeds")
+	if err != nil {
+		return nil, fmt.Errorf("feeds: feeds request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// A non-200 (e.g. an older daemon without the /feeds route) is "view
+	// unavailable" — let the caller fall back rather than decode an error body.
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("feeds: feeds request: status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Feeds []FeedStatus `json:"feeds"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("feeds: decode feeds response: %w", err)
+	}
+
+	return result.Feeds, nil
+}

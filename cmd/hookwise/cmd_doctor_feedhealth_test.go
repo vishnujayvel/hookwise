@@ -68,7 +68,7 @@ func TestCheckFeedHealth_OrphanSkipped(t *testing.T) {
 	cfg.Feeds.Custom = nil
 
 	var buf bytes.Buffer
-	count := checkFeedHealth(&buf, cacheDir, &cfg)
+	count := checkFeedHealth(&buf, cacheDir, feedsFromConfig(&cfg), &cfg)
 	out := buf.String()
 
 	// Known feed must still warn.
@@ -96,7 +96,7 @@ func TestCheckFeedHealth_DisabledFeedStaleNotWarned(t *testing.T) {
 	cfg.Feeds.News.Enabled = false // disabled
 
 	var buf bytes.Buffer
-	count := checkFeedHealth(&buf, cacheDir, &cfg)
+	count := checkFeedHealth(&buf, cacheDir, feedsFromConfig(&cfg), &cfg)
 	out := buf.String()
 
 	assert.NotContains(t, out, "WARN  feed:news", "disabled feed must not produce a WARN")
@@ -117,7 +117,7 @@ func TestCheckFeedHealth_EnabledFeedStaleStillWarns(t *testing.T) {
 	cfg.Feeds.Calendar.Enabled = true // enabled
 
 	var buf bytes.Buffer
-	count := checkFeedHealth(&buf, cacheDir, &cfg)
+	count := checkFeedHealth(&buf, cacheDir, feedsFromConfig(&cfg), &cfg)
 	out := buf.String()
 
 	assert.Contains(t, out, "WARN  feed:calendar: stale data", "enabled stale feed must still warn")
@@ -135,7 +135,7 @@ func TestCheckFeedHealth_DisabledFeedPlaceholderNotWarned(t *testing.T) {
 	cfg.Feeds.Memories.Enabled = false
 
 	var buf bytes.Buffer
-	count := checkFeedHealth(&buf, cacheDir, &cfg)
+	count := checkFeedHealth(&buf, cacheDir, feedsFromConfig(&cfg), &cfg)
 	out := buf.String()
 
 	assert.NotContains(t, out, "WARN  feed:memories", "disabled placeholder feed must not warn")
@@ -158,7 +158,7 @@ func TestCheckFeedHealth_CustomFeedTreatedAsKnown(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	count := checkFeedHealth(&buf, cacheDir, &cfg)
+	count := checkFeedHealth(&buf, cacheDir, feedsFromConfig(&cfg), &cfg)
 	out := buf.String()
 
 	assert.Contains(t, out, "feed:pulse", "custom feed (pulse) must appear in output")
@@ -210,7 +210,7 @@ func TestCheckFeedHealth_InsightsZeroSessionsWarns(t *testing.T) {
 	cfg.Feeds.Insights.Enabled = true
 
 	var buf bytes.Buffer
-	count := checkFeedHealth(&buf, cacheDir, &cfg)
+	count := checkFeedHealth(&buf, cacheDir, feedsFromConfig(&cfg), &cfg)
 	out := buf.String()
 
 	assert.Contains(t, out, "WARN  feed:insights: cache fresh but no sessions recorded",
@@ -230,7 +230,7 @@ func TestCheckFeedHealth_InsightsWithSessionsOK(t *testing.T) {
 	cfg.Feeds.Insights.Enabled = true
 
 	var buf bytes.Buffer
-	count := checkFeedHealth(&buf, cacheDir, &cfg)
+	count := checkFeedHealth(&buf, cacheDir, feedsFromConfig(&cfg), &cfg)
 	out := buf.String()
 
 	assert.Contains(t, out, "feed:insights: OK",

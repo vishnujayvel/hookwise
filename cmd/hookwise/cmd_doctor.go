@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -128,7 +129,8 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	// Use GetStateDir() to respect HOOKWISE_STATE_DIR env override.
 	socketPath := filepath.Join(core.GetStateDir(), "daemon.sock")
 	client := feeds.NewDaemonClient(socketPath)
-	if client.IsRunning() {
+	daemonUp := client.IsRunning()
+	if daemonUp {
 		health, healthErr := client.Health()
 		if healthErr == nil {
 			fmt.Fprintf(w, "PASS  daemon: running (pid: %v, uptime: %v)\n",
@@ -140,8 +142,31 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(w, "INFO  daemon: not running (start with 'hookwise daemon start')")
 	}
 
-	// Check 5: Feed health (reuses doctorCfg loaded above).
-	warnings += checkFeedHealth(w, filepath.Join(stateDir, "state"), doctorCfg)
+	// Resolve the feed config doctor reports against: the daemon's runtime view
+	// is authoritative (#1), falling back to the on-disk global config when the
+	// daemon is down or unreachable.
+	effectiveFeeds, feedSource := resolveEffectiveFeeds(client, daemonUp)
+	switch feedSource {
+	case "global-after-error":
+		fmt.Fprintln(w, "INFO  feed-config: daemon feed query failed; reporting against on-disk global config")
+	case "global":
+		fmt.Fprintln(w, "INFO  feed-config: daemon not running; reporting against on-disk global config")
+	}
+
+	// Drift: the daemon reads config once at startup. If it is up but its runtime
+	// feed config no longer matches the on-disk global config, the user edited the
+	// config without restarting — warn so the change isn't silently un-applied.
+	if feedSource == "daemon" {
+		warnings += checkFeedConfigDrift(w, effectiveFeeds)
+	}
+
+	// Back-compat: a project-level feeds: block is ignored by the singleton daemon
+	// (#89); tell the user to migrate it to the global config.
+	warnings += checkProjectFeedsIgnored(w, cwd)
+
+	// Check 5: Feed health against the daemon's effective feed config. doctorCfg
+	// (the project config) is still used for the status-line segment cross-check.
+	warnings += checkFeedHealth(w, filepath.Join(stateDir, "state"), effectiveFeeds, doctorCfg)
 
 	// Check 7: Hook safety — scan Claude Code settings for hook sprawl, missing
 	// binaries, network-dependent hot-path hooks, and duplicate/overlapping
@@ -228,64 +253,155 @@ func renderHookFinding(w io.Writer, f hooks.Finding) {
 }
 
 // knownBuiltinFeeds is the canonical list of feed names that have a Go producer.
-// Mirrors the cases in getFeedInterval's switch statement.
+// It seeds the builtin half of feedsFromConfig's enumeration.
 var knownBuiltinFeeds = []string{"project", "news", "calendar", "weather", "memories", "insights"}
 
-// isKnownFeed returns true if feedName corresponds to a built-in producer or to
-// a custom feed declared in cfg. Unknown orphan files (written by old versions or
-// by the Python TUI) return false and should be silently skipped.
-func isKnownFeed(feedName string, cfg *core.HooksConfig) bool {
-	for _, b := range knownBuiltinFeeds {
-		if feedName == b {
-			return true
-		}
-	}
-	if cfg != nil {
-		for _, c := range cfg.Feeds.Custom {
-			if feedName == c.Name {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// isFeedEnabled reports whether feedName is enabled in cfg. It mirrors the cases
-// in getFeedInterval's switch (and thus knownBuiltinFeeds); the two are pinned
-// together by TestIsFeedEnabled_MirrorsBuiltins. A disabled feed is not expected
-// to be polled, so checkFeedHealth uses this to downgrade a disabled feed's
-// stale/placeholder/empty cache from a misleading WARN to a benign INFO. Unknown
-// or custom feeds consult cfg.Feeds.Custom; a nil config reports disabled.
-func isFeedEnabled(cfg *core.HooksConfig, feedName string) bool {
+// feedsFromConfig builds the doctor-side effective feed map from a config. It is
+// the fallback used when the daemon is down: it mirrors what the daemon's
+// EffectiveFeeds would report for the same config because it resolves
+// enabled/interval through the SAME shared feeds.FeedEnabled /
+// feeds.EffectiveIntervalSeconds helpers the daemon uses — so doctor can never
+// report a feed enabled/stale differently from what the daemon actually polls
+// (#1). A nil config yields an empty map (all caches treated as orphans).
+func feedsFromConfig(cfg *core.HooksConfig) map[string]feeds.FeedStatus {
+	out := map[string]feeds.FeedStatus{}
 	if cfg == nil {
-		return false
+		return out
 	}
-	switch feedName {
-	case "project":
-		return cfg.Feeds.Project.Enabled
-	case "calendar":
-		return cfg.Feeds.Calendar.Enabled
-	case "news":
-		return cfg.Feeds.News.Enabled
-	case "insights":
-		return cfg.Feeds.Insights.Enabled
-	case "weather":
-		return cfg.Feeds.Weather.Enabled
-	case "memories":
-		return cfg.Feeds.Memories.Enabled
-	default:
-		for _, cf := range cfg.Feeds.Custom {
-			if cf.Name == feedName {
-				return cf.Enabled
-			}
+	names := append([]string{}, knownBuiltinFeeds...)
+	for _, c := range cfg.Feeds.Custom {
+		names = append(names, c.Name)
+	}
+	for _, name := range names {
+		out[name] = feeds.FeedStatus{
+			Name:            name,
+			Enabled:         feeds.FeedEnabled(cfg.Feeds, name),
+			IntervalSeconds: feeds.EffectiveIntervalSeconds(cfg.Feeds, name),
 		}
-		return false
 	}
+	return out
 }
 
-// checkFeedHealth reads feed cache files and reports placeholder/stale feeds.
-// Returns the number of warnings emitted.
-func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
+// resolveEffectiveFeeds returns the feed config doctor should report against,
+// plus a source tag. The daemon's runtime view (GET /feeds) is authoritative
+// (#1); when the daemon is down or the query fails, fall back to the on-disk
+// global config — what the daemon WOULD poll on next start — labeling it so the
+// user knows it is best-effort. Always fail-open (ARCH-1): never returns an
+// error, only an empty map in the worst case.
+//
+// source is one of: "daemon" (authoritative), "global" (daemon down),
+// "global-after-error" (daemon was up but the /feeds query failed).
+func resolveEffectiveFeeds(client *feeds.DaemonClient, daemonUp bool) (m map[string]feeds.FeedStatus, source string) {
+	if daemonUp {
+		if list, err := client.EffectiveFeeds(); err == nil {
+			out := make(map[string]feeds.FeedStatus, len(list))
+			for _, fs := range list {
+				out[fs.Name] = fs
+			}
+			return out, "daemon"
+		}
+		// Daemon was up but the query failed — fall through to on-disk, labeled.
+		gcfg, err := core.LoadGlobalConfig()
+		if err != nil {
+			return map[string]feeds.FeedStatus{}, "global-after-error"
+		}
+		return feedsFromConfig(&gcfg), "global-after-error"
+	}
+	gcfg, err := core.LoadGlobalConfig()
+	if err != nil {
+		return map[string]feeds.FeedStatus{}, "global"
+	}
+	return feedsFromConfig(&gcfg), "global"
+}
+
+// checkFeedConfigDrift warns when the daemon is polling a feed config that no
+// longer matches the on-disk global config — i.e. the user edited the global
+// config but did not restart the daemon (the daemon reads config once at
+// startup). Without this, a post-edit global config LOOKS applied while the
+// daemon keeps polling the old set. Only meaningful when daemonFeeds came from
+// the daemon socket. Returns 1 if it warned.
+//
+// The comparison is symmetric over the UNION of feed names: a feed present on
+// only one side (a custom feed added to or removed from the on-disk config
+// without a restart) is drift too, not just an enabled/interval change on a feed
+// both sides know about.
+func checkFeedConfigDrift(w io.Writer, daemonFeeds map[string]feeds.FeedStatus) int {
+	gcfg, err := core.LoadGlobalConfig()
+	if err != nil {
+		return 0 // fail-open: can't compare, don't warn
+	}
+	onDisk := feedsFromConfig(&gcfg)
+
+	drifted := map[string]bool{}
+	for name, d := range daemonFeeds {
+		o, ok := onDisk[name]
+		if !ok || d.Enabled != o.Enabled || d.IntervalSeconds != o.IntervalSeconds {
+			drifted[name] = true
+		}
+	}
+	for name := range onDisk {
+		if _, ok := daemonFeeds[name]; !ok {
+			drifted[name] = true
+		}
+	}
+	if len(drifted) == 0 {
+		return 0
+	}
+
+	names := make([]string, 0, len(drifted))
+	for name := range drifted {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	fmt.Fprintf(w, "WARN  feed-config: daemon is polling a stale feed config (differs for: %s) — restart the daemon (hookwise daemon stop) to apply changes to %s\n",
+		strings.Join(names, ", "), filepath.Join(core.GetStateDir(), "config.yaml"))
+	return 1
+}
+
+// checkProjectFeedsIgnored warns when the project hookwise.yaml in cwd carries a
+// feeds: block. Since the daemon is a singleton that sources feed config from
+// the global config only (#89), a project-level feeds: block is silently
+// ignored for polling — so the user must be told to move those keys to the
+// global config, or their per-project feed settings vanish. Returns 1 if warned.
+func checkProjectFeedsIgnored(w io.Writer, cwd string) int {
+	keys := projectFeedKeys(cwd)
+	if len(keys) == 0 {
+		return 0
+	}
+	fmt.Fprintf(w, "WARN  config: feed settings in this project's %s are ignored — the daemon uses %s (move these feed keys there: %s)\n",
+		core.ProjectConfigFile, filepath.Join(core.GetStateDir(), "config.yaml"), strings.Join(keys, ", "))
+	return 1
+}
+
+// projectFeedKeys returns the sorted top-level keys under the feeds: block of
+// cwd/hookwise.yaml, or nil if there is no project config or no feeds: block.
+func projectFeedKeys(cwd string) []string {
+	data, err := os.ReadFile(filepath.Join(cwd, core.ProjectConfigFile))
+	if err != nil {
+		return nil
+	}
+	var raw map[string]interface{}
+	if yaml.Unmarshal(data, &raw) != nil {
+		return nil
+	}
+	feedsRaw, ok := raw["feeds"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	keys := make([]string, 0, len(feedsRaw))
+	for k := range feedsRaw {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// checkFeedHealth reads feed cache files and reports placeholder/stale feeds
+// against `effective` — the feed config the daemon is actually polling with
+// (#1), resolved by the caller from the daemon socket (or the on-disk global
+// config as a fallback). `cfg` is the PROJECT config, used only for the
+// status-line segment cross-reference. Returns the number of warnings emitted.
+func checkFeedHealth(w io.Writer, cacheDir string, effective map[string]feeds.FeedStatus, cfg *core.HooksConfig) int {
 	warnings := 0
 
 	feedFiles, err := filepath.Glob(filepath.Join(cacheDir, "*.json"))
@@ -302,9 +418,11 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 			continue
 		}
 		feedName := strings.TrimSuffix(base, ".json")
-		// Skip orphan cache files that have no Go producer and are not in the
-		// config's custom feeds. Only known feeds produce actionable diagnostics.
-		if !isKnownFeed(feedName, cfg) {
+		// Skip orphan cache files that the daemon is not polling (no producer in
+		// its effective config). Only feeds the daemon actually runs produce
+		// actionable diagnostics.
+		fs, known := effective[feedName]
+		if !known {
 			continue
 		}
 
@@ -340,7 +458,7 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 		// outcomes to a benign INFO "disabled" line. A disabled feed that
 		// nonetheless carries fresh, real data still falls through to the healthy
 		// "OK" path below, so an actively-polled-elsewhere feed is not mislabelled.
-		enabled := isFeedEnabled(cfg, feedName)
+		enabled := fs.Enabled
 		reportDisabled := func() {
 			fmt.Fprintf(w, "INFO  feed:%s: disabled (cache not refreshed)\n", feedName)
 			feedStatuses[feedName] = "disabled"
@@ -398,8 +516,8 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 
 		age := time.Since(ts).Truncate(time.Second)
 
-		// Check staleness.
-		interval := getFeedInterval(cfg, feedName)
+		// Check staleness against the daemon's effective poll interval.
+		interval := fs.IntervalSeconds
 		if interval > 0 {
 			staleThreshold := time.Duration(2*interval) * time.Second
 			if age > staleThreshold {
@@ -519,35 +637,6 @@ func checkCostHonesty(w io.Writer, dbPath string, costEnabled bool) int {
 	default:
 		fmt.Fprintf(w, "PASS  cost: $%.2f across %d session(s) today\n",
 			summary.EstimatedCostUSD, summary.TotalSessions)
-		return 0
-	}
-}
-
-// getFeedInterval returns the configured interval_seconds for a feed name.
-func getFeedInterval(cfg *core.HooksConfig, feedName string) int {
-	if cfg == nil {
-		return 0
-	}
-	switch feedName {
-	case "project":
-		return cfg.Feeds.Project.IntervalSeconds
-	case "calendar":
-		return cfg.Feeds.Calendar.IntervalSeconds
-	case "news":
-		return cfg.Feeds.News.IntervalSeconds
-	case "insights":
-		return cfg.Feeds.Insights.IntervalSeconds
-	case "weather":
-		return cfg.Feeds.Weather.IntervalSeconds
-	case "memories":
-		return cfg.Feeds.Memories.IntervalSeconds
-	default:
-		// Check custom feeds.
-		for _, cf := range cfg.Feeds.Custom {
-			if cf.Name == feedName {
-				return cf.IntervalSeconds
-			}
-		}
 		return 0
 	}
 }

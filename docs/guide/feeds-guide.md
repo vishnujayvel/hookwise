@@ -2,6 +2,8 @@
 
 The feed platform is a background data aggregation system introduced in hookwise v1.1, with the insights producer added in v1.2. It collects data from multiple sources, caches it with TTL-aware freshness, and surfaces it through the status line and TUI.
 
+> **Note:** Feeds are polled by a single shared background daemon, so feed settings are configured globally in `~/.hookwise/config.yaml`, not in a project's `hookwise.yaml`. A `feeds:` block in a project config is ignored, and `hookwise doctor` will warn about it.
+
 ## Architecture
 
 ```

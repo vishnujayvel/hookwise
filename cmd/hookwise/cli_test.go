@@ -1433,15 +1433,18 @@ func TestDoctorFeedHealthStale(t *testing.T) {
 	cacheDir := filepath.Join(stateDir, "state")
 	os.MkdirAll(cacheDir, 0o700)
 
-	// Config with weather interval = 60 seconds.
-	configYAML := `version: 1
+	// Feed config lives in the GLOBAL config now — the singleton daemon sources
+	// feeds canonically from there (#89), and doctor reports against that. Weather
+	// interval = 60s.
+	globalYAML := `version: 1
 feeds:
   weather:
     enabled: true
     interval_seconds: 60
 `
-	configPath := filepath.Join(tmpDir, core.ProjectConfigFile)
-	os.WriteFile(configPath, []byte(configYAML), 0o644)
+	os.WriteFile(filepath.Join(stateDir, "config.yaml"), []byte(globalYAML), 0o644)
+	// Minimal project config so Check 1 passes without a project feeds: block.
+	os.WriteFile(filepath.Join(tmpDir, core.ProjectConfigFile), []byte("version: 1\n"), 0o644)
 
 	// Write a stale weather feed (timestamp 5 minutes ago, interval is 60s, threshold is 120s).
 	staleTime := time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339)
@@ -1477,15 +1480,18 @@ func TestDoctorFeedHealthEmptyData(t *testing.T) {
 	cacheDir := filepath.Join(stateDir, "state")
 	os.MkdirAll(cacheDir, 0o700)
 
-	// Enable weather so this test exercises the empty-data WARN, not the
-	// disabled-feed suppression (a disabled feed's empty cache is benign).
-	configYAML := `version: 1
+	// Enable weather in the GLOBAL config (the daemon's canonical feed source,
+	// #89) so this test exercises the empty-data WARN, not the disabled-feed
+	// suppression (a disabled feed's empty cache is benign).
+	globalYAML := `version: 1
 feeds:
   weather:
     enabled: true
     interval_seconds: 600
 `
-	os.WriteFile(filepath.Join(tmpDir, core.ProjectConfigFile), []byte(configYAML), 0o644)
+	os.WriteFile(filepath.Join(stateDir, "config.yaml"), []byte(globalYAML), 0o644)
+	// Minimal project config so Check 1 passes without a project feeds: block.
+	os.WriteFile(filepath.Join(tmpDir, core.ProjectConfigFile), []byte("version: 1\n"), 0o644)
 
 	// Fresh timestamp, but an empty data object.
 	now := time.Now().UTC().Format(time.RFC3339)

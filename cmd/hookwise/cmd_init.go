@@ -28,13 +28,19 @@ tui:
   auto_launch: false
   launch_method: "newWindow"
 
-# feeds:
-#   weather:
-#     enabled: true
-#     interval_seconds: 900
-#     latitude: 37.7749
-#     longitude: -122.4194
-#     temperature_unit: "fahrenheit" # or "celsius"
+# Feeds are polled by a single shared daemon, so they are configured GLOBALLY in
+# ~/.hookwise/config.yaml — NOT here. A feeds: block in this project file is
+# ignored for polling ('hookwise doctor' will warn). Put feeds in the global
+# config instead, e.g.:
+#
+#   # ~/.hookwise/config.yaml
+#   feeds:
+#     weather:
+#       enabled: true
+#       interval_seconds: 900
+#       latitude: 37.7749
+#       longitude: -122.4194
+#       temperature_unit: "fahrenheit" # or "celsius"
 `
 
 func newInitCmd() *cobra.Command {
