@@ -244,6 +244,39 @@ func isKnownFeed(feedName string, cfg *core.HooksConfig) bool {
 	return false
 }
 
+// isFeedEnabled reports whether feedName is enabled in cfg. It mirrors the cases
+// in getFeedInterval's switch (and thus knownBuiltinFeeds); the two are pinned
+// together by TestIsFeedEnabled_MirrorsBuiltins. A disabled feed is not expected
+// to be polled, so checkFeedHealth uses this to downgrade a disabled feed's
+// stale/placeholder/empty cache from a misleading WARN to a benign INFO. Unknown
+// or custom feeds consult cfg.Feeds.Custom; a nil config reports disabled.
+func isFeedEnabled(cfg *core.HooksConfig, feedName string) bool {
+	if cfg == nil {
+		return false
+	}
+	switch feedName {
+	case "project":
+		return cfg.Feeds.Project.Enabled
+	case "calendar":
+		return cfg.Feeds.Calendar.Enabled
+	case "news":
+		return cfg.Feeds.News.Enabled
+	case "insights":
+		return cfg.Feeds.Insights.Enabled
+	case "weather":
+		return cfg.Feeds.Weather.Enabled
+	case "memories":
+		return cfg.Feeds.Memories.Enabled
+	default:
+		for _, cf := range cfg.Feeds.Custom {
+			if cf.Name == feedName {
+				return cf.Enabled
+			}
+		}
+		return false
+	}
+}
+
 // checkFeedHealth reads feed cache files and reports placeholder/stale feeds.
 // Returns the number of warnings emitted.
 func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
@@ -295,8 +328,24 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 			continue
 		}
 
+		// A disabled feed is not expected to be polled, so a leftover cache that
+		// is placeholder/empty/zero-lived/stale is not a malfunction — reporting
+		// it as WARN ("stale data 304h ago") is misleading. Downgrade those
+		// outcomes to a benign INFO "disabled" line. A disabled feed that
+		// nonetheless carries fresh, real data still falls through to the healthy
+		// "OK" path below, so an actively-polled-elsewhere feed is not mislabelled.
+		enabled := isFeedEnabled(cfg, feedName)
+		reportDisabled := func() {
+			fmt.Fprintf(w, "INFO  feed:%s: disabled (cache not refreshed)\n", feedName)
+			feedStatuses[feedName] = "disabled"
+		}
+
 		// Check placeholder.
 		if src, ok := dataMap["source"].(string); ok && src == "placeholder" {
+			if !enabled {
+				reportDisabled()
+				continue
+			}
 			fmt.Fprintf(w, "WARN  feed:%s: placeholder data (no real source configured)\n", feedName)
 			warnings++
 			feedStatuses[feedName] = "placeholder"
@@ -307,6 +356,10 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 		// producer ran but emitted nothing — the segment renders blank. Report
 		// it distinctly rather than as "OK" (issue #99: cache-fresh != data-present).
 		if len(dataMap) == 0 {
+			if !enabled {
+				reportDisabled()
+				continue
+			}
 			fmt.Fprintf(w, "WARN  feed:%s: cache fresh but no data\n", feedName)
 			warnings++
 			feedStatuses[feedName] = "empty"
@@ -318,6 +371,10 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 		// renders blank even though len(dataMap) > 0, so the empty-map guard
 		// above won't catch it. Detect feed-specific zero-liveness conditions.
 		if reason := feedZeroLivenessReason(feedName, dataMap); reason != "" {
+			if !enabled {
+				reportDisabled()
+				continue
+			}
 			fmt.Fprintf(w, "WARN  feed:%s: %s\n", feedName, reason)
 			warnings++
 			feedStatuses[feedName] = "empty"
@@ -340,6 +397,10 @@ func checkFeedHealth(w io.Writer, cacheDir string, cfg *core.HooksConfig) int {
 		if interval > 0 {
 			staleThreshold := time.Duration(2*interval) * time.Second
 			if age > staleThreshold {
+				if !enabled {
+					reportDisabled()
+					continue
+				}
 				fmt.Fprintf(w, "WARN  feed:%s: stale data (last updated %s ago)\n", feedName, age)
 				warnings++
 				feedStatuses[feedName] = "stale"
