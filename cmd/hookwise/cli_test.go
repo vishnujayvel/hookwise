@@ -1477,6 +1477,16 @@ func TestDoctorFeedHealthEmptyData(t *testing.T) {
 	cacheDir := filepath.Join(stateDir, "state")
 	os.MkdirAll(cacheDir, 0o700)
 
+	// Enable weather so this test exercises the empty-data WARN, not the
+	// disabled-feed suppression (a disabled feed's empty cache is benign).
+	configYAML := `version: 1
+feeds:
+  weather:
+    enabled: true
+    interval_seconds: 600
+`
+	os.WriteFile(filepath.Join(tmpDir, core.ProjectConfigFile), []byte(configYAML), 0o644)
+
 	// Fresh timestamp, but an empty data object.
 	now := time.Now().UTC().Format(time.RFC3339)
 	writeJSONFile(t, filepath.Join(cacheDir, "weather.json"), map[string]interface{}{

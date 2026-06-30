@@ -51,6 +51,32 @@ func TestKnownBuiltinFeeds_MirrorsGetFeedInterval(t *testing.T) {
 	}
 }
 
+// TestIsFeedEnabled_MirrorsBuiltins enforces that isFeedEnabled has a switch case
+// for every builtin (parallel to getFeedInterval). A builtin missing from the
+// switch falls through to the default and is treated as permanently disabled,
+// which would suppress its diagnostics — the opposite failure of the stale-feed
+// bug. Each builtin is enabled here so a missing case (default false) is caught.
+func TestIsFeedEnabled_MirrorsBuiltins(t *testing.T) {
+	cfg := &core.HooksConfig{}
+	cfg.Feeds.Project.Enabled = true
+	cfg.Feeds.News.Enabled = true
+	cfg.Feeds.Calendar.Enabled = true
+	cfg.Feeds.Weather.Enabled = true
+	cfg.Feeds.Memories.Enabled = true
+	cfg.Feeds.Insights.Enabled = true
+
+	for _, feed := range knownBuiltinFeeds {
+		assert.Truef(t, isFeedEnabled(cfg, feed),
+			"isFeedEnabled(%q) must resolve via its own switch case, not fall through to default false", feed)
+	}
+
+	// A declared custom feed reflects its Enabled flag; unknown → false; nil → false.
+	cfg.Feeds.Custom = []core.CustomFeedConfig{{Name: "mycustom", Enabled: true}}
+	assert.True(t, isFeedEnabled(cfg, "mycustom"), "enabled custom feed must report enabled")
+	assert.False(t, isFeedEnabled(cfg, "nonexistent-orphan"), "unknown feed must report disabled")
+	assert.False(t, isFeedEnabled(nil, "project"), "nil config must report disabled (no panic)")
+}
+
 // TestIsKnownFeed pins isKnownFeed across builtins, custom feeds, and unknowns —
 // it had no coverage. Builtins are recognised; a declared custom feed is
 // recognised; an orphan/unknown name is not.
