@@ -1026,6 +1026,100 @@ analytics:
 	}
 }
 
+// LoadGlobalConfig sources the singleton daemon's config from the global file
+// ONLY (#89). It must never observe a project hookwise.yaml, so its result is
+// deterministic regardless of which directory cold-started the daemon.
+func TestLoadGlobalConfig_ReadsGlobalOnly(t *testing.T) {
+	globalDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", globalDir)
+
+	globalConfig := `
+version: 1
+feeds:
+  weather:
+    enabled: true
+    interval_seconds: 900
+  news:
+    enabled: false
+`
+	if err := os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(globalConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadGlobalConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Feeds.Weather.Enabled {
+		t.Error("expected weather enabled from global config")
+	}
+	if cfg.Feeds.Weather.IntervalSeconds != 900 {
+		t.Errorf("expected weather interval 900, got %d", cfg.Feeds.Weather.IntervalSeconds)
+	}
+	if cfg.Feeds.News.Enabled {
+		t.Error("expected news disabled from global config")
+	}
+}
+
+// A project hookwise.yaml in the working directory must NOT influence
+// LoadGlobalConfig — that is the whole point of the global-only source.
+func TestLoadGlobalConfig_IgnoresProjectOverlayInCwd(t *testing.T) {
+	globalDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", globalDir)
+	globalConfig := `
+version: 1
+feeds:
+  weather:
+    enabled: true
+`
+	if err := os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(globalConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A project config in cwd that would flip weather off under LoadConfig.
+	projectDir := t.TempDir()
+	projectConfig := `
+feeds:
+  weather:
+    enabled: false
+`
+	if err := os.WriteFile(filepath.Join(projectDir, "hookwise.yaml"), []byte(projectConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(projectDir)
+
+	// Sanity: LoadConfig(cwd) DOES see the project override (overlay is real).
+	proj, err := LoadConfig(projectDir)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if proj.Feeds.Weather.Enabled {
+		t.Fatal("precondition failed: project overlay should disable weather under LoadConfig")
+	}
+
+	// LoadGlobalConfig must ignore the project overlay entirely.
+	global, err := LoadGlobalConfig()
+	if err != nil {
+		t.Fatalf("LoadGlobalConfig: %v", err)
+	}
+	if !global.Feeds.Weather.Enabled {
+		t.Error("LoadGlobalConfig must ignore the project overlay; weather should stay enabled")
+	}
+}
+
+func TestLoadGlobalConfig_NoFileReturnsDefaults(t *testing.T) {
+	globalDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", globalDir)
+
+	cfg, err := LoadGlobalConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(cfg, GetDefaultConfig()) {
+		t.Error("expected defaults when no global config file exists")
+	}
+}
+
 func TestLoadConfig_GuardsArrayReplaces(t *testing.T) {
 	tmpDir := t.TempDir()
 	globalDir := filepath.Join(tmpDir, "global")

@@ -321,26 +321,55 @@ func LoadConfig(projectDir string) (HooksConfig, error) {
 	if projectRaw == nil {
 		includeBaseDir = filepath.Dir(globalConfigPath)
 	}
-	merged, err = ResolveIncludes(merged, includeBaseDir)
+	return finalizeConfig(merged, includeBaseDir)
+}
+
+// LoadGlobalConfig loads ONLY the global config (GetStateDir()/config.yaml) with
+// no project overlay. This is the canonical config source for the singleton feed
+// daemon (#89): because one daemon process is shared by every project/session,
+// its config must be deterministic regardless of which directory cold-started
+// it. The pipeline mirrors LoadConfig (includes -> env interpolation -> defaults
+// backfill) minus the project merge.
+func LoadGlobalConfig() (HooksConfig, error) {
+	globalConfigPath := filepath.Join(GetStateDir(), "config.yaml")
+
+	globalRaw, err := readYAMLFile(globalConfigPath)
+	if err != nil {
+		return HooksConfig{}, fmt.Errorf("reading global config: %w", err)
+	}
+	if globalRaw == nil {
+		return GetDefaultConfig(), nil
+	}
+
+	return finalizeConfig(globalRaw, filepath.Dir(globalConfigPath))
+}
+
+// finalizeConfig runs the back half of the config pipeline shared by LoadConfig
+// and LoadGlobalConfig: include resolution, env-var interpolation, then YAML
+// round-trip unmarshalling into HooksConfig (starting from defaults so missing
+// fields get sensible values). includeBaseDir is the directory includes resolve
+// relative to.
+func finalizeConfig(merged map[string]interface{}, includeBaseDir string) (HooksConfig, error) {
+	merged, err := ResolveIncludes(merged, includeBaseDir)
 	if err != nil {
 		return HooksConfig{}, fmt.Errorf("resolving includes: %w", err)
 	}
 
-	// Step 4: Interpolate environment variables
+	// Interpolate environment variables.
 	interpolated := InterpolateEnvVars(merged)
 	merged, ok := interpolated.(map[string]interface{})
 	if !ok {
 		return HooksConfig{}, fmt.Errorf("env var interpolation returned unexpected type %T", interpolated)
 	}
 
-	// Step 5: Marshal back to YAML and unmarshal into struct.
-	// This leverages Go's yaml tags for snake_case -> struct field mapping.
+	// Marshal back to YAML and unmarshal into struct. This leverages Go's yaml
+	// tags for snake_case -> struct field mapping.
 	yamlBytes, err := yaml.Marshal(merged)
 	if err != nil {
 		return HooksConfig{}, fmt.Errorf("re-marshaling config: %w", err)
 	}
 
-	// Start with defaults so missing fields get sensible values
+	// Start with defaults so missing fields get sensible values.
 	config := GetDefaultConfig()
 	if err := yaml.Unmarshal(yamlBytes, &config); err != nil {
 		return HooksConfig{}, fmt.Errorf("unmarshaling config: %w", err)

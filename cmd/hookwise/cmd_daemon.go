@@ -112,7 +112,25 @@ func newDaemonStopCmd() *cobra.Command {
 	}
 }
 
+// resolveDaemonConfig loads the canonical daemon-process config. The daemon is a
+// singleton — one socket, one cache, one process per state dir — so its entire
+// config (feeds, daemon, analytics snapshots) MUST come from the global config
+// file only, independent of which project directory cold-started it (#89).
+// Honoring a per-project hookwise.yaml here let whichever project won the
+// cold-start race freeze the feed config for every other project/session. Fails
+// open to defaults on error (ARCH-1).
+func resolveDaemonConfig() core.HooksConfig {
+	config, err := core.LoadGlobalConfig()
+	if err != nil {
+		return core.GetDefaultConfig()
+	}
+	return config
+}
+
 func newDaemonRunCmd() *cobra.Command {
+	// configPath is retained only so the daemon still accepts the legacy
+	// --config flag that older spawn paths may pass; it is intentionally NOT used
+	// to source config anymore (#89 — see resolveDaemonConfig).
 	var configPath string
 	var socketPath string
 
@@ -121,16 +139,7 @@ func newDaemonRunCmd() *cobra.Command {
 		Short:  "Run the daemon in the foreground (internal)",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if configPath == "" {
-				cwd, _ := os.Getwd()
-				configPath = filepath.Join(cwd, core.ProjectConfigFile)
-			}
-
-			config, err := core.LoadConfig(filepath.Dir(configPath))
-			if err != nil {
-				// Fail-open: use defaults.
-				config = core.GetDefaultConfig()
-			}
+			config := resolveDaemonConfig()
 
 			registry := feeds.NewRegistry()
 			feeds.RegisterBuiltins(registry)
