@@ -106,13 +106,23 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "INFO  legacy-dolt: %s present (archived; safe to remove)\n", doltDir)
 	}
 
+	// Load config once for the cost-honesty (Check 8) and feed-health (Check 5)
+	// checks below; both consult it and doctor is a one-shot diagnostic.
+	var doctorCfg *core.HooksConfig
+	if loadedCfg, loadErr := core.LoadConfig(cwd); loadErr == nil {
+		doctorCfg = &loadedCfg
+	}
+	costEnabled := doctorCfg != nil && doctorCfg.CostTracking.Enabled
+
 	// Check 8: Cost-tracking honesty. DailySummary aggregates per-session
 	// estimated_cost_usd from the SAME UTC day `hookwise stats` and the
 	// status-line read, so doctor agrees with what the user sees there. If
-	// sessions were recorded today but $0 was computed, the cost writer is
-	// likely dead -- the exact failure that kept stats/status-line silently at
-	// $0. Mirrors the feed zero-liveness principle (cache-fresh != data-present).
-	warnings += checkCostHonesty(w, dbPath)
+	// sessions were recorded today but $0 was computed WHILE cost tracking is
+	// enabled, the cost writer is likely dead -- the exact failure that kept
+	// stats/status-line silently at $0. When cost tracking is disabled (the
+	// default), $0 is expected, not a malfunction. Mirrors the feed
+	// zero-liveness / disabled-subsystem honesty principle.
+	warnings += checkCostHonesty(w, dbPath, costEnabled)
 
 	// Check 4: Daemon liveness via socket dial (replaces PID file check).
 	// Use GetStateDir() to respect HOOKWISE_STATE_DIR env override.
@@ -130,12 +140,8 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(w, "INFO  daemon: not running (start with 'hookwise daemon start')")
 	}
 
-	// Check 5: Feed health.
-	var feedCfg *core.HooksConfig
-	if loadedCfg, loadErr := core.LoadConfig(cwd); loadErr == nil {
-		feedCfg = &loadedCfg
-	}
-	warnings += checkFeedHealth(w, filepath.Join(stateDir, "state"), feedCfg)
+	// Check 5: Feed health (reuses doctorCfg loaded above).
+	warnings += checkFeedHealth(w, filepath.Join(stateDir, "state"), doctorCfg)
 
 	// Check 7: Hook safety — scan Claude Code settings for hook sprawl, missing
 	// binaries, network-dependent hot-path hooks, and duplicate/overlapping
@@ -469,13 +475,15 @@ func feedZeroLivenessReason(feedName string, dataMap map[string]interface{}) str
 }
 
 // checkCostHonesty reports a doctor warning when sessions were recorded today
-// but the computed cost is still $0 -- the signature of a dead cost writer
-// (sessions present but the cost value absent). It reads DailySummary for the
-// current UTC day, the same source `hookwise stats` and the status-line use, so
-// doctor stays consistent with what the user sees there. Returns the number of
-// warnings emitted (0 or 1). Absent or unopenable DBs are silent no-ops -- the
-// analytics check (Check 3) already owns reporting those.
-func checkCostHonesty(w io.Writer, dbPath string) int {
+// but the computed cost is still $0 AND cost tracking is enabled -- the
+// signature of a dead cost writer (sessions present but the cost value absent).
+// When cost tracking is disabled (costEnabled=false, the default), a $0 total is
+// expected, not a malfunction, and is reported as a benign INFO instead. It
+// reads DailySummary for the current UTC day, the same source `hookwise stats`
+// and the status-line use, so doctor stays consistent with what the user sees
+// there. Returns the number of warnings emitted (0 or 1). Absent or unopenable
+// DBs are silent no-ops -- the analytics check (Check 3) already owns those.
+func checkCostHonesty(w io.Writer, dbPath string, costEnabled bool) int {
 	if _, err := os.Stat(dbPath); err != nil {
 		return 0
 	}
@@ -496,6 +504,15 @@ func checkCostHonesty(w io.Writer, dbPath string) int {
 		fmt.Fprintln(w, "INFO  cost: no sessions recorded today yet")
 		return 0
 	case summary.EstimatedCostUSD == 0:
+		// A $0 total is only a "dead writer" signal when cost tracking is ON.
+		// With cost tracking disabled (the default), $0 is the expected state,
+		// not a malfunction — report it as benign INFO rather than a misleading
+		// "may be dead" WARN. Same disabled-subsystem honesty principle as the
+		// feed-health checks (a disabled feed isn't "stale", it's off).
+		if !costEnabled {
+			fmt.Fprintf(w, "INFO  cost: tracking disabled (%d session(s) today, $0.00)\n", summary.TotalSessions)
+			return 0
+		}
 		fmt.Fprintf(w, "WARN  cost: %d session(s) today but $0.00 computed "+
 			"(cost tracking may be dead -- see 'hookwise stats')\n", summary.TotalSessions)
 		return 1
