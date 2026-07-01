@@ -275,9 +275,11 @@ func runScheduledSnapshot(dbPath string, retention int) {
 // TUI launcher (Bug #14 — duplicate terminal tabs)
 // ---------------------------------------------------------------------------
 
-// tuiPIDPath returns the path to the TUI PID file.
+// tuiPIDPath returns the path to the TUI PID file. It reads core.GetStateDir()
+// at call time so it honors HOOKWISE_STATE_DIR (#116); the package-level
+// core.DefaultStateDir var is frozen at init and ignores the override.
 func tuiPIDPath() string {
-	return filepath.Join(core.DefaultStateDir, "tui.pid")
+	return filepath.Join(core.GetStateDir(), "tui.pid")
 }
 
 // tuiLaunchCooldown is how long a recorded launch suppresses re-launch. It only
@@ -496,7 +498,9 @@ func launchTUIIfNeeded(launchMethod string) {
 	}()
 
 	l := &tuiLauncher{
-		stateDir:  core.DefaultStateDir,
+		// core.GetStateDir() (not the frozen core.DefaultStateDir) so the launch
+		// marker honors HOOKWISE_STATE_DIR, matching tuiPIDPath (#116).
+		stateDir:  core.GetStateDir(),
 		cooldown:  tuiLaunchCooldown,
 		now:       time.Now,
 		isRunning: isTUIRunning,
