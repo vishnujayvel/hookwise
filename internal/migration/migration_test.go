@@ -223,6 +223,48 @@ func TestDetectTypeScript_OnlySQLite(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Test 3b: DetectTypeScript must NOT treat a Go-origin analytics DB as a TS
+// source (#218). The Go runtime writes its analytics.db to the same path a
+// TypeScript install would, so a presence-only check imports the Go DB into
+// itself → sessions.id UNIQUE conflict on the first `upgrade`.
+// ---------------------------------------------------------------------------
+
+func TestDetectTypeScript_GoOriginSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	hwDir := filepath.Join(tmpDir, ".hookwise")
+	require.NoError(t, os.MkdirAll(hwDir, 0o700))
+
+	// Create a genuine Go-format analytics DB at the TS candidate path. Open()
+	// initialises the Go-only schema (including the schema_meta sentinel table).
+	dbPath := filepath.Join(hwDir, "analytics.db")
+	godb, err := analytics.Open(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, godb.Close())
+
+	opts := MigrationOpts{HomeDir: tmpDir}
+	sqlitePath, _ := DetectTypeScript(opts)
+
+	assert.Empty(t, sqlitePath, "a Go-origin analytics.db must not be detected as a TypeScript migration source")
+}
+
+// A genuine TypeScript-era DB (no schema_meta) must still be detected so real
+// TS users migrate cleanly.
+func TestDetectTypeScript_TSOriginDetected(t *testing.T) {
+	tmpDir := t.TempDir()
+	hwDir := filepath.Join(tmpDir, ".hookwise")
+	require.NoError(t, os.MkdirAll(hwDir, 0o700))
+
+	dbPath := filepath.Join(hwDir, "analytics.db")
+	tsdb := createTestSQLite(t, dbPath)
+	require.NoError(t, tsdb.Close())
+
+	opts := MigrationOpts{HomeDir: tmpDir}
+	sqlitePath, _ := DetectTypeScript(opts)
+
+	assert.Equal(t, dbPath, sqlitePath, "a genuine TypeScript-origin analytics.db must still be detected")
+}
+
+// ---------------------------------------------------------------------------
 // Test 4: MigrateSQLite imports sessions
 // ---------------------------------------------------------------------------
 
