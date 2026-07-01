@@ -85,7 +85,13 @@ func DetectTypeScript(opts MigrationOpts) (sqlitePath, costStatePath string) {
 
 	sqliteCandidate := filepath.Join(dir, "analytics.db")
 	if info, err := os.Stat(sqliteCandidate); err == nil && !info.IsDir() {
-		sqlitePath = sqliteCandidate
+		// #218: the Go runtime writes its analytics DB to this same path. Only
+		// treat it as a TypeScript migration source when it is NOT a Go-origin
+		// DB -- otherwise `upgrade` imports the Go DB into itself and hits a
+		// sessions.id UNIQUE conflict on the first run.
+		if !isGoOriginDB(sqliteCandidate) {
+			sqlitePath = sqliteCandidate
+		}
 	}
 
 	costStateCandidate := filepath.Join(dir, "state", "cost-state.json")
@@ -94,6 +100,31 @@ func DetectTypeScript(opts MigrationOpts) (sqlitePath, costStatePath string) {
 	}
 
 	return sqlitePath, costStatePath
+}
+
+// isGoOriginDB reports whether the SQLite database at path was created by the
+// Go analytics runtime rather than a genuine TypeScript-era install (#218).
+//
+// The Go runtime always creates a `schema_meta` table (see internal/analytics)
+// which no TypeScript-era database ever had, so its presence is a reliable
+// Go-origin sentinel. On any open/query error the DB is treated as NOT
+// Go-origin, so a genuine (possibly unusual) TypeScript database is never
+// skipped -- the failure mode we must avoid is dropping a real user's data.
+func isGoOriginDB(path string) bool {
+	db, err := sql.Open("sqlite", path+"?mode=ro")
+	if err != nil {
+		return false
+	}
+	defer db.Close()
+
+	var count int
+	err = db.QueryRow(
+		"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_meta'",
+	).Scan(&count)
+	if err != nil {
+		return false
+	}
+	return count > 0
 }
 
 // ---------------------------------------------------------------------------
