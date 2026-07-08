@@ -19,6 +19,17 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/feeds"
 )
 
+// shortSocketPath returns a unix socket path under /tmp for a test daemon.
+// macOS /var/folders temp paths (from t.TempDir) can exceed the 104-byte unix
+// socket limit, so sockets get their own short dir. Cleaned up automatically.
+func shortSocketPath(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "hw-sock-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return filepath.Join(dir, "d.sock")
+}
+
 // =========================================================================
 // Task 4.1: Dispatch resilience under failure conditions
 // =========================================================================
@@ -242,6 +253,12 @@ func TestChaos_ProducerPanicRecovery(t *testing.T) {
 	daemon := feeds.NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, registry)
 	daemon.SetPIDFile(pidFile)
 	daemon.SetCacheDir(cacheDir)
+	// Isolate the unix socket. DefaultSocketPath is frozen at init and ignores
+	// HOOKWISE_STATE_DIR, so without this the chaos daemon collides with the
+	// integration package's daemon under parallel `go test ./...` (the nightly
+	// validate tier), binding the same real socket. Uses a short /tmp path to
+	// stay under the macOS 104-byte unix-socket limit.
+	daemon.SetSocketPath(shortSocketPath(t))
 	daemon.SetStaggerOffset(0)
 
 	require.NoError(t, daemon.Start())

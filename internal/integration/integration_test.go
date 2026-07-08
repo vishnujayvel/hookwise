@@ -29,6 +29,17 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// shortSocketPath returns a unix socket path under /tmp for a test daemon.
+// macOS /var/folders temp paths (from t.TempDir) can exceed the 104-byte unix
+// socket limit, so sockets get their own short dir. Cleaned up automatically.
+func shortSocketPath(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "hw-sock-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return filepath.Join(dir, "d.sock")
+}
+
 // =========================================================================
 // Helpers
 // =========================================================================
@@ -323,9 +334,21 @@ func TestIntegration_DaemonLifecycleWithCacheBridge(t *testing.T) {
 		},
 	})
 
-	daemon := feeds.NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, registry)
+	// Weather is a recognised feed and defaults to disabled (FeedEnabled reads
+	// cfg.Weather.Enabled); it must be enabled explicitly or the daemon skips
+	// it and weather.json is never written. "pulse" is not a recognised feed so
+	// it is enabled fail-open by default.
+	daemon := feeds.NewDaemon(core.DaemonConfig{}, core.FeedsConfig{
+		Weather: core.WeatherFeedConfig{Enabled: true},
+	}, registry)
 	daemon.SetPIDFile(pidFile)
 	daemon.SetCacheDir(cacheDir)
+	// Isolate the unix socket. DefaultSocketPath is frozen at package init from
+	// ~/.hookwise, so HOOKWISE_STATE_DIR does not move it; without this the
+	// daemon binds the shared real socket and collides with a live daemon
+	// (local) or a parallel test package (nightly). Uses a short /tmp path to
+	// stay under the macOS 104-byte unix-socket limit.
+	daemon.SetSocketPath(shortSocketPath(t))
 	daemon.SetStaggerOffset(10 * time.Millisecond) // fast for tests
 
 	// Start daemon
@@ -364,7 +387,9 @@ func TestIntegration_DaemonLifecycleWithCacheBridge(t *testing.T) {
 	pulseEntry, ok := flattened["pulse"].(map[string]interface{})
 	require.True(t, ok)
 	assert.NotEmpty(t, pulseEntry["updated_at"], "should have updated_at")
-	assert.Equal(t, bridge.DefaultTTLSeconds, pulseEntry["ttl_seconds"], "should have ttl_seconds")
+	// ttl_seconds is a JSON number (float64) after the cache round-trip; the
+	// daemon injects feedCacheTTLSeconds(60s interval) = 180, floored to 300.
+	assert.Equal(t, float64(bridge.DefaultTTLSeconds), pulseEntry["ttl_seconds"], "should have ttl_seconds")
 	assert.Equal(t, float64(3), pulseEntry["session_count"], "data field should be at top level")
 	assert.Equal(t, float64(1), pulseEntry["active_sessions"], "data field should be at top level")
 	assert.NotContains(t, pulseEntry, "type", "envelope field should not be present")
@@ -693,6 +718,9 @@ func TestIntegration_DaemonWritesCacheNotAnalyticsDB(t *testing.T) {
 	daemon := feeds.NewDaemon(core.DaemonConfig{}, core.FeedsConfig{}, registry)
 	daemon.SetPIDFile(pidFile)
 	daemon.SetCacheDir(cacheDir)
+	// Isolate the unix socket (see the lifecycle test above): DefaultSocketPath
+	// is frozen at init and ignores HOOKWISE_STATE_DIR.
+	daemon.SetSocketPath(shortSocketPath(t))
 	daemon.SetStaggerOffset(0)
 
 	require.NoError(t, daemon.Start())
