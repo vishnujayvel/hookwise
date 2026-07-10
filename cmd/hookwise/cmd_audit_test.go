@@ -94,6 +94,23 @@ func TestAuditMalformedSettingsFailFindingNoPanic(t *testing.T) {
 	assert.Contains(t, report.Findings[0].Message, "could not be parsed")
 }
 
+func TestAuditMalformedSettingsTextRender(t *testing.T) {
+	claudeDir := t.TempDir()
+	writeAuditSettings(t, claudeDir, `{"hooks": {`) // truncated JSON
+	t.Setenv("HOOKWISE_CLAUDE_DIR", claudeDir)
+
+	output, err := executeCommand("audit")
+
+	// Same FAIL contract as the JSON path, rendered as text.
+	require.Error(t, err, "FAIL must exit non-zero")
+	assert.ErrorIs(t, err, errAuditFailed)
+	assert.Contains(t, output, "FAIL")
+	assert.Contains(t, output, "hook-settings")
+	assert.Contains(t, output, "could not be parsed")
+	assert.Contains(t, output, "fix the JSON and re-run")
+	assert.Contains(t, output, "Result: FAIL")
+}
+
 func TestAuditExitCodeFailOnMissingBinary(t *testing.T) {
 	claudeDir := t.TempDir()
 	writeAuditSettings(t, claudeDir, `{
