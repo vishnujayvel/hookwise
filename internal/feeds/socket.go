@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/vishnujayvel/hookwise/internal/core"
@@ -24,6 +25,7 @@ type SocketServer struct {
 	shutdownOnce sync.Once
 	startedAt    time.Time
 	mu           sync.Mutex
+	boundInfo    os.FileInfo // socket file identity captured at bind time
 }
 
 // SetFeedsProvider wires the function that GET /feeds calls to report the
@@ -44,10 +46,50 @@ func NewSocketServer(socketPath string, shutdownFn func(), startedAt time.Time) 
 	}
 }
 
+// acquireArbitrationLock takes an exclusive flock on a sidecar lock file
+// next to the socket. bind(2)+listen(2) via net.Listen is not atomic: a
+// socket that is bound but not yet listening refuses connections and is
+// indistinguishable from a stale one, so two racing daemons could each
+// classify the other's live socket as stale and both "win" the bind. The
+// flock spans the whole stat/dial/remove/bind sequence so arbitration is
+// serialized across processes. The lock file is deliberately never removed:
+// unlinking a lock file while another process may be flocking it reopens
+// the race on a fresh inode.
+//
+// Acquisition is non-blocking with a retry deadline rather than a bare
+// LOCK_EX: a hung-but-alive holder (SIGSTOP, wedged filesystem) would
+// otherwise stall Start and Shutdown indefinitely — Daemon.Stop budgets
+// 10s for the whole shutdown. A dead holder is not a concern; the OS
+// releases the flock on process exit.
+func (s *SocketServer) acquireArbitrationLock(timeout time.Duration) (*os.File, error) {
+	f, err := os.OpenFile(s.socketPath+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return f, nil
+		}
+		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN {
+			f.Close()
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			f.Close()
+			return nil, fmt.Errorf("timed out after %s waiting for holder of %s", timeout, s.socketPath+".lock")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // Start binds the unix socket, sets permissions to 0600, registers HTTP
 // routes, and begins serving. Before binding, it performs stale socket
 // detection: if a socket file exists but cannot be connected to, it is
-// removed to allow a fresh bind (SOCKET-3).
+// removed to allow a fresh bind (SOCKET-3). The detect-remove-bind sequence
+// runs under a cross-process flock so concurrent starts cannot misclassify
+// a bound-but-not-yet-listening socket as stale.
 func (s *SocketServer) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -56,6 +98,14 @@ func (s *SocketServer) Start() error {
 	if err := core.EnsureDir(filepath.Dir(s.socketPath), core.DefaultDirMode); err != nil {
 		return fmt.Errorf("feeds: ensure socket dir: %w", err)
 	}
+
+	// 5s bound: a healthy holder's critical section is at most one failed
+	// 500ms dial plus a few syscalls, so even a queue of racers drains fast.
+	lock, err := s.acquireArbitrationLock(5 * time.Second)
+	if err != nil {
+		return fmt.Errorf("feeds: acquire socket arbitration lock: %w", err)
+	}
+	defer lock.Close() // closing the fd releases the flock
 
 	// Stale socket detection (SOCKET-3): if the file exists, try to connect.
 	if _, err := os.Stat(s.socketPath); err == nil {
@@ -78,6 +128,23 @@ func (s *SocketServer) Start() error {
 		return fmt.Errorf("feeds: bind socket: %w", err)
 	}
 	s.listener = listener
+
+	// Go's UnixListener unlinks the path unconditionally on Close — if another
+	// daemon has replaced the file by then, that would delete the successor's
+	// live socket. Disable it; Shutdown owns removal with an identity check.
+	if ul, ok := listener.(*net.UnixListener); ok {
+		ul.SetUnlinkOnClose(false)
+	}
+
+	// Capture the bound socket file's identity so Shutdown only ever removes
+	// the file this instance created, never a successor's. On stat failure
+	// boundInfo stays nil and Shutdown skips removal — the file is then
+	// reclaimed by the next Start's stale detection.
+	if fi, statErr := os.Stat(s.socketPath); statErr == nil {
+		s.boundInfo = fi
+	} else {
+		core.Logger().Warn("feeds: could not capture bound socket identity; shutdown will not remove the socket file", "path", s.socketPath, "error", statErr)
+	}
 
 	// Set socket file permissions to 0600 (SOCKET-2).
 	if err := os.Chmod(s.socketPath, 0o600); err != nil {
@@ -127,10 +194,23 @@ func (s *SocketServer) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	// Remove the socket file.
-	if err := os.Remove(s.socketPath); err != nil && !os.IsNotExist(err) {
-		if firstErr == nil {
-			firstErr = fmt.Errorf("feeds: remove socket: %w", err)
+	// Remove the socket file — only under the arbitration flock, and only if
+	// it is still the file this instance bound. If another daemon has since
+	// replaced it, removing by path would delete the other daemon's live
+	// socket. If the lock cannot be acquired, skip removal entirely: an
+	// unlocked check-and-remove is the same TOCTOU this lock exists to close,
+	// and leaving a stale file for the next Start's stale detection is
+	// strictly safer.
+	if lock, lockErr := s.acquireArbitrationLock(2 * time.Second); lockErr == nil {
+		defer lock.Close()
+		if fi, statErr := os.Stat(s.socketPath); statErr == nil {
+			if s.boundInfo != nil && os.SameFile(s.boundInfo, fi) {
+				if err := os.Remove(s.socketPath); err != nil && !os.IsNotExist(err) {
+					if firstErr == nil {
+						firstErr = fmt.Errorf("feeds: remove socket: %w", err)
+					}
+				}
+			}
 		}
 	}
 

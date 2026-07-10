@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -178,6 +179,57 @@ func TestSocketServer_ShutdownRemovesSocketFile(t *testing.T) {
 
 	_, err = os.Stat(socketPath)
 	assert.True(t, os.IsNotExist(err), "socket file should be removed after shutdown")
+}
+
+func TestSocketServer_ConcurrentStartOneWinner(t *testing.T) {
+	// Regression for the SOCKET-3 TOCTOU race: net.Listen is bind+listen,
+	// not atomic, so a bound-but-not-yet-listening socket refuses dials and
+	// looked stale to racing starters — two daemons could both "win". The
+	// arbitration flock must serialize the detect-remove-bind sequence.
+	socketPath := filepath.Join(socketTempDir(t), "d.sock")
+
+	const racers = 8
+	servers := make([]*SocketServer, racers)
+	errs := make([]error, racers)
+	var wg sync.WaitGroup
+	for i := 0; i < racers; i++ {
+		servers[i] = NewSocketServer(socketPath, func() {}, time.Now())
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = servers[i].Start()
+		}(i)
+	}
+	wg.Wait()
+
+	winners := 0
+	for i, err := range errs {
+		if err == nil {
+			winners++
+			t.Cleanup(func() { _ = servers[i].Shutdown(context.Background()) })
+		}
+	}
+	assert.Equal(t, 1, winners, "exactly one concurrent Start must win the bind")
+}
+
+func TestSocketServer_ShutdownSparesSuccessorSocket(t *testing.T) {
+	// If another daemon replaced the socket file after this instance bound it,
+	// Shutdown must not remove the successor's file — neither via the explicit
+	// remove (identity-checked) nor via Go's unlink-on-close (disabled).
+	socketPath := filepath.Join(socketTempDir(t), "d.sock")
+
+	srv := NewSocketServer(socketPath, func() {}, time.Now())
+	require.NoError(t, srv.Start())
+
+	// Simulate a successor taking over the path.
+	require.NoError(t, os.Remove(socketPath))
+	require.NoError(t, os.WriteFile(socketPath, []byte("successor"), 0o600))
+
+	require.NoError(t, srv.Shutdown(context.Background()))
+
+	content, err := os.ReadFile(socketPath)
+	require.NoError(t, err, "successor's file must survive the predecessor's shutdown")
+	assert.Equal(t, "successor", string(content))
 }
 
 func TestSocketServer_ShutdownOnlyPOST(t *testing.T) {
