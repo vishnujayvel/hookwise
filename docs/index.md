@@ -21,9 +21,9 @@ features:
   - title: Coaching
     details: Metacognition prompts, builder's trap detection, and communication coaching to keep you focused and productive.
   - title: Feed Platform
-    details: Background daemon with 8 built-in producers (pulse, project, calendar, news, insights, practice, weather, memories) and a TTL-aware cache bus.
+    details: Background daemon with 6 built-in producers (project, news, calendar, weather, memories, insights) plus custom feeds, and a TTL-aware cache bus.
   - title: Status Line
-    details: Two-tier status line with 21 segments. Renders in your Claude Code prompt with live data from the cache bus.
+    details: Composable status line segments. Renders in your Claude Code prompt with live data from the cache bus.
   - title: Recipes
     details: Pre-built, shareable hook configurations. Include community recipes or create your own with guards, handlers, and config.
 ---

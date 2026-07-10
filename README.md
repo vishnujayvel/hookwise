@@ -80,7 +80,7 @@ One file. Claude Code reads it, understands it, and can even help you write new 
 | Analytics | SQLite, queryable | DIY | Display-only |
 | Workflow insights | Friction signals, session pulse | No | No |
 | Configuration | One YAML file | Scattered scripts | JSON/TUI |
-| Recipes | 12 built-in, shareable | N/A | N/A |
+| Recipes | 11 built-in, shareable | N/A | N/A |
 | Cost tracking | Budgets + alerts | DIY | Current session only |
 
 ## Quick Start
@@ -92,7 +92,8 @@ curl -fsSL https://raw.githubusercontent.com/vishnujayvel/hookwise/main/scripts/
 # …or build/install with Go:
 go install github.com/vishnujayvel/hookwise/cmd/hookwise@latest
 
-hookwise init --preset minimal
+hookwise init          # scaffold hookwise.yaml + inventory your existing hooks
+hookwise init --wire   # wire dispatch + status line into .claude/settings.json
 hookwise doctor
 ```
 
@@ -102,7 +103,11 @@ hookwise doctor
 <img src="screenshots/doctor-v1.3.png" alt="hookwise doctor output — all checks passed" width="600">
 </div>
 
-Then [register hookwise in `.claude/settings.json`](docs/guide/getting-started.md) — one dispatcher handles all 13 hook events.
+`hookwise doctor` checks your config, state directory, analytics DB, daemon liveness, and per-feed health — measured against the daemon's *effective* runtime config, not just what's on disk. It's honest about disabled subsystems: a feed you turned off reports as `disabled`, and $0 with cost tracking off is "expected", not a malfunction warning.
+
+`hookwise init --wire` registers the dispatcher and status line in `.claude/settings.json` for you — idempotently, with a pre-flight safety audit, an automatic backup, and `--dry-run` / `--unwire` escape hatches. One dispatcher handles all 13 hook events. Prefer to edit settings yourself? [Manual setup &rarr;](docs/guide/getting-started.md)
+
+Before it writes anything, `hookwise init` also inventories the hooks you already have (user settings are never modified) and saves the pre-init snapshot to `~/.hookwise/hook-audit.json`.
 
 ## How It Works
 
@@ -114,7 +119,7 @@ Every hook event passes through a three-phase execution engine. Guards protect, 
 
 ## What You Get
 
-**[Guard Rails](docs/features/guards.md)** -- Declarative rules with firewall semantics. `block` or `warn` with glob patterns and operators like `contains`, `matches`, `starts_with`.
+**[Guard Rails](docs/features/guards.md)** -- Declarative rules with firewall semantics. `block`, `confirm`, or `warn` with glob patterns and operators like `contains`, `matches`, `starts_with`.
 
 <img src="screenshots/guard-demo.gif" alt="Guard blocking a dangerous rm -rf" width="700">
 
@@ -122,18 +127,20 @@ Every hook event passes through a three-phase execution engine. Guards protect, 
 <img src="screenshots/guard-evaluation-flow.png" alt="Guard evaluation flow — hookwise.yaml rules are matched by tool name, then condition, resulting in block, confirm, or warn actions" width="500">
 </div>
 
+**Hook Audit** -- `hookwise audit` scans your Claude Code settings files and flags hook-safety issues: sprawl, missing binaries, network-dependent hooks on hot paths, and duplicate or overlapping hooks. `--json` emits a schema-versioned report for CI (exits 0 on PASS/WARN, 1 on FAIL); `--project-dir` scans a project's `.claude/` settings instead of your user-level settings.
+
 **[Coaching](docs/features/coaching.md)** -- Periodic **metacognition prompts** that break autopilot mode: *"Are you solving the right problem, or the most interesting one?"* Research on AI-assisted programming shows students who plan before coding outperform those who jump straight to debugging ([AIED 2025](https://arxiv.org/abs/2509.03171)) — hookwise makes planning-first the default.
 
-**[Status Line](docs/features/status-line.md)** -- 21 composable segments powered by a [background daemon](docs/features/feeds.md) with 8 built-in feed producers. Mix `session`, `cost`, `project`, `calendar`, `news`, `insights`, and more. Peripheral vision for your development flow — you don't stare at it, but you glance at it.
+**[Status Line](docs/features/status-line.md)** -- Composable segments powered by a [background daemon](docs/features/feeds.md) with 6 built-in feed producers plus custom feeds. Mix `cost`, `project`, `calendar`, `weather`, `news`, `insights`, and more. Peripheral vision for your development flow — you don't stare at it, but you glance at it.
 
 <img src="screenshots/status-line-insights.gif" alt="hookwise status line — friction tips, pace metrics, and calendar awareness" width="700">
 
 **[Workflow Insights](docs/features/feeds.md)** -- Surfaces friction patterns with actionable tips, pace metrics, and session health. The data your workflow already generates but never shows you.
 
-**[Feed Platform](docs/features/feeds.md)** -- A background daemon polls 8 producers on staggered intervals and writes to an atomic cache bus with per-key TTL. Status line segments read from cache with `isFresh()` checks. If a feed is unavailable or stale, its segments silently disappear (fail-open).
+**[Feed Platform](docs/features/feeds.md)** -- A background daemon polls 6 built-in producers (plus your custom feeds) on staggered intervals and writes to an atomic cache bus with per-key TTL. Status line segments read from cache with `isFresh()` checks. If a feed is unavailable or stale, its segments silently disappear (fail-open). The daemon is a singleton shared by every project, so feeds are configured once, in the global `~/.hookwise/config.yaml` — `hookwise doctor` reports feed health against the daemon's *actual* runtime config and warns if a project file carries a `feeds:` block (which the daemon ignores).
 
 <div align="center">
-<img src="screenshots/feed-architecture.png" alt="Feed platform architecture — data sources flow through a background daemon with 8 producers into an atomic cache bus, then to the 21-segment status line" width="600">
+<img src="screenshots/feed-architecture.png" alt="Feed platform architecture — data sources flow through a background daemon into an atomic cache bus, then to the status line segments" width="600">
 </div>
 
 **[Analytics](docs/features/analytics.md)** -- SQLite-backed session tracking: tool calls, duration, cost, daily budgets. Close the perception gap between how fast you *feel* and how fast you *are*.
@@ -148,7 +155,7 @@ Every hook event passes through a three-phase execution engine. Guards protect, 
 
 ## Configuration
 
-Everything lives in `hookwise.yaml`. Four presets: `minimal`, `coaching`, `analytics`, `full`. [Full reference &rarr;](docs/guide/getting-started.md)
+Everything lives in `hookwise.yaml`. [Full reference &rarr;](docs/guide/getting-started.md)
 
 ```yaml
 version: 1
@@ -160,10 +167,10 @@ guards:
 coaching:
   metacognition: { enabled: true, interval_seconds: 300 }
 analytics: { enabled: true }
-status_line: { enabled: true, segments: [session, cost, project, calendar] }
+status_line: { enabled: true, segments: [cost, project, calendar] }
 ```
 
-Global config at `~/.hookwise/config.yaml` applies everywhere. Project-level `hookwise.yaml` overrides per workspace.
+Global config at `~/.hookwise/config.yaml` applies everywhere. Project-level `hookwise.yaml` overrides per workspace — with one exception: the `feeds:` block only takes effect in the global config, because the feed daemon is a shared singleton. A project-level `feeds:` block is ignored, and `hookwise doctor` warns about it.
 
 ## Testing
 
@@ -180,7 +187,7 @@ Go test helpers in `pkg/hookwise/testing`. [Details &rarr;](docs/cli.md)
 
 ## Recipes
 
-12 built-in -- [see all](recipes/) or [create your own](docs/guide/creating-a-recipe.md):  `block-dangerous-commands`, `metacognition-prompts`, `commit-without-tests`, and more.
+11 built-in -- [see all](recipes/) or [create your own](docs/guide/creating-a-recipe.md):  `block-dangerous-commands`, `metacognition-prompts`, `commit-without-tests`, and more.
 
 ## Security
 

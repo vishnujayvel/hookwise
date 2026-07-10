@@ -107,7 +107,7 @@ With `--streaks`, you see:
 
 ## TUI Analytics Tab
 
-The TUI (`hookwise tui`, tab 4: Analytics) provides a visual dashboard with the same data:
+The TUI (`hookwise-tui`, tab 4: Analytics) provides a visual dashboard with the same data:
 
 - Daily summary table
 - Tool usage breakdown

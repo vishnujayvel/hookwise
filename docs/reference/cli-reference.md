@@ -1,195 +1,225 @@
 # CLI Reference
 
-hookwise provides 12 CLI commands. All commands are invoked as `hookwise <command>`.
+All commands are invoked as `hookwise <command>`. Run `hookwise <command> --help` for the authoritative flag list.
 
 ## init
 
 Initialize hookwise in the current directory.
 
 ```bash
-hookwise init [--preset <name>]
+hookwise init
+```
+
+Without flags, `init` does three things:
+
+1. **Scans your existing Claude Code hooks** before writing anything, and saves the pre-init inventory (hooks, findings, parse errors) to `~/.hookwise/hook-audit.json`. The scan is advisory — it never modifies your Claude Code settings, and a scan failure never aborts init.
+2. Creates a default `hookwise.yaml` in the current directory (skipped if one already exists).
+3. Ensures the `~/.hookwise/` state directory exists.
+
+### init --wire / --unwire
+
+Wire hookwise into Claude Code's `settings.json` — idempotently and safely:
+
+```bash
+hookwise init --wire                # wire dispatch hooks + statusLine
+hookwise init --wire --dry-run      # preview the settings.json diff without writing
+hookwise init --unwire              # remove hookwise's own hooks, touching nothing else
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--preset <name>` | Use a preset configuration: `minimal`, `coaching`, `analytics`, `full` |
+| `--wire` | Wire hookwise into Claude Code settings.json |
+| `--unwire` | Remove hookwise hooks from Claude Code settings.json |
+| `--dry-run` | Print what would change without writing |
+| `--events <list>` | Hook events to wire, comma-separated (default `PreToolUse,PostToolUse`) |
+| `--no-status-line` | Skip wiring the statusLine entry |
+| `--settings <path>` | Override path to Claude Code settings.json |
+| `--force` | Wire even if pre-flight finds FAIL-level issues |
 
-Creates `hookwise.yaml` in the current directory and `~/.hookwise/` state directory.
+Wiring runs a pre-flight safety audit first and refuses to proceed on FAIL-level findings unless `--force` is given. A backup of settings.json is written before any change.
 
-**Presets:**
+## audit
 
-| Preset | Includes |
-|--------|----------|
-| `minimal` | Guards only |
-| `coaching` | Guards + metacognition + builder's trap |
-| `analytics` | Guards + SQLite session tracking |
-| `full` | All features (guards, coaching, analytics, feeds, insights, status line, cost tracking) |
+Scan Claude Code hook configuration for health issues.
+
+```bash
+hookwise audit [--json] [--project-dir <dir>]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Emit a schema-versioned JSON report (`schema_version: 1`) instead of text |
+| `--project-dir <dir>` | Scan `<dir>/.claude/settings.json` + `settings.local.json` instead of the user-level settings |
+
+Scans settings files for hook-safety issues: inventory/sprawl, missing binaries, network-dependent hooks on hot paths, and duplicate or overlapping hooks. The report includes a full hook inventory (by event, matcher, command, source file), findings with levels, and a `PASS` / `WARN` / `FAIL` summary.
+
+**Exit codes:** 0 on PASS or WARN, 1 on FAIL — suitable for CI gates. Malformed settings files become FAIL findings rather than crashes.
 
 ## doctor
 
-Check system health and configuration.
+Run system health checks.
 
 ```bash
 hookwise doctor
 ```
 
-Validates:
+Checks:
+
 - `hookwise.yaml` exists and parses correctly
-- State directory (`~/.hookwise/`) exists with correct permissions
-- All referenced handlers are accessible
-- Recipe includes resolve correctly
-- Feed configuration is valid
-- Daemon status
+- State directory exists
+- Analytics DB opens and is queryable
+- Daemon liveness (socket dial)
+- **Feed config source** — when the daemon is running, doctor queries its runtime feed config (`GET /feeds`) and reports against what the daemon is *actually* polling; when it isn't, doctor falls back to the on-disk global config and says so
+- **Feed config drift** — warns when the daemon is polling a stale config (you edited `~/.hookwise/config.yaml` after daemon startup) and suggests a restart
+- **Project `feeds:` block** — warns if the project `hookwise.yaml` carries feed settings, which the singleton daemon ignores (move them to the global config)
+- Per-feed health (fresh / stale / placeholder / no data) and status-line segment cross-check
+- Existing Claude Code hook settings parse cleanly
+- **Cost-tracking honesty** — sessions recorded today with $0 computed *while cost tracking is enabled* is flagged as a likely dead cost writer; with cost tracking disabled (the default), $0 is reported as expected, not a malfunction
 
-## status
-
-Show current configuration summary.
-
-```bash
-hookwise status [--config <path>]
-```
-
-| Flag | Description |
-|------|-------------|
-| `--config <path>` | Path to config file (default: `hookwise.yaml` in cwd) |
-
-Displays which features are enabled, guard rule count, included recipes, and feed status.
-
-## status-line
-
-Render the two-tier status line. Reads a JSON payload from stdin (provided by Claude Code).
-
-```bash
-echo '{"session_id":"abc","context_window":{"used_percentage":0.67}}' | hookwise status-line
-```
-
-This command is called automatically by Claude Code hooks -- you rarely need to invoke it manually.
+Doctor is honest about disabled subsystems: a disabled feed reports as `INFO disabled`, not as a stale-cache warning.
 
 ## stats
 
-Display session analytics and tool usage.
+Display today's analytics dashboard.
 
 ```bash
-hookwise stats [--json] [--agents] [--cost] [--streaks]
+hookwise stats [--data-dir <path>]
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Output structured JSON |
-| `--agents` | Include multi-agent activity summary |
-| `--cost` | Include cost breakdown |
-| `--streaks` | Include coding streak information |
+| `--data-dir <path>` | Path to the analytics SQLite DB file (defaults to config `analytics.db_path` / `~/.hookwise/analytics.db`) |
 
-Requires analytics to be enabled in `hookwise.yaml`.
+Opens the analytics database and displays today's daily summary and tool breakdown. Requires analytics to be enabled in `hookwise.yaml`.
 
 ## test
 
-Run the hookwise guard test suite.
+Evaluate guard test scenarios.
 
 ```bash
-hookwise test
-```
-
-Loads test scenarios from `hookwise.yaml` and runs them against your guard rules, reporting pass/fail for each scenario.
-
-## tui
-
-Launch the interactive terminal UI.
-
-```bash
-hookwise tui
-```
-
-Opens a full-screen interface with 8 tabs:
-
-| Key | Tab | Description |
-|-----|-----|-------------|
-| `1` | Dashboard | Session status, feature toggles, quick stats |
-| `2` | Guards | Rule browser, test interface, match visualization |
-| `3` | Coaching | Metacognition, builder's trap, communication status |
-| `4` | Analytics | Daily summary, tool breakdown, authorship metrics |
-| `5` | Feeds | Live feed data, daemon health, cache bus state |
-| `6` | Insights | AI-generated insights, trend analysis |
-| `7` | Recipes | Installed recipes, details, active includes |
-| `8` | Status | Status line preview, segment configuration |
-
-Press `q` or `Escape` to exit.
-
-## migrate
-
-Migrate from Python hookwise (v0.1.0).
-
-```bash
-hookwise migrate [--dry-run]
+hookwise test [--project-dir <dir>]
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--dry-run` | Preview changes without applying them |
+| `--project-dir <dir>` | Project directory (defaults to cwd) |
 
-Replaces the Python hookwise entry in Claude's `settings.json` with the Go binary and validates your config against the current schema.
-
-See the [Migration guide](/reference/migration) for full details.
+Loads config, creates synthetic test payloads for each guard rule, evaluates them, and reports pass/fail.
 
 ## dispatch
 
 Dispatch a hook event. This is the fast-path command called by Claude Code on every hook event.
 
 ```bash
-hookwise dispatch <event-type>
+hookwise dispatch <EventType> [--project-dir <dir>]
 ```
 
 Reads the hook payload from stdin as JSON and routes it through the three-phase execution pipeline (guard, context, side effect).
 
 **Event types:** `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `Stop`, `SubagentStart`, `SubagentStop`, `PreCompact`, `SessionStart`, `SessionEnd`, `PermissionRequest`, `Setup`
 
-This command is registered in `.claude/settings.json` -- see [Getting Started](/guide/getting-started) for setup instructions.
+This command is registered in `.claude/settings.json` — `hookwise init --wire` does it for you, or see [Getting Started](/guide/getting-started) for manual setup.
+
+## status-line
+
+Render the status line. Called automatically by Claude Code's `statusLine` setting.
+
+```bash
+hookwise status-line [--project-dir <dir>]
+```
+
+Loads config and the feed cache, then renders a single ANSI-colored status line to stdout. Auto-starts the feed daemon if it isn't running.
 
 ## daemon
 
 Manage the background feed daemon.
 
 ```bash
-hookwise daemon <start|stop|status> [--config <path>]
+hookwise daemon <start|stop>
 ```
 
 | Subcommand | Description |
 |------------|-------------|
-| `start` | Start the daemon as a detached background process |
-| `stop` | Send SIGTERM and remove the PID file |
-| `status` | Show daemon PID and running state |
+| `start` | Start the feed daemon (connect-or-start) |
+| `stop` | Stop the feed daemon |
 
-| Flag | Description |
-|------|-------------|
-| `--config <path>` | Path to config file |
+The daemon is a singleton — one socket, one cache, one process per state directory. Its feed configuration comes from the **global** config (`~/.hookwise/config.yaml`) only, regardless of which project directory started it; a project-level `feeds:` block is ignored (`hookwise doctor` warns about this). It polls feed producers at their configured intervals and writes results to the cache bus.
 
-The daemon polls feed producers at their configured intervals and writes results to the cache bus.
+## snapshot
 
-## feeds
-
-Live feed dashboard showing daemon health and cache bus state.
+Take a point-in-time snapshot of the analytics database.
 
 ```bash
-hookwise feeds [--once] [--config <path>]
+hookwise snapshot [--data-dir <path>] [--snapshots-dir <dir>] [--retention <n>]
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--once` | Show a snapshot and exit (no auto-refresh) |
-| `--config <path>` | Path to config file |
+| `--data-dir <path>` | Path to the analytics SQLite DB file |
+| `--snapshots-dir <dir>` | Directory to write snapshots to (defaults to `~/.hookwise/snapshots`) |
+| `--retention <n>` | Number of snapshots to keep (defaults to config `snapshot_retention`) |
 
-Displays each feed's status, last update time, freshness, and cached data.
+Writes a consistent `VACUUM INTO` copy of the analytics database and prunes older snapshots beyond the retention limit.
 
-## setup
+## log
 
-Set up external integrations.
+Show analytics snapshot history.
 
 ```bash
-hookwise setup <target>
+hookwise log [--limit <n>] [--snapshots-dir <dir>]
 ```
 
-| Target | Description |
-|--------|-------------|
-| `calendar` | Configure Google Calendar OAuth for the calendar feed |
+| Flag | Description |
+|------|-------------|
+| `--limit <n>` | Maximum number of snapshots to show, 0 = all (default 10) |
+| `--snapshots-dir <dir>` | Path to snapshots directory |
 
-Stores credentials at `~/.hookwise/calendar-credentials.json`.
+Displays recent snapshots (newest first). Snapshots are created periodically by the daemon via `VACUUM INTO`.
+
+## diff
+
+Show row-count changes between two analytics snapshots.
+
+```bash
+hookwise diff <from-ref> <to-ref> [--snapshots-dir <dir>]
+```
+
+Refs accept `latest` (newest snapshot), `prev` (second-newest), an exact snapshot name, or a date prefix like `20260101` (newest match wins).
+
+```bash
+hookwise diff prev latest
+hookwise diff 20260101 20260102
+```
+
+## notifications
+
+Display notification history.
+
+```bash
+hookwise notifications [--limit <n>] [--data-dir <path>]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--limit <n>` | Maximum number of notifications to show (default 20) |
+| `--data-dir <path>` | Path to the analytics SQLite DB file |
+
+Shows recent notifications from the budget producer, stored in the analytics database and surfaced via the status line or this command.
+
+## upgrade
+
+Migrate data from a TypeScript hookwise installation.
+
+```bash
+hookwise upgrade [--dry-run] [--data-dir <path>] [--project-dir <dir>]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Preview migration without making changes |
+| `--data-dir <path>` | Path to the analytics SQLite DB file |
+| `--project-dir <dir>` | Project directory for config validation |
+
+Detects an existing TypeScript hookwise installation, imports the data into the Go SQLite analytics database, and validates config parity. Original files are never modified (non-destructive).
+
+See the [Migration guide](/reference/migration) for full details.

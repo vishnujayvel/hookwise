@@ -10,16 +10,16 @@ The TUI is a separate Python package bundled in the `tui/` directory:
 cd tui && pip install -e .
 ```
 
-Or install from the venv that ships with hookwise:
+Or install it as a standalone tool (e.g. with uv):
 
 ```bash
-hookwise tui  # Auto-detects the bundled venv
+uv tool install ./tui
 ```
 
 ## Launching the TUI
 
 ```bash
-hookwise tui
+hookwise-tui
 ```
 
 ## Navigation
