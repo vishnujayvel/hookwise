@@ -19,7 +19,7 @@ This document defines what hookwise controls and what it does not. It exists for
 | `hookwise.yaml` config | `internal/core/config.go` | Project-level and global YAML configuration (gopkg.in/yaml.v3) with deep merge, env var interpolation, snake_case/camelCase conversion |
 | Config validation | `internal/core/config.go` (`ValidateConfig`) | Structural validation of all 14 top-level sections with path-based error reporting |
 | Include resolution | `internal/core/config.go` (`ResolveIncludes`) | Merge included YAML files (including recipe files) into the base config |
-| Recipe library | `recipes/` | 11 built-in recipes across 6 categories (safety, quality, productivity, behavioral, compliance, gamification), consumed as YAML config includes |
+| Recipe library | `recipes/` | 10 built-in recipes across 6 categories (safety, quality, productivity, behavioral, compliance, gamification), consumed as YAML config includes |
 
 ### Execution Layer
 
@@ -259,7 +259,7 @@ The following are examples of features that would violate hookwise's boundaries.
 
 - **Auto-fixing lint errors detected by guards.** A guard can warn "this bash command has no error handling," but hookwise must not rewrite the command to add `set -e`. That crosses from observation into code modification.
 - **Auto-committing on session end.** The project producer reads git state, but hookwise must never run `git commit` or `git push` on behalf of the user.
-- **Creating GitHub issues from coaching alerts.** A coaching-style nudge could surface "you've been in tooling mode for 90 minutes," but hookwise should not create external artifacts (issues, PRs, Slack messages) without an explicit integration layer.
+- **Creating GitHub issues from workflow alerts.** An insights-style nudge could surface "you've been in tooling mode for 90 minutes," but hookwise should not create external artifacts (issues, PRs, Slack messages) without an explicit integration layer.
 
 ### Features that would violate "Configure, don't control"
 

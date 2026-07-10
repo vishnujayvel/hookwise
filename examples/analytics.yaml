@@ -1,7 +1,7 @@
 # hookwise.yaml -- Analytics Configuration
 # ==========================================
 # Guards plus session tracking, AI attribution, and tool call analytics.
-# Includes a status line showing AI ratio and session metrics.
+# Includes a status line showing cost and workflow insights.
 # Data is stored in ~/.hookwise/analytics.db (SQLite).
 #
 # Usage: Copy this file to your project root as hookwise.yaml
@@ -41,4 +41,5 @@ analytics:
 status_line:
   enabled: true
   segments:
-    - ai_ratio   # AI vs human authorship percentage
+    - cost       # estimated daily spend
+    - insights   # workflow insights summary

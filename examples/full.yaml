@@ -1,8 +1,8 @@
 # hookwise.yaml -- Full Configuration
 # =====================================
 # All features enabled with sensible defaults. This is the kitchen-sink
-# config -- guards, coaching, analytics, cost tracking, transcript backup,
-# and a comprehensive status line.
+# config -- guards, analytics, cost tracking, and a comprehensive
+# status line.
 #
 # Usage: Copy this file to your project root as hookwise.yaml
 #        Customize thresholds and budgets to match your workflow.
@@ -49,25 +49,6 @@ guards:
     when: 'tool_input.file_path ends_with ".env"'
     reason: "Writing to .env file - verify no secrets are exposed"
 
-# Coaching: behavioral nudges and self-awareness tools
-coaching:
-  # Metacognition prompts every 5 minutes (300 seconds)
-  metacognition:
-    enabled: true
-    interval_seconds: 300
-
-  # Builder trap detection with escalating alerts
-  builder_trap:
-    enabled: true
-    thresholds:
-      yellow: 30
-      orange: 60
-      red: 90
-
-  # Communication coach (disable if not doing interview prep)
-  communication:
-    enabled: false
-
 # Analytics: usage tracking and authorship metrics
 analytics:
   enabled: true
@@ -82,8 +63,7 @@ cost_tracking:
 status_line:
   enabled: true
   segments:
-    - ai_ratio       # AI vs human authorship percentage
-    - builder_trap   # builder trap status indicator
+    - project        # git branch and repo context
     - cost           # current cost vs daily budget
 
 # Global settings

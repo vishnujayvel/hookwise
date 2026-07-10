@@ -126,22 +126,6 @@ guards:
     reason: "Gmail tool requires human confirmation"
 ```
 
-### Enabling Coaching
-
-```yaml
-coaching:
-  metacognition:
-    enabled: true
-    interval_seconds: 300  # prompt every 5 minutes
-
-  builder_trap:
-    enabled: true
-    thresholds:
-      yellow: 30   # gentle nudge at 30 min
-      orange: 60   # stronger nudge at 60 min
-      red: 90      # urgent at 90 min
-```
-
 ### Enabling Analytics
 
 ```yaml
@@ -162,7 +146,7 @@ Recipes are pre-built configurations you can include:
 ```yaml
 includes:
   - recipes/safety/block-dangerous-commands
-  - recipes/behavioral/metacognition-prompts
+  - recipes/quality/commit-without-tests
   - recipes/compliance/cost-tracking
 ```
 

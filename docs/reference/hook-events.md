@@ -98,7 +98,6 @@ If a handler returns `{ decision: "block", reason: "..." }`, the tool call is re
 
 **Common uses:**
 - Turn analytics
-- Coaching prompts (metacognition, builder's trap)
 - Status line updates
 - Session cost calculation
 
