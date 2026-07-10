@@ -60,3 +60,14 @@ func TestDefaultSettingsPaths_HonorsClaudeDirEnv(t *testing.T) {
 	require.NotEmpty(t, paths)
 	assert.Equal(t, filepath.Join(claude, "settings.json"), paths[0])
 }
+
+func TestProjectSettingsPaths(t *testing.T) {
+	project := t.TempDir()
+
+	paths := ProjectSettingsPaths(project)
+
+	assert.Equal(t, []string{
+		filepath.Join(project, ".claude", "settings.json"),
+		filepath.Join(project, ".claude", "settings.local.json"),
+	}, paths, "project scan targets the <dir>/.claude settings pair, settings.json first")
+}
