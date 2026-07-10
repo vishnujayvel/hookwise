@@ -38,8 +38,8 @@ func isTestBinary(path string) bool {
 
 // defaultDaemonLogPath returns the daemon log file path. It reads
 // core.GetStateDir() at call time so HOOKWISE_STATE_DIR is honored, rather
-// than the frozen core.DefaultDaemonLogPath package var (mirrors PR #227's
-// tuiPIDPath pattern).
+// than a frozen package-level default (mirrors PR #227's tuiPIDPath
+// pattern).
 func defaultDaemonLogPath() string {
 	return filepath.Join(core.GetStateDir(), "daemon.log")
 }
@@ -84,7 +84,7 @@ func NewDaemonClient(socketPath string) *DaemonClient {
 //  1. Dial socket with connectTimeout
 //  2. If connected, return nil (daemon already running)
 //  3. If not, add random jitter (SPAWN-1: 0-200ms), spawn hookwise daemon run
-//     with Setsid:true (SPAWN-2), redirect stdout/stderr to DefaultDaemonLogPath
+//     with Setsid:true (SPAWN-2), redirect stdout/stderr to the daemon log file
 //  4. Poll socket every 100ms for up to readyTimeout
 //  5. Return error if timeout (caller fail-opens per ARCH-1)
 func (c *DaemonClient) EnsureDaemon(configPath string) error {
@@ -172,7 +172,7 @@ func (c *DaemonClient) spawnDaemon(configPath string) error {
 
 	// Redirect stdout/stderr to daemon log file. Resolved via
 	// core.GetStateDir() at call time so HOOKWISE_STATE_DIR is honored, rather
-	// than the frozen core.DefaultDaemonLogPath package var.
+	// than a frozen package-level default.
 	logFile, err := os.OpenFile(defaultDaemonLogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open daemon log: %w", err)

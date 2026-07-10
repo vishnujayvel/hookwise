@@ -152,7 +152,6 @@ type CostTrackingConfig struct {
 type SettingsConfig struct {
 	LogLevel              string `yaml:"log_level" json:"logLevel"` // "debug", "info", "warn", "error"
 	HandlerTimeoutSeconds int    `yaml:"handler_timeout_seconds" json:"handlerTimeoutSeconds"`
-	StateDir              string `yaml:"state_dir" json:"stateDir"`
 }
 
 // --- Guard Types ---
@@ -360,7 +359,6 @@ type CalendarFeedConfig struct {
 	IntervalSeconds  int      `yaml:"interval_seconds" json:"intervalSeconds"`
 	LookaheadMinutes int      `yaml:"lookahead_minutes" json:"lookaheadMinutes"`
 	Calendars        []string `yaml:"calendars" json:"calendars"`
-	CredentialsPath  string   `yaml:"credentials_path" json:"credentialsPath"`
 	TokenPath        string   `yaml:"token_path" json:"tokenPath"`
 }
 
@@ -397,9 +395,8 @@ type WeatherFeedConfig struct {
 }
 
 type MemoriesFeedConfig struct {
-	Enabled         bool   `yaml:"enabled" json:"enabled"`
-	IntervalSeconds int    `yaml:"interval_seconds" json:"intervalSeconds"`
-	DBPath          string `yaml:"db_path" json:"dbPath"`
+	Enabled         bool `yaml:"enabled" json:"enabled"`
+	IntervalSeconds int  `yaml:"interval_seconds" json:"intervalSeconds"`
 }
 
 type FeedsConfig struct {
@@ -413,9 +410,8 @@ type FeedsConfig struct {
 }
 
 type DaemonConfig struct {
-	AutoStart                bool   `yaml:"auto_start" json:"autoStart"`
-	InactivityTimeoutMinutes int    `yaml:"inactivity_timeout_minutes" json:"inactivityTimeoutMinutes"`
-	LogFile                  string `yaml:"log_file" json:"logFile"`
+	AutoStart                bool `yaml:"auto_start" json:"autoStart"`
+	InactivityTimeoutMinutes int  `yaml:"inactivity_timeout_minutes" json:"inactivityTimeoutMinutes"`
 }
 
 type TUIConfig struct {

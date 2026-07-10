@@ -199,7 +199,6 @@ Reports whether the daemon is running, its PID, and uptime.
 daemon:
   auto_start: false           # start daemon automatically on SessionStart
   inactivity_timeout_minutes: 30  # stop after no activity
-  log_file: "~/.hookwise/daemon.log"
 ```
 
 The daemon includes stale PID cleanup -- if the PID file references a dead process, it is removed automatically.

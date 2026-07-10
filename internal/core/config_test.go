@@ -1323,8 +1323,8 @@ sounds:
 	// Project config overrides with env vars and includes
 	projectDir := filepath.Join(tmpDir, "project")
 	projectConfig := `
-daemon:
-  log_file: "${HOOKWISE_CUSTOM_LOG}"
+analytics:
+  db_path: "${HOOKWISE_CUSTOM_LOG}"
 includes:
   - includes/extras.yaml
 guards:
@@ -1350,8 +1350,8 @@ guards:
 		t.Errorf("expected handler_timeout=30 from global, got %d", cfg.Settings.HandlerTimeoutSeconds)
 	}
 	// Env var interpolated
-	if cfg.Daemon.LogFile != "/var/log/hookwise.log" {
-		t.Errorf("expected interpolated daemon log_file, got %q", cfg.Daemon.LogFile)
+	if cfg.Analytics.DBPath != "/var/log/hookwise.log" {
+		t.Errorf("expected interpolated analytics db_path, got %q", cfg.Analytics.DBPath)
 	}
 	// Include resolved
 	if !cfg.Sounds.Enabled {
@@ -1782,7 +1782,6 @@ version: 1
 daemon:
   auto_start: false
   inactivity_timeout_minutes: 60
-  log_file: "/custom/daemon.log"
 `
 	if err := os.WriteFile(filepath.Join(tmpDir, "hookwise.yaml"), []byte(projectConfig), 0o644); err != nil {
 		t.Fatal(err)
@@ -1797,9 +1796,6 @@ daemon:
 	}
 	if cfg.Daemon.InactivityTimeoutMinutes != 60 {
 		t.Errorf("expected timeout=60, got %d", cfg.Daemon.InactivityTimeoutMinutes)
-	}
-	if cfg.Daemon.LogFile != "/custom/daemon.log" {
-		t.Errorf("expected custom log file, got %q", cfg.Daemon.LogFile)
 	}
 }
 
