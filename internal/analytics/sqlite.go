@@ -38,9 +38,11 @@ func DefaultDoltDir() string {
 	return filepath.Join(core.HomeDir(), ".hookwise", "dolt")
 }
 
-// DefaultDBPath returns the conventional SQLite analytics database file path.
+// DefaultDBPath returns the conventional SQLite analytics database file path,
+// resolved under core.GetStateDir() so HOOKWISE_STATE_DIR is honored at call
+// time (mirrors DefaultSnapshotsDir / PR #227's tuiPIDPath pattern).
 func DefaultDBPath() string {
-	return filepath.Join(core.HomeDir(), ".hookwise", "analytics.db")
+	return filepath.Join(core.GetStateDir(), "analytics.db")
 }
 
 // Open creates (if needed) and opens the SQLite analytics database.

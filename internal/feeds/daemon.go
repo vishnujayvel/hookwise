@@ -54,15 +54,20 @@ type Daemon struct {
 
 // NewDaemon creates a new daemon with the given configuration and registry.
 // pidFile and cacheDir can be overridden for testing; pass empty strings to
-// use the defaults from core.DefaultPIDPath and core.DefaultCachePath.
+// use the defaults, which are resolved from core.GetStateDir() at call time
+// (so HOOKWISE_STATE_DIR is honored) rather than the frozen
+// core.DefaultPIDPath/DefaultCachePath/DefaultSocketPath package vars. The
+// subpaths mirror those constants exactly: "daemon.pid", "state" (the dir
+// containing status-line-cache.json), and "daemon.sock".
 func NewDaemon(config core.DaemonConfig, feeds core.FeedsConfig, registry *Registry) *Daemon {
+	stateDir := core.GetStateDir()
 	return &Daemon{
 		config:        config,
 		feeds:         feeds,
 		registry:      registry,
-		pidFile:       core.DefaultPIDPath,
-		cacheDir:      filepath.Dir(core.DefaultCachePath),
-		socketPath:    core.DefaultSocketPath,
+		pidFile:       filepath.Join(stateDir, "daemon.pid"),
+		cacheDir:      filepath.Join(stateDir, "state"),
+		socketPath:    filepath.Join(stateDir, "daemon.sock"),
 		staggerOffset: defaultStaggerOffset,
 	}
 }

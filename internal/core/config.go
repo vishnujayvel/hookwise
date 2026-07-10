@@ -80,7 +80,12 @@ func GetDefaultConfig() HooksConfig {
 				LookaheadMinutes: 120,
 				Calendars:        []string{"primary"},
 				CredentialsPath:  DefaultCalendarCredentialsPath,
-				TokenPath:        DefaultCalendarTokenPath,
+				// Resolved via GetStateDir() at config-load time (rather than
+				// the frozen DefaultCalendarTokenPath var) so HOOKWISE_STATE_DIR
+				// is honored whenever it's set before GetDefaultConfig() runs.
+				// The producer_calendar.go call-time fallback covers the case
+				// where this field is empty at Produce() time regardless.
+				TokenPath: filepath.Join(GetStateDir(), "calendar-token.json"),
 			},
 			News: NewsFeedConfig{
 				Enabled:         false,

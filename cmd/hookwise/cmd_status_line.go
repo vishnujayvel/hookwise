@@ -800,7 +800,11 @@ var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 // writeStatusLineCache writes the ANSI-stripped status line output to the cache file
 // so the TUI can display a live preview.
 func writeStatusLineCache(line string) error {
-	cachePath := core.LastStatusOutputPath
+	// Resolved via core.GetStateDir() at call time so HOOKWISE_STATE_DIR is
+	// honored, rather than the frozen core.LastStatusOutputPath package var.
+	// The Python TUI reader already honors the env var (data.py), so this
+	// fixes a real split-brain between writer and reader.
+	cachePath := filepath.Join(core.GetStateDir(), "cache", "last-status-output.txt")
 	cacheDir := filepath.Dir(cachePath)
 
 	if err := os.MkdirAll(cacheDir, core.DefaultDirMode); err != nil {
