@@ -192,11 +192,11 @@ func runWire(cmd *cobra.Command, wire, unwire, dryRun bool, events []string, noS
 // written to <state dir>/hook-audit.json so the pre-init state of the user's
 // Claude Code hooks survives as an artifact (e.g. for support and doctor).
 type hookAuditReport struct {
-	GeneratedAt  time.Time        `json:"generated_at"`
-	ScannedPaths []string         `json:"scanned_paths"`
-	Hooks        []hookAuditEntry `json:"hooks"`
-	Findings     []hooks.Finding  `json:"findings"`
-	ParseErrors  []string         `json:"parse_errors,omitempty"`
+	GeneratedAt  time.Time          `json:"generated_at"`
+	ScannedPaths []string           `json:"scanned_paths"`
+	Hooks        []hookAuditEntry   `json:"hooks"`
+	Findings     []hookAuditFinding `json:"findings"`
+	ParseErrors  []string           `json:"parse_errors,omitempty"`
 }
 
 // hookAuditEntry mirrors hooks.HookEntry with stable snake_case JSON keys.
@@ -206,6 +206,15 @@ type hookAuditEntry struct {
 	Type       string `json:"type"`
 	Command    string `json:"command"`
 	SourceFile string `json:"source_file"`
+}
+
+// hookAuditFinding mirrors hooks.Finding with stable snake_case JSON keys, so
+// the on-disk schema stays uniform and decoupled from internal/hooks.
+type hookAuditFinding struct {
+	Level   string   `json:"level"`
+	Code    string   `json:"code"`
+	Message string   `json:"message"`
+	Details []string `json:"details,omitempty"`
 }
 
 // hookAuditFile is the report file name under the state dir.
@@ -245,7 +254,15 @@ func scanExistingHooks(out io.Writer) {
 		GeneratedAt:  time.Now().UTC(),
 		ScannedPaths: paths,
 		Hooks:        make([]hookAuditEntry, 0, len(inv.Entries)),
-		Findings:     findings,
+		Findings:     make([]hookAuditFinding, 0, len(findings)),
+	}
+	for _, f := range findings {
+		report.Findings = append(report.Findings, hookAuditFinding{
+			Level:   f.Level,
+			Code:    f.Code,
+			Message: f.Message,
+			Details: f.Details,
+		})
 	}
 	for _, e := range inv.Entries {
 		report.Hooks = append(report.Hooks, hookAuditEntry{
@@ -265,7 +282,7 @@ func scanExistingHooks(out io.Writer) {
 		fmt.Fprintf(out, "WARN  hook-audit: could not write %s: %v\n", auditPath, err)
 		return
 	}
-	fmt.Fprintf(out, "Hook audit saved to %s\n\n", auditPath)
+	fmt.Fprintf(out, "Hook audit saved to %s\n", auditPath)
 }
 
 func runInit(cmd *cobra.Command, args []string) error {

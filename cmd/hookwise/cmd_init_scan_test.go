@@ -96,15 +96,21 @@ func TestInitScansExistingHooks(t *testing.T) {
 			Command    string `json:"command"`
 			SourceFile string `json:"source_file"`
 		} `json:"hooks"`
-		Findings []struct {
-			Level string
-			Code  string
-		} `json:"findings"`
+		Findings []map[string]any `json:"findings"`
 	}
 	require.NoError(t, json.Unmarshal(data, &report))
 	assert.NotEmpty(t, report.GeneratedAt)
 	assert.Len(t, report.Hooks, 3)
-	assert.NotEmpty(t, report.Findings)
+	require.NotEmpty(t, report.Findings)
+	// Findings must serialize with the same snake_case keys as the rest of
+	// the report, not internal/hooks PascalCase field names.
+	for _, f := range report.Findings {
+		assert.Contains(t, f, "level")
+		assert.Contains(t, f, "code")
+		assert.Contains(t, f, "message")
+		assert.NotContains(t, f, "Level")
+		assert.NotContains(t, f, "Details")
+	}
 	for _, h := range report.Hooks {
 		assert.Equal(t, settingsPath, h.SourceFile)
 	}
@@ -185,6 +191,42 @@ func TestInitScanReportsParseErrors(t *testing.T) {
 	after, err := os.ReadFile(settingsPath)
 	require.NoError(t, err)
 	assert.Equal(t, malformed, after)
+}
+
+func TestInitScanReportsLocalSettingsParseErrors(t *testing.T) {
+	claudeDir, stateDir := setupInitScanEnv(t)
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	localPath := filepath.Join(claudeDir, "settings.local.json")
+	require.NoError(t, os.WriteFile(settingsPath, []byte(settingsWithHooks), 0o600))
+	malformedLocal := []byte(`{"hooks": [broken`)
+	require.NoError(t, os.WriteFile(localPath, malformedLocal, 0o600))
+
+	output, err := executeCommand("init")
+	require.NoError(t, err, "init must not fail on malformed settings.local.json: %s", output)
+
+	// The parse error names the local file; the valid settings.json still scans.
+	assert.Contains(t, output, "settings.local.json could not be parsed")
+	assert.Contains(t, output, "3 hooks across 2 events")
+	assert.Contains(t, output, "Created")
+
+	data, err := os.ReadFile(filepath.Join(stateDir, "hook-audit.json"))
+	require.NoError(t, err)
+	var report struct {
+		ParseErrors []string `json:"parse_errors"`
+	}
+	require.NoError(t, json.Unmarshal(data, &report))
+	require.Len(t, report.ParseErrors, 1)
+	assert.Contains(t, report.ParseErrors[0], "settings.local.json")
+
+	// Neither settings file is rewritten, byte for byte.
+	after, err := os.ReadFile(settingsPath)
+	require.NoError(t, err)
+	assert.Equal(t, []byte(settingsWithHooks), after,
+		"init must leave settings.json byte-identical")
+	afterLocal, err := os.ReadFile(localPath)
+	require.NoError(t, err)
+	assert.Equal(t, malformedLocal, afterLocal,
+		"init must leave malformed settings.local.json byte-identical")
 }
 
 func TestInitSkipsScanWhenConfigExists(t *testing.T) {
