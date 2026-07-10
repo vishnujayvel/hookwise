@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/vishnujayvel/hookwise/internal/core"
@@ -186,6 +188,86 @@ func runWire(cmd *cobra.Command, wire, unwire, dryRun bool, events []string, noS
 	return nil
 }
 
+// hookAuditReport is the persisted shape of an init-time hook scan. It is
+// written to <state dir>/hook-audit.json so the pre-init state of the user's
+// Claude Code hooks survives as an artifact (e.g. for support and doctor).
+type hookAuditReport struct {
+	GeneratedAt  time.Time        `json:"generated_at"`
+	ScannedPaths []string         `json:"scanned_paths"`
+	Hooks        []hookAuditEntry `json:"hooks"`
+	Findings     []hooks.Finding  `json:"findings"`
+	ParseErrors  []string         `json:"parse_errors,omitempty"`
+}
+
+// hookAuditEntry mirrors hooks.HookEntry with stable snake_case JSON keys.
+type hookAuditEntry struct {
+	Event      string `json:"event"`
+	Matcher    string `json:"matcher"`
+	Type       string `json:"type"`
+	Command    string `json:"command"`
+	SourceFile string `json:"source_file"`
+}
+
+// hookAuditFile is the report file name under the state dir.
+const hookAuditFile = "hook-audit.json"
+
+// scanExistingHooks inventories the user's existing Claude Code hooks BEFORE
+// hookwise writes any config, so users see what is already running (and avoid
+// stacking redundant guard systems). It is strictly read-only with respect to
+// Claude Code settings: it reuses the hermetic hooks.Scan reader and only
+// writes the audit report under hookwise's own state dir. Scan or report
+// failures never abort init — the scan is advisory.
+func scanExistingHooks(out io.Writer) {
+	paths := hooks.DefaultSettingsPaths()
+
+	fmt.Fprintln(out, "Scanning existing Claude Code hooks...")
+	inv, err := hooks.Scan(paths)
+	if err != nil {
+		// Scan currently never returns a non-nil error, but stay defensive.
+		fmt.Fprintf(out, "WARN  hooks: settings scan failed: %v\n", err)
+		return
+	}
+
+	for _, pe := range inv.ParseErrors {
+		fmt.Fprintf(out, "WARN  hook-settings: %s could not be parsed: %v\n", pe.File, pe.Err)
+	}
+
+	findings := hooks.AllFindings(inv, nil)
+	if len(inv.Entries) == 0 {
+		fmt.Fprintln(out, "No existing Claude Code hooks found — clean slate.")
+	} else {
+		for _, f := range findings {
+			renderHookFinding(out, f)
+		}
+	}
+
+	report := hookAuditReport{
+		GeneratedAt:  time.Now().UTC(),
+		ScannedPaths: paths,
+		Hooks:        make([]hookAuditEntry, 0, len(inv.Entries)),
+		Findings:     findings,
+	}
+	for _, e := range inv.Entries {
+		report.Hooks = append(report.Hooks, hookAuditEntry{
+			Event:      e.Event,
+			Matcher:    e.Matcher,
+			Type:       e.Type,
+			Command:    e.Command,
+			SourceFile: e.SourceFile,
+		})
+	}
+	for _, pe := range inv.ParseErrors {
+		report.ParseErrors = append(report.ParseErrors, fmt.Sprintf("%s: %v", pe.File, pe.Err))
+	}
+
+	auditPath := filepath.Join(core.GetStateDir(), hookAuditFile)
+	if err := core.AtomicWriteJSON(auditPath, report); err != nil {
+		fmt.Fprintf(out, "WARN  hook-audit: could not write %s: %v\n", auditPath, err)
+		return
+	}
+	fmt.Fprintf(out, "Hook audit saved to %s\n\n", auditPath)
+}
+
 func runInit(cmd *cobra.Command, args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -199,6 +281,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "hookwise.yaml already exists at %s -- skipping.\n", configPath)
 		return nil
 	}
+
+	// Inventory existing hooks before writing anything (gh#39).
+	scanExistingHooks(cmd.OutOrStdout())
 
 	// Write default config.
 	if err := os.WriteFile(configPath, []byte(defaultYAMLTemplate), 0o644); err != nil {
