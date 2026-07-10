@@ -9,42 +9,21 @@ The feed platform is a background data aggregation system introduced in hookwise
 ```
 Daemon (background process)
   ├── Feed Registry (registration + lookup)
-  │     ├── pulse     (heartbeat / idle detection)
   │     ├── project   (git branch + last commit)
   │     ├── calendar  (Google Calendar events)
   │     ├── news      (Hacker News top stories)
   │     ├── insights  (Claude Code usage metrics)
-  │     ├── practice  (daily practice reps)
   │     ├── weather   (local conditions via Open-Meteo)
   │     ├── memories  ("On this day" session history)
   │     └── custom[]  (user-defined shell commands)
   │
-  └── Cache Bus (per-key atomic merge + TTL reads)
-        └── ~/.hookwise/state/status-line-cache.json
+  └── Cache Bus (per-feed atomic writes + TTL reads)
+        └── ~/.hookwise/state/<feed>.json
 ```
 
 The daemon polls each producer at its configured interval, merges results into the cache bus, and the status line reads from the cache on every render.
 
 ## Producers
-
-### Pulse
-
-The heartbeat producer tracks session liveness. It writes a timestamp on every dispatch event and the daemon checks for staleness.
-
-```yaml
-feeds:
-  pulse:
-    enabled: true
-    interval_seconds: 30
-    thresholds:
-      green: 30     # seconds since last activity
-      yellow: 60
-      orange: 120
-      red: 300
-      skull: 600
-```
-
-The status line shows a colored indicator based on how long since the last activity.
 
 ### Project
 
@@ -75,13 +54,7 @@ feeds:
       - primary
 ```
 
-Requires a one-time setup:
-
-```bash
-hookwise setup calendar
-```
-
-This stores credentials at `~/.hookwise/calendar-credentials.json`.
+Requires a one-time setup: place your Google OAuth client credentials at `~/.hookwise/calendar-credentials.json` and the OAuth token at `~/.hookwise/calendar-token.json`. The producer refreshes and writes back the token automatically; if credentials are missing, the calendar segments simply stay empty (fail-open).
 
 ### News
 
@@ -145,17 +118,12 @@ The cache bus is the central data store for all feed data. It provides:
 - **TTL-aware reads** -- `isFresh()` checks `updated_at + ttl_seconds` against the current time
 - **Fail-open on corruption** -- corrupt or missing cache files are treated as empty objects
 
-Cache location: `~/.hookwise/state/status-line-cache.json`
+Cache location: one JSON file per feed under `~/.hookwise/state/` (e.g. `~/.hookwise/state/project.json`).
 
-Each entry in the cache has this shape:
+Each cached feed has this shape:
 
 ```json
 {
-  "pulse": {
-    "updated_at": "2026-02-23T10:00:00.000Z",
-    "ttl_seconds": 30,
-    "idle_minutes": 2
-  },
   "project": {
     "updated_at": "2026-02-23T10:00:00.000Z",
     "ttl_seconds": 60,
@@ -188,10 +156,10 @@ Sends SIGTERM to the daemon process and removes the PID file.
 ### Status
 
 ```bash
-hookwise daemon status
+hookwise doctor
 ```
 
-Reports whether the daemon is running, its PID, and uptime.
+Doctor dials the daemon socket and reports whether the daemon is running, its PID, and uptime — plus per-feed health against the daemon's effective config.
 
 ### Configuration
 
@@ -207,36 +175,33 @@ The daemon includes stale PID cleanup -- if the PID file references a dead proce
 
 Producers do not all poll at the same time. The daemon staggers their schedules to avoid burst I/O. Each producer runs on its own interval independently.
 
-## Feed Dashboard
+## Feed Health
 
-View live feed health with:
+View feed health with:
 
 ```bash
-hookwise feeds
+hookwise doctor
 ```
 
 This shows:
-- Daemon status (running/stopped)
-- Each feed's last update time and freshness
-- Cache bus size and key count
+- Daemon status (running/stopped, PID, uptime)
+- Each feed's freshness (`OK` / `stale` / `disabled` / `placeholder data`)
+- Which config the report is measured against (the daemon's runtime config when it's up, the on-disk global config otherwise)
 
-Use `--once` for a snapshot that exits immediately:
-
-```bash
-hookwise feeds --once
-```
+The TUI's Feeds tab (`hookwise-tui`, key `5`) offers a live auto-refreshing view of the same data.
 
 ## Troubleshooting
 
 **Daemon not starting**
-- Check if another daemon is already running: `hookwise daemon status`
+- Check if another daemon is already running: `hookwise doctor`
 - Check the log file: `cat ~/.hookwise/daemon.log`
 - Verify the PID file is not stale: `cat ~/.hookwise/daemon.pid`
 
 **Stale feed data**
 - The daemon may have stopped. Restart it: `hookwise daemon start`
 - Check TTL values -- very short TTLs may show stale data between polls
-- Run `hookwise feeds` to see which feeds are fresh vs. stale
+- Run `hookwise doctor` to see which feeds are fresh vs. stale
+- If you edited `~/.hookwise/config.yaml` after the daemon started, doctor will warn that the daemon is polling a stale config — run `hookwise daemon stop` and let it restart to apply the change
 
 **No usage-data directory**
 - The insights producer needs `~/.claude/usage-data/` to exist

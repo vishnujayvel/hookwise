@@ -26,25 +26,27 @@ go build -o /usr/local/bin/hookwise ./cmd/hookwise/
 Navigate to your project directory and run:
 
 ```bash
-hookwise init --preset minimal
+hookwise init
 ```
 
-This creates two things:
-- `hookwise.yaml` in your project root (the configuration file)
-- `~/.hookwise/` state directory (for analytics, logs, and cache)
-
-Available presets:
-
-| Preset | Description |
-|--------|-------------|
-| `minimal` | Guards only -- blocks dangerous commands |
-| `coaching` | Guards + metacognition prompts + builder's trap detection |
-| `analytics` | Guards + SQLite session tracking and authorship metrics |
-| `full` | All features enabled |
+This does three things:
+- **Scans your existing Claude Code hooks first** and saves the pre-init inventory to `~/.hookwise/hook-audit.json` — so you have a record of what was configured before hookwise touched anything. The scan is read-only; your Claude Code settings are never modified.
+- Creates `hookwise.yaml` in your project root (the configuration file)
+- Ensures the `~/.hookwise/` state directory exists (for analytics, logs, and cache)
 
 ### 2. Register hooks in Claude Code
 
-Add hookwise as a hook handler in your Claude Code settings (`.claude/settings.json`):
+The recommended way is `--wire`, which edits `.claude/settings.json` for you — idempotently, after a pre-flight safety audit, with a backup:
+
+```bash
+hookwise init --wire              # wires dispatch hooks + statusLine
+hookwise init --wire --dry-run    # preview the diff first
+hookwise init --unwire            # removes hookwise's hooks, touching nothing else
+```
+
+By default `--wire` registers the `PreToolUse` and `PostToolUse` events (customize with `--events`) and the statusLine entry (skip with `--no-status-line`). If the pre-flight finds FAIL-level issues it refuses to write unless you pass `--force`.
+
+Alternatively, add hookwise as a hook handler manually in `.claude/settings.json`:
 
 ```json
 {
@@ -80,24 +82,17 @@ Add hookwise as a hook handler in your Claude Code settings (`.claude/settings.j
 hookwise doctor
 ```
 
-This runs 9 checks:
-- Go binary is installed and on PATH
-- Claude directory exists (`~/.claude/`)
-- Configuration file exists and is valid YAML
-- State directory has correct permissions
-- Status line segments resolve correctly
-- Daemon process is running
-- Insights data is accessible
-- Calendar credentials are valid
-- Python 3 is available (for TUI)
+Doctor checks that your configuration file exists and is valid YAML, the state directory and analytics database are healthy, and the feed daemon is running. It reports per-feed health against the daemon's *effective* runtime config (what the daemon is actually polling — falling back to the on-disk global config when the daemon is down), warns when the daemon is polling a stale config or when a project-level `feeds:` block is being ignored, and cross-checks your status-line segments against feed data.
 
-### 4. Check your configuration
+Doctor is honest about disabled subsystems: a disabled feed reports as `disabled` (not as a stale-cache warning), and $0 cost with cost tracking off is "expected", not a malfunction.
+
+### 4. Audit your hook setup
 
 ```bash
-hookwise status
+hookwise audit
 ```
 
-This shows a summary of your current configuration: which features are enabled, how many guard rules are active, and which recipes are included.
+This inventories every hook across your Claude Code settings files and flags safety issues: missing binaries, network-dependent hooks on hot paths, and duplicate or overlapping hooks. Add `--json` for a schema-versioned report (useful in CI — exits 0 on PASS/WARN, 1 on FAIL), or `--project-dir <dir>` to scan a project's `.claude/` settings instead of your user-level settings.
 
 ## Basic Configuration
 
@@ -175,13 +170,13 @@ See [Creating a Recipe](./creating-a-recipe.md) for writing your own.
 
 ## Feeds and Insights
 
-hookwise includes a feed platform with a background daemon that aggregates data from multiple sources:
+hookwise includes a feed platform with a background daemon that aggregates data from multiple sources.
+
+The daemon is a singleton shared by every project, so feeds are configured in the **global** config at `~/.hookwise/config.yaml` — not in a project's `hookwise.yaml`. A project-level `feeds:` block is ignored for polling, and `hookwise doctor` warns about it.
 
 ```yaml
+# ~/.hookwise/config.yaml
 feeds:
-  pulse:
-    enabled: true
-    interval_seconds: 30
   project:
     enabled: true
     interval_seconds: 60
@@ -190,14 +185,10 @@ feeds:
     interval_seconds: 300
   news:
     enabled: true
-    source: hackernews
     interval_seconds: 600
   insights:
     enabled: true
     interval_seconds: 120
-  practice:
-    enabled: true
-    interval_seconds: 60
   weather:
     enabled: true
     interval_seconds: 900
@@ -215,8 +206,10 @@ hookwise daemon start
 Check feed health:
 
 ```bash
-hookwise feeds
+hookwise doctor
 ```
+
+Doctor queries the daemon's runtime feed config, so what it reports is what the daemon is actually polling — including a warning if you edited the global config after the daemon started.
 
 The insights producer reads your Claude Code usage data from `~/.claude/usage-data/` and surfaces metrics like session frequency, tool friction, and pace trends in your status line.
 

@@ -5,10 +5,17 @@ All commands are invoked as `hookwise <command>`.
 ## Commands
 
 ```
-hookwise init [--preset minimal|coaching|analytics|full]
-                          Generate hookwise.yaml and state directory
+hookwise init             Scaffold hookwise.yaml, ensure the state directory, and
+                          inventory existing hooks (report: ~/.hookwise/hook-audit.json)
 
-hookwise doctor           Health check: config, state dir, handlers
+hookwise init --wire      Wire dispatch + status line into .claude/settings.json
+                          (idempotent; --dry-run to preview, --unwire to remove)
+
+hookwise audit            Scan Claude Code hook config for health issues
+                          (--json for CI; exits 0 on PASS/WARN, 1 on FAIL)
+
+hookwise doctor           Health check: config, state dir, analytics DB, daemon,
+                          per-feed health vs the daemon's effective config
 ```
 
 <div align="center">
@@ -16,39 +23,29 @@ hookwise doctor           Health check: config, state dir, handlers
 </div>
 
 ```
-hookwise status           Show current configuration summary
-```
-
-<div align="center">
-<img src="../screenshots/status-v1.2.png" alt="hookwise status output showing guards, coaching, features, and feeds" width="600">
-</div>
-
-```
-hookwise stats            Session analytics: tool calls, duration, cost
+hookwise stats            Analytics dashboard for today: tool calls, duration, cost
 
 hookwise test             Run guard rule tests against scenarios
 
-hookwise tui              Launch the interactive TUI for config management
+hookwise dispatch <event> Dispatch a hook event (called by Claude Code)
 
-hookwise feeds [--once]   Live feed dashboard: daemon status, feed health, cache bus
-                          Auto-refreshes every 3s; press q to quit. Use --once for snapshot.
+hookwise status-line      Render the status line (called by Claude Code)
 
-hookwise setup <target>   Set up external integrations (e.g., hookwise setup calendar)
-
-hookwise daemon <start|stop|status>
+hookwise daemon <start|stop>
                           Manage the background feed daemon
 
-hookwise migrate          Migrate from Python hookwise (v0.1.0)
+hookwise snapshot         Point-in-time VACUUM INTO copy of the analytics DB
+
+hookwise log              Show analytics snapshot history
+
+hookwise diff <from> <to> Row-count changes between two analytics snapshots
+
+hookwise notifications    Show recent notification history
+
+hookwise upgrade          Migrate data from a TypeScript hookwise installation
 ```
 
-## Presets
-
-| Preset | What you get |
-|--------|-------------|
-| `minimal` | Guards only -- just the safety rails |
-| `coaching` | Guards + metacognition + builder's trap + communication |
-| `analytics` | Guards + SQLite session tracking |
-| `full` | Everything enabled |
+See the [CLI Reference](reference/cli-reference.md) for per-command flags.
 
 ## Testing Utilities
 
@@ -78,7 +75,7 @@ Test helpers available in `pkg/hookwise/testing`:
 
 ## Interactive TUI
 
-Full-screen terminal UI built with Python Textual -- 8 tabs:
+Full-screen terminal UI built with Python Textual, shipped **separately** from the core binary as `hookwise-tui` (the core CLI needs no Python) -- 8 tabs:
 
 | Key | Tab | Description |
 |-----|-----|-------------|
@@ -91,7 +88,7 @@ Full-screen terminal UI built with Python Textual -- 8 tabs:
 | `7` | Recipes | Recipe browser grouped by category |
 | `8` | Status | Status line preview and segment configurator |
 
-Press `q` to exit the TUI. Install: `cd tui && pip install -e .`
+Press `q` to exit the TUI. Install from the `tui/` directory (e.g. `uv tool install ./tui`), then launch it with `hookwise tui` (or run `hookwise-tui` directly).
 
 ---
 

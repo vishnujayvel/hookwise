@@ -12,7 +12,7 @@ This guide walks you through migrating from the original Python hookwise (v0.1.0
 | Test framework | pytest | `go test` + contract fixtures |
 | Testing API | `GuardTester` (Python) | `hwtesting.GuardTester` (Go) |
 | TUI | Textual | Python Textual (unchanged) |
-| Recipes | 7 built-in | 12 built-in |
+| Recipes | 7 built-in | 11 built-in |
 | Event support | 7 events | All 13 Claude Code events |
 | Analytics | SQLite (TypeScript-era) | SQLite (modernc.org/sqlite, WAL mode, ~19 MB binary) |
 | Distribution | pip/PyPI | Go binary via GitHub Releases |
@@ -46,22 +46,24 @@ go build -ldflags "-X main.version=$(git describe --tags)" -o /usr/local/bin/hoo
 
 ### 2. Run the migration command
 
-hookwise includes an automated migration tool:
+hookwise includes an automated data-migration tool:
 
 ```bash
-hookwise migrate
+hookwise upgrade
 ```
 
 This will:
-- Replace the Python hookwise entry in Claude's `settings.json` with the Go binary
-- Validate your existing `hookwise.yaml` against the current schema
-- Report any incompatibilities
+- Detect an existing pre-Go hookwise installation (`~/.hookwise/analytics.db` and `~/.hookwise/state/cost-state.json`)
+- Import the data into the Go SQLite analytics database
+- Validate config parity
 
-Use `--dry-run` to preview changes without applying them:
+Original files are never modified (the migration is non-destructive). Use `--dry-run` to preview what would be migrated without making changes:
 
 ```bash
-hookwise migrate --dry-run
+hookwise upgrade --dry-run
 ```
+
+To point hookwise at Claude Code's `settings.json`, use `hookwise init --wire` (see the [CLI Reference](cli-reference.md)).
 
 ### 3. Update handler scripts
 

@@ -4,28 +4,26 @@ A background daemon polls feed producers on configurable intervals and writes re
 
 ## Producers
 
-8 built-in feed producers:
+6 built-in feed producers:
 
-| Producer | Default Interval | What it provides |
-|----------|-----------------|-----------------|
-| `pulse` | 30s | Session heartbeat and idle time detection |
-| `project` | 60s | Git repo name, branch, last commit age |
-| `calendar` | 300s | Current/next calendar event and free time |
-| `news` | 1800s | Hacker News top stories (rotates) |
-| `insights` | 120s | Claude Code usage metrics from `~/.claude/usage-data/` |
-| `practice` | 60s | Daily practice rep count and last practice time |
-| `weather` | 900s | Local temperature, conditions, and wind speed |
-| `memories` | 3600s | "On this day" session history and nostalgia |
+| Producer | What it provides |
+|----------|-----------------|
+| `project` | Git repo name, branch, last commit age |
+| `news` | Hacker News top stories (rotates) |
+| `calendar` | Current/next calendar event and free time |
+| `weather` | Local temperature, conditions, and wind speed |
+| `memories` | "On this day" session history and nostalgia |
+| `insights` | Claude Code usage metrics from `~/.claude/usage-data/` |
+
+Each enabled feed polls at its configured `interval_seconds`, defaulting to 60s when unset. User-defined custom feed producers can be added under `feeds.custom`.
 
 ## Feed Configuration
 
-Configure feeds in `hookwise.yaml`:
+Feeds are polled by a single shared daemon, so they are configured in the **global** config at `~/.hookwise/config.yaml` — not in a project's `hookwise.yaml`. A `feeds:` block in a project config is ignored for polling, and `hookwise doctor` warns about it and lists the keys to move.
 
 ```yaml
+# ~/.hookwise/config.yaml
 feeds:
-  pulse:
-    enabled: true
-    interval_seconds: 30
   project:
     enabled: true
     interval_seconds: 60
@@ -35,6 +33,8 @@ feeds:
     staleness_days: 30
     usage_data_path: "~/.claude/usage-data"
 ```
+
+`hookwise doctor` reports feed health against the daemon's *effective* runtime config (queried from the running daemon), falling back to the on-disk global config when the daemon is down — and warns when the daemon is polling a stale config after a global-config edit.
 
 ## Insights Producer
 
@@ -72,7 +72,9 @@ Missing directory, malformed JSON files, and permission errors all result in gra
 
 ## Daemon Behavior
 
-The daemon starts automatically with `hookwise dispatch` and shuts down after a configurable period of inactivity (default: 120 minutes). Set `daemon.inactivity_timeout_minutes` in `hookwise.yaml` to adjust.
+The daemon is auto-started by `hookwise status-line` when it isn't running (or start it explicitly with `hookwise daemon start`), and shuts down after a configurable period of inactivity (default: 120 minutes). Set `daemon.inactivity_timeout_minutes` in the global `~/.hookwise/config.yaml` to adjust.
+
+The daemon is a singleton — one socket, one cache, one process per state directory — and its entire config comes from the global config file, independent of which project started it.
 
 ## Architecture
 

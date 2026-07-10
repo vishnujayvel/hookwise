@@ -10,10 +10,10 @@ The TUI is a separate Python package bundled in the `tui/` directory:
 cd tui && pip install -e .
 ```
 
-Or install from the venv that ships with hookwise:
+Or install it as a standalone tool (e.g. with uv):
 
 ```bash
-hookwise tui  # Auto-detects the bundled venv
+uv tool install ./tui
 ```
 
 ## Launching the TUI
@@ -21,6 +21,8 @@ hookwise tui  # Auto-detects the bundled venv
 ```bash
 hookwise tui
 ```
+
+This launches the dashboard via the same singleton guard as session auto-launch, so concurrent invocations spawn at most one TUI. It requires `hookwise-tui` on your PATH (installed above); you can also run `hookwise-tui` directly.
 
 ## Navigation
 

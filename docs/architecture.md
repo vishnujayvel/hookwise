@@ -49,20 +49,18 @@ graph LR
     end
 
     subgraph Daemon[Background Daemon]
-        D1[Feed Registry<br/>8 producers]
-        D2[pulse 30s]
-        D3[project 60s]
-        D4[calendar 5m]
-        D5[news 30m]
-        D6[insights 2m]
-        D7[practice 60s]
-        D8[weather 15m]
-        D9[memories 1h]
+        D1[Feed Registry<br/>6 built-in producers + custom]
+        D3[project]
+        D4[calendar]
+        D5[news]
+        D6[insights]
+        D8[weather]
+        D9[memories]
     end
 
     Sources --> D1
     D1 --> CB[Cache Bus<br/>Atomic JSON<br/>Per-key TTL<br/>isFresh check]
-    CB --> SL[Status Line<br/>21 segments]
+    CB --> SL[Status Line<br/>composable segments]
 
     style Sources fill:#D0EBFF,stroke:#1971C2,stroke-width:2px
     style Daemon fill:#D3F9D8,stroke:#2B8A3E,stroke-width:2px
@@ -102,7 +100,7 @@ tests/            # 1400+ tests across 61 test files
   performance/    # Benchmarks and import boundary tests
   cli/            # CLI command tests
 
-recipes/          # 12 built-in recipes
+recipes/          # 11 built-in recipes
 examples/         # 4 example configs (minimal, coaching, analytics, full)
 ```
 

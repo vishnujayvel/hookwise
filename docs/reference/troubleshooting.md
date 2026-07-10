@@ -9,7 +9,7 @@ Common issues and their solutions.
 **Check for an existing daemon:**
 
 ```bash
-hookwise daemon status
+hookwise doctor
 ```
 
 If a daemon is already running, stop it first:
@@ -37,12 +37,12 @@ Look for startup errors such as missing config, invalid feed definitions, or per
 
 ## Stale Feed Data
 
-**Symptom:** Status line shows outdated information. `hookwise feeds` shows feeds as stale.
+**Symptom:** Status line shows outdated information. `hookwise doctor` shows feeds as stale.
 
 **Is the daemon running?**
 
 ```bash
-hookwise daemon status
+hookwise doctor
 ```
 
 If stopped, restart it:
@@ -115,7 +115,7 @@ hookwise is designed for single-user use. The state directory should be owned by
 
 ## TUI Not Launching
 
-**Symptom:** `hookwise tui` exits immediately or shows rendering errors.
+**Symptom:** `hookwise tui` (or `hookwise-tui` directly) exits immediately or shows rendering errors.
 
 **Terminal requirements:**
 
