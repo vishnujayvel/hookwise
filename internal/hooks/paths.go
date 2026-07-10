@@ -41,6 +41,14 @@ func DefaultSettingsPaths() []string {
 	return SettingsPaths(claudeDir)
 }
 
+// ProjectSettingsPaths returns the project-level settings files to scan for a
+// given project directory: <dir>/.claude/settings.json and
+// <dir>/.claude/settings.local.json. Like SettingsPaths, both are always
+// listed even if absent — Scan tolerates missing files.
+func ProjectSettingsPaths(projectDir string) []string {
+	return SettingsPaths(filepath.Join(projectDir, ".claude"))
+}
+
 // AllFindings runs every hook-safety analysis over the inventory and returns the
 // findings in a stable order: inventory (SCAN) → sprawl → missing binary →
 // network → duplicates/overlap. lookPath is injected for the binary check
