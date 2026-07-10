@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Callable, cast
-from textual.css.query import DOMQuery
+from pathlib import Path
+from typing import Any, Callable
 
 import pytest
 from textual.css.query import NoMatches
@@ -18,12 +18,118 @@ from textual.pilot import Pilot
 from textual.widgets import Static
 
 from hookwise_tui.app import HookwiseTUI
+from hookwise_tui.data import (
+    AnalyticsData,
+    DailySummary,
+    FeedHealth,
+    ToolBreakdown,
+)
 
 # Type alias for the snap_compare fixture callable (matches the plugin's inner
 # compare() signature: app + keyword args → bool).
 SnapCompare = Callable[..., bool]
 
 TERMINAL_SIZE = (80, 24)
+
+
+# -- Fixed data sources for tabs that compose from live machine state --------
+# The Guards tab composes from read_config() (the developer's real
+# ~/.hookwise/config.yaml) and the Analytics tab from read_analytics() (the
+# live ~/.hookwise/analytics.db).  Post-compose stabiliser callbacks cannot
+# make those deterministic: they can rewrite widget *content* but not widget
+# *structure* — e.g. the sparklines and tool table only exist at all when the
+# DB has rows.  The data readers themselves are therefore monkeypatched so
+# compose sees identical fixed data on every machine.
+
+FIXED_GUARDS_CONFIG: dict[str, Any] = {
+    "guards": [
+        {
+            "match": "Bash",
+            "action": "block",
+            "reason": "Destructive command blocked",
+            "when": "command contains 'rm -rf /'",
+        },
+        {
+            "match": "Edit",
+            "action": "warn",
+            "reason": "Editing a lockfile is usually a mistake",
+            "when": "path ends_with '.lock'",
+        },
+        {
+            "match": "Bash",
+            "action": "confirm",
+            "reason": "Force push needs explicit confirmation",
+            "when": "command contains '--force'",
+            "unless": "command contains '--force-with-lease'",
+        },
+    ]
+}
+
+
+def _fixed_feed_health(
+    config: dict[str, Any], cache: dict[str, Any]
+) -> list[FeedHealth]:
+    """Deterministic stand-in for read_feed_health().
+
+    Non-empty on purpose: the ``#feed-list`` container lays out at a height
+    of one row, so its children clip to a single border line — a line that
+    is present whenever at least one feed exists and absent otherwise.
+    ``last_update=None`` renders the age as "never" (no live-clock maths).
+    """
+    return [
+        FeedHealth(
+            name="pulse", enabled=True, last_update=None,
+            interval_seconds=30, healthy=False,
+        ),
+        FeedHealth(
+            name="project", enabled=True, last_update=None,
+            interval_seconds=60, healthy=False,
+        ),
+    ]
+
+
+def _fixed_analytics_data(
+    db_path: Path | None = None, days: int = 7
+) -> AnalyticsData:
+    """Deterministic stand-in for read_analytics().
+
+    Non-empty on purpose: exercises the metric boxes, both sparklines, and
+    the tool-breakdown DataTable, all of which are omitted from the DOM when
+    the data is empty.
+    """
+    return AnalyticsData(
+        daily=[
+            DailySummary(
+                date="2026-01-01",
+                total_events=40,
+                total_tool_calls=30,
+                lines_added=120,
+                lines_removed=15,
+                sessions=2,
+            ),
+            DailySummary(
+                date="2026-01-02",
+                total_events=80,
+                total_tool_calls=60,
+                lines_added=310,
+                lines_removed=42,
+                sessions=3,
+            ),
+            DailySummary(
+                date="2026-01-03",
+                total_events=25,
+                total_tool_calls=20,
+                lines_added=55,
+                lines_removed=8,
+                sessions=1,
+            ),
+        ],
+        tools=[
+            ToolBreakdown(tool_name="Edit", count=42, lines_added=380, lines_removed=51),
+            ToolBreakdown(tool_name="Bash", count=35, lines_added=0, lines_removed=0),
+            ToolBreakdown(tool_name="Read", count=28, lines_added=0, lines_removed=0),
+        ],
+    )
 
 
 # -- Tab IDs and the key press needed to reach each one ----------------------
@@ -49,6 +155,17 @@ async def _stabilise_feeds(pilot: Pilot[Any]) -> None:
     - ``#daemon-panel``: the live daemon PID and uptime (changes every second).
     Both are pinned to fixed strings here to prevent spurious snapshot mismatches.
     """
+    from hookwise_tui.tabs.feeds import FeedsTab
+
+    # Stop the tab's 3-second refresh interval first: if it fired between
+    # this callback and the snapshot capture it would overwrite the pinned
+    # widgets below with live machine state (an intermittent race).
+    try:
+        tab = pilot.app.query_one(FeedsTab)
+        for interval_timer in list(tab._timers):
+            interval_timer.stop()
+    except NoMatches:
+        pass
     try:
         timer = pilot.app.query_one("#timer-display", Static)
         timer.update("Last refresh: 00:00:00 UTC | Next in 3s | Refresh #1")
@@ -75,57 +192,6 @@ async def _stabilise_insights(pilot: Pilot[Any]) -> None:
     time.tzset()
 
 
-async def _stabilise_analytics(pilot: Pilot[Any]) -> None:
-    """Pin the Analytics tab's live database-driven content to deterministic values.
-
-    The Analytics tab reads from the live ``~/.hookwise/analytics.db`` SQLite
-    database at compose time.  Session counts, tool-call totals, sparkline
-    values, and table rows all change as real work is recorded.  This callback
-    overwrites those widgets with fixed content so the snapshot is reproducible
-    regardless of the developer's local analytics state.
-
-    Widgets pinned:
-    - ``.metric-box`` Statics (3): session count, tool calls, lines added.
-    - ``SparklineWidget`` children (2): ``.spark-label`` + ``.spark-bar`` per spark.
-    - ``DataTable`` (1): cleared and refilled with a single fixed placeholder row.
-    """
-    from textual.css.query import NoMatches as _NoMatches
-    from hookwise_tui.tabs.analytics import AnalyticsTab
-    from hookwise_tui.widgets.sparkline import SparklineWidget
-    from textual.widgets import DataTable
-
-    try:
-        tab = pilot.app.query_one(AnalyticsTab)
-    except _NoMatches:
-        return  # Analytics tab not in DOM — safe to skip
-
-    # Pin the three metric-box Statics to fixed values
-    fixed_metrics = [
-        "Sessions (7d)\n[bold cyan]0[/bold cyan]",
-        "Tool Calls\n[bold cyan]0[/bold cyan]",
-        "Lines Added\n[bold cyan]0[/bold cyan]",
-    ]
-    for widget, text in zip(cast(DOMQuery[Static], tab.query(".metric-box")), fixed_metrics):
-        widget.update(text)
-
-    # Pin each SparklineWidget's label and bar to fixed placeholder content
-    for spark in tab.query(SparklineWidget):
-        try:
-            spark.query_one(".spark-label", Static).update(
-                f"{spark._label}: [bold cyan]0[/bold cyan]"
-            )
-            spark.query_one(".spark-bar", Static).update("[green]▄▄▄▄▄▄▄[/green]")
-        except _NoMatches:
-            pass
-
-    # Clear and stub the tool-breakdown DataTable if present
-    try:
-        table = tab.query_one(DataTable)
-        table.clear()
-    except _NoMatches:
-        pass  # No data → "no analytics data" Static is shown instead
-
-
 async def _stabilise_status(pilot: Pilot[Any]) -> None:
     """Pin the clock segment and preview to fixed content to avoid snapshot flakiness.
 
@@ -134,8 +200,19 @@ async def _stabilise_status(pilot: Pilot[Any]) -> None:
     """
     os.environ["TZ"] = "UTC"
     time.tzset()
-    # Pin the preview box to static content
     from textual.containers import Container
+    from hookwise_tui.tabs.status import StatusTab
+
+    # Stop the tab's 3-second refresh interval first: if it fired between
+    # this callback and the snapshot capture it would overwrite the pinned
+    # preview with live machine state (an intermittent race).
+    try:
+        tab = pilot.app.query_one(StatusTab)
+        for timer in list(tab._timers):
+            timer.stop()
+    except NoMatches:
+        pass
+    # Pin the preview box to static content
     try:
         preview = pilot.app.query_one("#preview-box", Container)
         preview.remove_children()
@@ -145,11 +222,28 @@ async def _stabilise_status(pilot: Pilot[Any]) -> None:
 
 
 @pytest.mark.parametrize("tab_id, keys", TAB_SPECS, ids=[t[0] for t in TAB_SPECS])
-def test_tab_snapshot(snap_compare: SnapCompare, tab_id: str, keys: tuple[str, ...]) -> None:
+def test_tab_snapshot(
+    snap_compare: SnapCompare,
+    tab_id: str,
+    keys: tuple[str, ...],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Each TUI tab renders correctly at 80x24."""
-    if tab_id == "analytics":
-        run_before = _stabilise_analytics
+    if tab_id == "guards":
+        # Compose-time data source — pin before the app runs (see note above).
+        monkeypatch.setattr(
+            "hookwise_tui.tabs.guards.read_config", lambda: FIXED_GUARDS_CONFIG
+        )
+    elif tab_id == "analytics":
+        monkeypatch.setattr(
+            "hookwise_tui.tabs.analytics.read_analytics", _fixed_analytics_data
+        )
     elif tab_id == "feeds":
+        monkeypatch.setattr(
+            "hookwise_tui.tabs.feeds.read_feed_health", _fixed_feed_health
+        )
+
+    if tab_id == "feeds":
         run_before = _stabilise_feeds
     elif tab_id == "insights":
         run_before = _stabilise_insights
