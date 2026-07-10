@@ -204,7 +204,8 @@ func BenchmarkGuardEvaluation_WithConditions(b *testing.B) {
 // Benchmark 4: Config loading
 // =========================================================================
 //
-// Benchmarks LoadConfig() to verify it completes within 500 microseconds.
+// Benchmarks LoadConfig() to verify it completes within the enforced 2ms
+// budget (measured ~850us on Apple Silicon).
 
 func BenchmarkConfigLoading(b *testing.B) {
 	tmpDir := b.TempDir()
@@ -249,7 +250,8 @@ settings:
 	}
 }
 
-// TestConfigLoading_Latency verifies config loading completes within 500 microseconds.
+// TestConfigLoading_Latency verifies config loading completes within the
+// enforced 2ms budget (measured ~850us on Apple Silicon).
 func TestConfigLoading_Latency(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOOKWISE_STATE_DIR", filepath.Join(tmpDir, ".hookwise-state"))
