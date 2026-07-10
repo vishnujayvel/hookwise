@@ -71,3 +71,15 @@ dist/
 # openlore — local index/analysis stays out of git; decision records are tracked
 .openlore/*
 !.openlore/decisions/
+
+# Personal usage-audit story (contains reflections on real session usage)
+docs/story/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+
+# Gas City — beads DB stays local-only, never synced to the GitHub code repo
+.beads/
