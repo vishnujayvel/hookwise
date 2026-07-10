@@ -60,20 +60,35 @@ type auditSummary struct {
 func newAuditCmd() *cobra.Command {
 	var jsonOut bool
 	var projectDir string
+	var fix bool
+	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "audit",
 		Short: "Scan Claude Code hook configuration for health issues",
 		Long: "Scans Claude Code settings files for hook-safety issues: inventory/sprawl,\n" +
 			"missing binaries, network-dependent hooks on hot paths, and duplicate or\n" +
-			"overlapping hooks. Exits 0 on PASS/WARN, 1 on FAIL.",
+			"overlapping hooks. Exits 0 on PASS/WARN, 1 on FAIL.\n\n" +
+			"With --fix, interactively removes EXACT duplicate hook entries within a\n" +
+			"single settings file (timestamped backup + atomic write + post-write\n" +
+			"validation). Near-duplicates and cross-file repeats are never removed —\n" +
+			"they are reported as recommendations. --dry-run prints the removal plan\n" +
+			"without changing anything.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if (fix || dryRun) && jsonOut {
+				return errors.New("--json cannot be combined with --fix/--dry-run")
+			}
+			if fix || dryRun {
+				return runAuditFix(cmd, auditSettingsPaths(projectDir), dryRun)
+			}
 			return runAudit(cmd, jsonOut, projectDir)
 		},
 	}
 
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Emit a schema-versioned JSON report instead of text")
 	cmd.Flags().StringVar(&projectDir, "project-dir", "", "Scan <dir>/.claude/settings.json + settings.local.json instead of the user-level settings")
+	cmd.Flags().BoolVar(&fix, "fix", false, "Interactively remove exact duplicate hook entries (per-change y/N)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the duplicate-removal plan without modifying any file")
 	return cmd
 }
 
