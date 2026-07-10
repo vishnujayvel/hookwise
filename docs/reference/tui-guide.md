@@ -32,15 +32,14 @@ This launches the dashboard via the same singleton guard as session auto-launch,
 |-----|--------|
 | `1` | Switch to Dashboard tab |
 | `2` | Switch to Guards tab |
-| `3` | Switch to Coaching tab |
-| `4` | Switch to Analytics tab |
-| `5` | Switch to Feeds tab |
-| `6` | Switch to Insights tab |
-| `7` | Switch to Recipes tab |
-| `8` | Switch to Status tab |
+| `3` | Switch to Analytics tab |
+| `4` | Switch to Feeds tab |
+| `5` | Switch to Insights tab |
+| `6` | Switch to Recipes tab |
+| `7` | Switch to Status tab |
 | `q` | Quit the TUI |
 
-Tabs are numbered 1-8. Press the corresponding number key to switch instantly.
+Tabs are numbered 1-7. Press the corresponding number key to switch instantly.
 
 ## Tabs
 
@@ -48,8 +47,8 @@ Tabs are numbered 1-8. Press the corresponding number key to switch instantly.
 
 Feature overview showing all hookwise capabilities:
 
-- **Feature cards** -- Each feature (Analytics, Guards, Coaching, Feeds, Status Line, Cost Tracking, Greeting, Transcript Backup) displayed with description and enabled/disabled badge
-- **Configuration summary** -- Guard count, active coaching modules, active feeds
+- **Feature cards** -- Each feature (Analytics, Guards, Feeds, Status Line, Cost Tracking, Greeting) displayed with description and enabled/disabled badge
+- **Configuration summary** -- Guard count, active feeds
 - **Quick status** -- See at a glance what's on and what's off
 
 ### 2. Guards
@@ -60,16 +59,7 @@ Guard rules table with action descriptions:
 - **Rule table** -- All configured guard rules with match patterns, actions, reasons, and conditions
 - **First-match-wins** -- Rules are evaluated top-to-bottom
 
-### 3. Coaching
-
-Three coaching features with user-friendly explanations:
-
-- **Metacognition** -- "Periodic nudges to reflect on your approach -- prevents autopilot coding"
-- **Builder's Trap** -- "Alerts when you've been in tooling/config too long without shipping value"
-- **Communication Coach** -- "Grammar and clarity checks on your prompts (pattern-based, no LLM cost)"
-- Each card shows current configuration values (interval, thresholds, tone)
-
-### 4. Analytics
+### 3. Analytics
 
 Coding patterns, tool usage, and AI authorship:
 
@@ -80,7 +70,7 @@ Coding patterns, tool usage, and AI authorship:
 
 See the [Analytics Guide](/guide/analytics-guide) for details on what is tracked and how authorship scoring works.
 
-### 5. Feeds
+### 4. Feeds
 
 Live feed dashboard with auto-refresh (every 3 seconds):
 
@@ -92,7 +82,7 @@ Live feed dashboard with auto-refresh (every 3 seconds):
 
 See the [Feeds Guide](/guide/feeds-guide) for architecture details and configuration.
 
-### 6. Insights
+### 5. Insights
 
 Claude Code usage analytics (dedicated tab, new in v1.2):
 
@@ -103,7 +93,7 @@ Claude Code usage analytics (dedicated tab, new in v1.2):
 - **Daily AI summary** -- LLM-generated narrative about your coding patterns, top insight, and suggested focus area (uses Haiku, ~$0.01/day)
 - **Refresh button** -- Manually regenerate the daily summary
 
-### 7. Recipes
+### 6. Recipes
 
 Recipe browser grouped by category:
 
@@ -111,7 +101,7 @@ Recipe browser grouped by category:
 - **Recipe tree** -- All available recipes organized by category (safety, coaching, productivity, etc.)
 - **Recipe descriptions** -- What each recipe configures
 
-### 8. Status
+### 7. Status
 
 Status line preview and segment configurator:
 

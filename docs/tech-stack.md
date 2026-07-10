@@ -37,12 +37,12 @@ They communicate via a **shared filesystem cache** (JSON file), not HTTP or IPC.
 | **Textual** | >=1.0.0 | Full-featured terminal UI framework (tabs, widgets, CSS) | Rich widget library, CSS-based styling, async-native |
 | **Rich** | >=13.0 | Text formatting, tables, syntax highlighting within TUI | Textual's rendering foundation |
 | **PyYAML** | >=6.0 | Reads `hookwise.yaml` from Python side | Standard YAML parser for Python |
-| **Anthropic SDK** | >=0.40.0 | Claude API calls for coaching tab suggestions | Official SDK for Claude integration |
+| **Anthropic SDK** | >=0.40.0 | Claude API calls for the Insights tab's daily AI summary | Official SDK for Claude integration |
 
 **Key patterns:**
 
 - Uses `hatchling` as build backend
-- TUI has 8 tabs: Dashboard, Guards, Feeds, Analytics, Coaching, Recipes, Insights, Status
+- TUI has 7 tabs: Dashboard, Guards, Analytics, Feeds, Insights, Recipes, Status
 - Custom widgets: `FeatureCard`, `Sparkline`, `FeedHealth`, `WeatherBackground`
 
 ## Layer 3: Build and Bundling
