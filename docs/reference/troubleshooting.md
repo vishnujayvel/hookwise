@@ -115,7 +115,7 @@ hookwise is designed for single-user use. The state directory should be owned by
 
 ## TUI Not Launching
 
-**Symptom:** `hookwise-tui` exits immediately or shows rendering errors.
+**Symptom:** `hookwise tui` (or `hookwise-tui` directly) exits immediately or shows rendering errors.
 
 **Terminal requirements:**
 

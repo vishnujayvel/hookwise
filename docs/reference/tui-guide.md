@@ -19,8 +19,10 @@ uv tool install ./tui
 ## Launching the TUI
 
 ```bash
-hookwise-tui
+hookwise tui
 ```
+
+This launches the dashboard via the same singleton guard as session auto-launch, so concurrent invocations spawn at most one TUI. It requires `hookwise-tui` on your PATH (installed above); you can also run `hookwise-tui` directly.
 
 ## Navigation
 

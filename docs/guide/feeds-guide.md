@@ -54,7 +54,7 @@ feeds:
       - primary
 ```
 
-Requires a one-time setup: place your Google OAuth client credentials at `~/.hookwise/calendar-credentials.json` (path configurable via `credentials_path`) and the OAuth token at `~/.hookwise/calendar-token.json`. The producer refreshes and writes back the token automatically; if credentials are missing, the calendar segments simply stay empty (fail-open).
+Requires a one-time setup: place your Google OAuth client credentials at `~/.hookwise/calendar-credentials.json` and the OAuth token at `~/.hookwise/calendar-token.json`. The producer refreshes and writes back the token automatically; if credentials are missing, the calendar segments simply stay empty (fail-open).
 
 ### News
 

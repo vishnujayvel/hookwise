@@ -88,7 +88,7 @@ Full-screen terminal UI built with Python Textual, shipped **separately** from t
 | `7` | Recipes | Recipe browser grouped by category |
 | `8` | Status | Status line preview and segment configurator |
 
-Press `q` to exit the TUI. Install from the `tui/` directory (e.g. `uv tool install ./tui`), then run `hookwise-tui`.
+Press `q` to exit the TUI. Install from the `tui/` directory (e.g. `uv tool install ./tui`), then launch it with `hookwise tui` (or run `hookwise-tui` directly).
 
 ---
 

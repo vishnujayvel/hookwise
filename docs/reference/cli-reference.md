@@ -130,6 +130,16 @@ hookwise status-line [--project-dir <dir>]
 
 Loads config and the feed cache, then renders a single ANSI-colored status line to stdout. Auto-starts the feed daemon if it isn't running.
 
+## tui
+
+Launch the interactive TUI dashboard.
+
+```bash
+hookwise tui [--launch-method <newWindow|background>]
+```
+
+Launches the `hookwise-tui` dashboard if it is not already running, using the same singleton guard as session auto-launch (concurrent invocations spawn at most one TUI). Requires `hookwise-tui` on your PATH — the TUI ships separately from the core binary; install it from the `tui/` directory (e.g. `uv tool install ./tui`). See the [TUI Guide](tui-guide.md).
+
 ## daemon
 
 Manage the background feed daemon.
