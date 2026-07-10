@@ -196,6 +196,31 @@ func TestApplySubsetRemovesOnlyAccepted(t *testing.T) {
 	assert.Len(t, replan.Removals, 2)
 }
 
+func TestApplyDuplicateAcceptedIDsAppliedOnce(t *testing.T) {
+	path := writeFixSettings(t, fixFixture)
+	plan := mustPlan(t, path)
+
+	var g1ID string
+	for _, r := range plan.Removals {
+		if strings.HasPrefix(r.ID, "PreToolUse#g1#h0#") {
+			g1ID = r.ID
+		}
+	}
+	require.NotEmpty(t, g1ID, "cross-group duplicate must be in the plan")
+
+	// The same accepted ID twice must splice its byte range exactly once —
+	// a second application of the identical [start,end) cut after the first
+	// shifted the bytes would silently corrupt unrelated content.
+	removed, _, err := ApplyRemovals(path, []string{g1ID, g1ID}, plan.Guards[path])
+	require.NoError(t, err)
+	assert.Equal(t, 1, removed, "duplicate accepted IDs must count once")
+
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, fixFixtureAfterG1Only, string(after),
+		"file must be byte-identical to a single-application result")
+}
+
 func TestApplyTOCTOURefusesWhenFileChanged(t *testing.T) {
 	path := writeFixSettings(t, fixFixture)
 	plan := mustPlan(t, path)

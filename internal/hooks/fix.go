@@ -573,10 +573,19 @@ func ApplyRemovals(path string, acceptedIDs []string, guard FileGuard) (removed 
 		siteByID[siteID(s)] = s
 	}
 	var toRemove []hookSite
+	seenIDs := map[string]bool{}
 	for _, id := range acceptedIDs {
 		if !removable[id] {
 			return 0, "", fmt.Errorf("hooks: %q is not a removable duplicate in %s — refusing to apply", id, path)
 		}
+		// Dedupe defensively: the same ID twice would yield two identical cut
+		// ranges, and splicing the same [start,end) a second time (after the
+		// first shifted the bytes) removes wrong, unrelated bytes. The CLI
+		// can't produce duplicates, but this is an exported API.
+		if seenIDs[id] {
+			continue
+		}
+		seenIDs[id] = true
 		toRemove = append(toRemove, siteByID[id])
 	}
 
