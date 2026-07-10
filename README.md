@@ -76,7 +76,6 @@ One file. Claude Code reads it, understands it, and can even help you write new 
 |---|---------|-----------------|------------------|
 | Guard rails | Declarative YAML | Manual bash | No |
 | Testing | GuardTester + HookRunner | Manual | N/A |
-| Coaching | Metacognition prompts | No | No |
 | Analytics | SQLite, queryable | DIY | Display-only |
 | Workflow insights | Friction signals, session pulse | No | No |
 | Configuration | One YAML file | Scattered scripts | JSON/TUI |
@@ -147,7 +146,7 @@ Every hook event passes through a three-phase execution engine. Guards protect, 
 
 <img src="screenshots/stats.png" alt="hookwise stats" width="600">
 
-**[Interactive TUI](docs/cli.md)** _(optional · experimental)_ -- A full-screen Python/[Textual](https://textual.textualize.io) dashboard with 8 tabs. It ships **separately** from the core binary (the core CLI, guards, analytics, and status line need no Python). Install it from the `tui/` directory (e.g. `uv tool install ./tui`); once `hookwise-tui` is on your PATH, launch it on demand with `hookwise tui`, or set `tui.auto_launch: true` to open it in a separate terminal on session start.
+**[Interactive TUI](docs/cli.md)** _(optional · experimental)_ -- A full-screen Python/[Textual](https://textual.textualize.io) dashboard with 7 tabs. It ships **separately** from the core binary (the core CLI, guards, analytics, and status line need no Python). Install it from the `tui/` directory (e.g. `uv tool install ./tui`); once `hookwise-tui` is on your PATH, launch it on demand with `hookwise tui`, or set `tui.auto_launch: true` to open it in a separate terminal on session start.
 
 <div align="center">
 <img src="screenshots/tui-insights.png" alt="hookwise TUI — Claude Code usage insights with session metrics, trends, and tool breakdown" width="700">

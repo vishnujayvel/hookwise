@@ -75,18 +75,17 @@ Test helpers available in `pkg/hookwise/testing`:
 
 ## Interactive TUI
 
-Full-screen terminal UI built with Python Textual, shipped **separately** from the core binary as `hookwise-tui` (the core CLI needs no Python) -- 8 tabs:
+Full-screen terminal UI built with Python Textual, shipped **separately** from the core binary as `hookwise-tui` (the core CLI needs no Python) -- 7 tabs:
 
 | Key | Tab | Description |
 |-----|-----|-------------|
 | `1` | Dashboard | Feature overview with enabled/disabled status |
 | `2` | Guards | Guard rules table with action descriptions |
-| `3` | Coaching | Coaching features with user-friendly explanations |
-| `4` | Analytics | Sparkline trends, tool breakdown, cost tracking |
-| `5` | Feeds | Live feed dashboard with auto-refresh and health indicators |
-| `6` | Insights | Claude Code usage metrics, trends, and daily AI summary |
-| `7` | Recipes | Recipe browser grouped by category |
-| `8` | Status | Status line preview and segment configurator |
+| `3` | Analytics | Sparkline trends, tool breakdown, cost tracking |
+| `4` | Feeds | Live feed dashboard with auto-refresh and health indicators |
+| `5` | Insights | Claude Code usage metrics, trends, and daily AI summary |
+| `6` | Recipes | Recipe browser grouped by category |
+| `7` | Status | Status line preview and segment configurator |
 
 Press `q` to exit the TUI. Install from the `tui/` directory (e.g. `uv tool install ./tui`), then launch it with `hookwise tui` (or run `hookwise-tui` directly).
 
