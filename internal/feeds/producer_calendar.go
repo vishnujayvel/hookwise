@@ -21,7 +21,7 @@ import (
 const defaultCalendarLookaheadMinutes = 120
 
 // CalendarProducer fetches upcoming events from Google Calendar API.
-// It implements ConfigAware to receive token/credentials paths from feed config.
+// It implements ConfigAware to receive the token path from feed config.
 type CalendarProducer struct {
 	mu         sync.Mutex
 	feedsCfg   core.FeedsConfig

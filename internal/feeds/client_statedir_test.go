@@ -23,12 +23,13 @@ func TestDefaultDaemonLogPath_HonorsStateDirOverride(t *testing.T) {
 }
 
 // TestDefaultDaemonLogPath_DefaultUnchanged verifies the no-override default
-// is byte-identical to the legacy core.DefaultDaemonLogPath value.
+// is byte-identical to the legacy default (the since-removed
+// core.DefaultDaemonLogPath package var, ~/.hookwise/daemon.log).
 func TestDefaultDaemonLogPath_DefaultUnchanged(t *testing.T) {
 	t.Setenv("HOOKWISE_STATE_DIR", "")
 
 	got := defaultDaemonLogPath()
-	assert.Equal(t, core.DefaultDaemonLogPath, got)
+	assert.Equal(t, filepath.Join(core.DefaultStateDir, "daemon.log"), got)
 }
 
 // TestDefaultDaemonSocketPath_HonorsStateDirOverride verifies that

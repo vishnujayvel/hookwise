@@ -227,8 +227,8 @@ See the [Feeds Guide](./feeds-guide.md) for a deep dive into the feed platform a
 hookwise supports environment variable interpolation in config values:
 
 ```yaml
-settings:
-  state_dir: "${HOME}/.hookwise"
+analytics:
+  db_path: "${HOME}/.hookwise/analytics.db"
 ```
 
 The state directory itself can be overridden:

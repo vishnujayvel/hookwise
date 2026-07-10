@@ -10,29 +10,14 @@ var (
 	// DefaultStateDir is ~/.hookwise/
 	DefaultStateDir = filepath.Join(HomeDir(), ".hookwise")
 
-	// DefaultDBPath is ~/.hookwise/analytics.db
-	DefaultDBPath = filepath.Join(DefaultStateDir, "analytics.db")
-
 	// DefaultCachePath is ~/.hookwise/state/status-line-cache.json
 	DefaultCachePath = filepath.Join(DefaultStateDir, "state", "status-line-cache.json")
-
-	// DefaultLogPath is ~/.hookwise/logs/
-	DefaultLogPath = filepath.Join(DefaultStateDir, "logs")
-
-	// GlobalConfigPath is ~/.hookwise/config.yaml
-	GlobalConfigPath = filepath.Join(DefaultStateDir, "config.yaml")
 
 	// DefaultPIDPath is ~/.hookwise/daemon.pid
 	DefaultPIDPath = filepath.Join(DefaultStateDir, "daemon.pid")
 
 	// DefaultSocketPath is ~/.hookwise/daemon.sock
 	DefaultSocketPath = filepath.Join(DefaultStateDir, "daemon.sock")
-
-	// DefaultDaemonLogPath is ~/.hookwise/daemon.log
-	DefaultDaemonLogPath = filepath.Join(DefaultStateDir, "daemon.log")
-
-	// DefaultCalendarCredentialsPath is ~/.hookwise/calendar-credentials.json
-	DefaultCalendarCredentialsPath = filepath.Join(DefaultStateDir, "calendar-credentials.json")
 
 	// DefaultCalendarTokenPath is ~/.hookwise/calendar-token.json
 	DefaultCalendarTokenPath = filepath.Join(DefaultStateDir, "calendar-token.json")

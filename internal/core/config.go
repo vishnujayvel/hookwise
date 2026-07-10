@@ -64,7 +64,6 @@ func GetDefaultConfig() HooksConfig {
 		Settings: SettingsConfig{
 			LogLevel:              "info",
 			HandlerTimeoutSeconds: DefaultHandlerTimeout,
-			StateDir:              DefaultStateDir,
 		},
 		Includes: []string{},
 		Feeds: FeedsConfig{
@@ -79,7 +78,6 @@ func GetDefaultConfig() HooksConfig {
 				IntervalSeconds:  300,
 				LookaheadMinutes: 120,
 				Calendars:        []string{"primary"},
-				CredentialsPath:  DefaultCalendarCredentialsPath,
 				// Resolved via GetStateDir() at config-load time (rather than
 				// the frozen DefaultCalendarTokenPath var) so HOOKWISE_STATE_DIR
 				// is honored whenever it's set before GetDefaultConfig() runs.
@@ -112,14 +110,12 @@ func GetDefaultConfig() HooksConfig {
 			Memories: MemoriesFeedConfig{
 				Enabled:         false,
 				IntervalSeconds: 3600,
-				DBPath:          DefaultDBPath,
 			},
 			Custom: []CustomFeedConfig{},
 		},
 		Daemon: DaemonConfig{
 			AutoStart:                true,
 			InactivityTimeoutMinutes: 120,
-			LogFile:                  DefaultDaemonLogPath,
 		},
 		TUI: TUIConfig{
 			AutoLaunch:   false,
