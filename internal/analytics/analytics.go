@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 )
 
@@ -29,6 +30,10 @@ type EventRecord struct {
 	LinesAdded        int
 	LinesRemoved      int
 	AIConfidenceScore float64
+	// DispatchLatencyMs is the wall-clock duration of the dispatch handler
+	// run that produced this event. nil means "not measured" (writers
+	// predating gh#37) and persists as NULL — distinct from a real 0ms.
+	DispatchLatencyMs *int64
 }
 
 // AuthorshipEntry describes a single authorship ledger row.
@@ -58,6 +63,28 @@ type ToolBreakdownEntry struct {
 	ToolName   string
 	Count      int
 	Percentage float64
+}
+
+// LatencyBucket holds dispatch-latency aggregates for one grouping (overall
+// or a single event type). Percentiles use the nearest-rank method on the
+// recorded millisecond values.
+type LatencyBucket struct {
+	EventType string // "" for the overall bucket
+	Count     int
+	AvgMs     float64
+	P50Ms     int64
+	P95Ms     int64
+	P99Ms     int64
+	MaxMs     int64
+}
+
+// LatencyStatsResult holds the overall dispatch-latency aggregates plus a
+// per-event-type breakdown, ordered by count descending. Overall.Count == 0
+// means no latency data exists for the date (rows predating the
+// dispatch_latency_ms column stay NULL and are excluded).
+type LatencyStatsResult struct {
+	Overall LatencyBucket
+	ByEvent []LatencyBucket
 }
 
 // ---------------------------------------------------------------------------
@@ -138,8 +165,8 @@ func (a *Analytics) EndSession(ctx context.Context, sessionID string, endedAt ti
 // RecordEvent inserts a row into the events table.
 func (a *Analytics) RecordEvent(ctx context.Context, sessionID string, event EventRecord) error {
 	_, err := a.db.Exec(ctx,
-		`INSERT INTO events (session_id, event_type, tool_name, timestamp, file_path, lines_added, lines_removed, ai_confidence_score)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO events (session_id, event_type, tool_name, timestamp, file_path, lines_added, lines_removed, ai_confidence_score, dispatch_latency_ms)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sessionID,
 		event.EventType,
 		event.ToolName,
@@ -148,6 +175,7 @@ func (a *Analytics) RecordEvent(ctx context.Context, sessionID string, event Eve
 		event.LinesAdded,
 		event.LinesRemoved,
 		event.AIConfidenceScore,
+		event.DispatchLatencyMs, // nil → NULL
 	)
 	if err != nil {
 		return fmt.Errorf("analytics: record event: %w", err)
@@ -289,4 +317,80 @@ func (a *Analytics) ToolBreakdown(ctx context.Context, date string) ([]ToolBreak
 	}
 
 	return entries, nil
+}
+
+// LatencyStats returns dispatch-latency aggregates for a given date
+// (YYYY-MM-DD): overall avg/p50/p95/p99/max plus a per-event-type breakdown.
+// Only rows with a non-NULL dispatch_latency_ms count — events recorded before
+// the column existed are excluded, never fabricated as 0ms.
+func (a *Analytics) LatencyStats(ctx context.Context, date string) (*LatencyStatsResult, error) {
+	rows, err := a.db.Query(ctx,
+		`SELECT event_type, dispatch_latency_ms
+		 FROM events
+		 WHERE dispatch_latency_ms IS NOT NULL AND timestamp LIKE ?
+		 ORDER BY dispatch_latency_ms ASC`,
+		date+"%",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: latency stats: %w", err)
+	}
+	defer rows.Close()
+
+	// Rows arrive pre-sorted by latency, so each per-type slice (and the
+	// overall slice) stays sorted — percentiles read straight off them.
+	var all []int64
+	byType := map[string][]int64{}
+	for rows.Next() {
+		var eventType string
+		var ms int64
+		if err := rows.Scan(&eventType, &ms); err != nil {
+			return nil, fmt.Errorf("analytics: latency stats scan: %w", err)
+		}
+		all = append(all, ms)
+		byType[eventType] = append(byType[eventType], ms)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("analytics: latency stats rows: %w", err)
+	}
+
+	result := &LatencyStatsResult{Overall: latencyBucket("", all)}
+	for eventType, values := range byType {
+		result.ByEvent = append(result.ByEvent, latencyBucket(eventType, values))
+	}
+	sort.Slice(result.ByEvent, func(i, j int) bool {
+		if result.ByEvent[i].Count != result.ByEvent[j].Count {
+			return result.ByEvent[i].Count > result.ByEvent[j].Count
+		}
+		return result.ByEvent[i].EventType < result.ByEvent[j].EventType
+	})
+	return result, nil
+}
+
+// latencyBucket aggregates a sorted-ascending slice of latency values.
+func latencyBucket(eventType string, sorted []int64) LatencyBucket {
+	b := LatencyBucket{EventType: eventType, Count: len(sorted)}
+	if len(sorted) == 0 {
+		return b
+	}
+	var sum int64
+	for _, v := range sorted {
+		sum += v
+	}
+	b.AvgMs = float64(sum) / float64(len(sorted))
+	b.P50Ms = percentileNearestRank(sorted, 0.50)
+	b.P95Ms = percentileNearestRank(sorted, 0.95)
+	b.P99Ms = percentileNearestRank(sorted, 0.99)
+	b.MaxMs = sorted[len(sorted)-1]
+	return b
+}
+
+// percentileNearestRank returns the q-th percentile (0 < q <= 1) of a
+// sorted-ascending slice using the nearest-rank method: the value at
+// ceil(q*N), 1-indexed.
+func percentileNearestRank(sorted []int64, q float64) int64 {
+	idx := int(math.Ceil(q*float64(len(sorted)))) - 1
+	if idx < 0 {
+		idx = 0
+	}
+	return sorted[idx]
 }

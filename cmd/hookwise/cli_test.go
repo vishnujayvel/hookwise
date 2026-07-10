@@ -995,7 +995,7 @@ func TestRecordAnalytics_SessionStart(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "analytics.db")
 
 	payload := core.HookPayload{SessionID: "test-session-001"}
-	recordAnalytics(context.Background(), core.EventSessionStart, payload, dbPath, core.CostTrackingConfig{})
+	recordAnalytics(context.Background(), core.EventSessionStart, payload, dbPath, core.CostTrackingConfig{}, nil)
 
 	// Verify session was recorded.
 	db, err := analytics.Open(dbPath)
@@ -1021,11 +1021,11 @@ func TestRecordAnalytics_PostToolUse(t *testing.T) {
 
 	// First create a session.
 	payload := core.HookPayload{SessionID: "test-session-002"}
-	recordAnalytics(context.Background(), core.EventSessionStart, payload, dbPath, core.CostTrackingConfig{})
+	recordAnalytics(context.Background(), core.EventSessionStart, payload, dbPath, core.CostTrackingConfig{}, nil)
 
 	// Record a tool use event.
 	payload.ToolName = "Bash"
-	recordAnalytics(context.Background(), core.EventPostToolUse, payload, dbPath, core.CostTrackingConfig{})
+	recordAnalytics(context.Background(), core.EventPostToolUse, payload, dbPath, core.CostTrackingConfig{}, nil)
 
 	db, err := analytics.Open(dbPath)
 	if err != nil {

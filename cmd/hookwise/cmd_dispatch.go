@@ -74,6 +74,13 @@ func newDispatchCmd() *cobra.Command {
 				// Run the three-phase dispatch engine
 				dispatchResult := core.Dispatch(ctx, eventType, payload, config)
 
+				// Per-dispatch latency (gh#37): wall-clock around handler
+				// execution only. Measured before budget enforcement and
+				// analytics so those side effects don't inflate it. Recording
+				// it is itself a fail-open side effect — a broken clock or DB
+				// must never change dispatch behavior (ARCH-1).
+				dispatchLatencyMs := time.Since(dispatchStart).Milliseconds()
+
 				// Budget enforcement (PreToolUse only, opt-in via
 				// cost_tracking.enforcement: enforce). A deny here is the hardest
 				// gate, so it overrides whatever dispatch decided. Off by default,
@@ -107,7 +114,7 @@ func newDispatchCmd() *cobra.Command {
 					done := make(chan struct{})
 					go func() {
 						defer close(done)
-						recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath, config.CostTracking)
+						recordAnalytics(ctx, eventType, payload, config.Analytics.DBPath, config.CostTracking, &dispatchLatencyMs)
 					}()
 					select {
 					case <-done:
@@ -215,7 +222,9 @@ const analyticsRecordTimeout = 2 * time.Second
 // recordAnalytics writes session/event data to the SQLite analytics DB. The
 // caller waits for it (bounded) before os.Exit so the write actually persists.
 // Fail-open: any error is logged but never surfaces to the user (ARCH-1).
-func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string, costCfg core.CostTrackingConfig) {
+// dispatchLatencyMs is the measured handler duration for this dispatch; nil
+// means "not measured" and persists as NULL on the event row.
+func recordAnalytics(ctx context.Context, eventType string, payload core.HookPayload, dataDir string, costCfg core.CostTrackingConfig, dispatchLatencyMs *int64) {
 	defer func() {
 		if r := recover(); r != nil {
 			core.Logger().Error("panic in analytics recording", "recovered", fmt.Sprintf("%v", r))
@@ -244,9 +253,10 @@ func recordAnalytics(ctx context.Context, eventType string, payload core.HookPay
 
 	case core.EventPostToolUse:
 		event := analytics.EventRecord{
-			EventType: eventType,
-			ToolName:  payload.ToolName,
-			Timestamp: now,
+			EventType:         eventType,
+			ToolName:          payload.ToolName,
+			Timestamp:         now,
+			DispatchLatencyMs: dispatchLatencyMs,
 		}
 		if err := a.RecordEvent(ctx, payload.SessionID, event); err != nil {
 			core.Logger().Error("analytics: record event", "error", err)

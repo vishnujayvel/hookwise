@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -123,6 +124,11 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	// default), $0 is expected, not a malfunction. Mirrors the feed
 	// zero-liveness / disabled-subsystem honesty principle.
 	warnings += checkCostHonesty(w, dbPath, costEnabled)
+
+	// Check 9: Dispatch latency (gh#37). WARN when the 7-day average exceeds
+	// the threshold; silent when no latency data exists (older DBs / no
+	// dispatches) — disabled-subsystem honesty, same as #222/#223.
+	warnings += checkDispatchLatency(w, dbPath)
 
 	// Check 4: Daemon liveness via socket dial (replaces PID file check).
 	// Use GetStateDir() to respect HOOKWISE_STATE_DIR env override.
@@ -638,4 +644,50 @@ func checkCostHonesty(w io.Writer, dbPath string, costEnabled bool) int {
 			summary.EstimatedCostUSD, summary.TotalSessions)
 		return 0
 	}
+}
+
+// dispatchLatencyWarnMs is the 7-day average dispatch latency above which
+// doctor warns. Dispatch sits on every hook invocation, so a sustained
+// average past this threshold means hooks are visibly slowing tool calls.
+const dispatchLatencyWarnMs = 50.0
+
+// checkDispatchLatency reports a doctor warning when the average dispatch
+// latency over the last 7 days exceeds dispatchLatencyWarnMs. No latency data
+// (DB predates the dispatch_latency_ms column, or no recent dispatches) means
+// no output at all — absence of measurement is not health, and warning on it
+// would be fabrication (disabled-subsystem honesty, #222/#223). Absent or
+// unopenable DBs are silent no-ops — the analytics check (Check 3) owns those.
+func checkDispatchLatency(w io.Writer, dbPath string) int {
+	if _, err := os.Stat(dbPath); err != nil {
+		return 0
+	}
+	db, err := analytics.Open(dbPath)
+	if err != nil {
+		return 0
+	}
+	defer db.Close()
+
+	// Timestamps are stored as UTC RFC3339 strings, so a lexicographic >=
+	// against a same-format cutoff is a correct time comparison.
+	cutoff := time.Now().UTC().AddDate(0, 0, -7).Format(time.RFC3339)
+	var avg sql.NullFloat64
+	var count int
+	err = db.QueryRow(context.Background(),
+		`SELECT AVG(dispatch_latency_ms), COUNT(*)
+		 FROM events
+		 WHERE dispatch_latency_ms IS NOT NULL AND timestamp >= ?`,
+		cutoff,
+	).Scan(&avg, &count)
+	if err != nil || count == 0 || !avg.Valid {
+		return 0
+	}
+
+	if avg.Float64 > dispatchLatencyWarnMs {
+		fmt.Fprintf(w, "WARN  latency: avg dispatch latency %.1fms over last 7 days exceeds %.0fms (%d dispatch(es)) -- hooks are slowing tool calls\n",
+			avg.Float64, dispatchLatencyWarnMs, count)
+		return 1
+	}
+	fmt.Fprintf(w, "PASS  latency: avg dispatch %.1fms over last 7 days (%d dispatch(es))\n",
+		avg.Float64, count)
+	return 0
 }
