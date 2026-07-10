@@ -36,6 +36,22 @@ func isTestBinary(path string) bool {
 	return strings.HasSuffix(base, ".test") || strings.HasSuffix(base, ".test.exe")
 }
 
+// defaultDaemonLogPath returns the daemon log file path. It reads
+// core.GetStateDir() at call time so HOOKWISE_STATE_DIR is honored, rather
+// than the frozen core.DefaultDaemonLogPath package var (mirrors PR #227's
+// tuiPIDPath pattern).
+func defaultDaemonLogPath() string {
+	return filepath.Join(core.GetStateDir(), "daemon.log")
+}
+
+// defaultDaemonSocketPath returns the socket path a freshly spawned daemon
+// defaults to on its own (see feeds.NewDaemon). It reads core.GetStateDir()
+// at call time so HOOKWISE_STATE_DIR is honored, rather than the frozen
+// core.DefaultSocketPath package var.
+func defaultDaemonSocketPath() string {
+	return filepath.Join(core.GetStateDir(), "daemon.sock")
+}
+
 // DaemonClient provides daemon connectivity from CLI commands.
 type DaemonClient struct {
 	socketPath     string
@@ -109,8 +125,10 @@ func (c *DaemonClient) EnsureDaemon(configPath string) error {
 // SPAWN-2: Setsid:true detaches the daemon from the parent process group.
 // SPAWN-3: Config path passed via --config flag to daemon run command.
 func (c *DaemonClient) spawnDaemon(configPath string) error {
-	// Ensure state directory exists (for daemon log and socket).
-	if err := core.EnsureDir(core.DefaultStateDir, core.DefaultDirMode); err != nil {
+	// Ensure state directory exists (for daemon log and socket). Resolved via
+	// core.GetStateDir() at call time so HOOKWISE_STATE_DIR is honored, rather
+	// than the frozen core.DefaultStateDir package var.
+	if err := core.EnsureDir(core.GetStateDir(), core.DefaultDirMode); err != nil {
 		return fmt.Errorf("ensure state dir: %w", err)
 	}
 
@@ -133,15 +151,29 @@ func (c *DaemonClient) spawnDaemon(configPath string) error {
 	if configPath != "" {
 		args = append(args, "--config", configPath)
 	}
-	if c.socketPath != core.DefaultSocketPath {
+	// Only pass --socket when it differs from what the spawned daemon would
+	// default to on its own. The spawned process inherits our environment
+	// (including HOOKWISE_STATE_DIR, if set — exec.Command inherits env by
+	// default and we never override cmd.Env here), and `daemon run` defaults
+	// its socket via feeds.NewDaemon(), which itself now resolves from
+	// core.GetStateDir() at call time. So recomputing that same default here
+	// (rather than comparing against the frozen core.DefaultSocketPath) keeps
+	// this check correct in both the override and no-override cases: with no
+	// override both sides equal the legacy ~/.hookwise/daemon.sock path; with
+	// an override both sides equal the same $HOOKWISE_STATE_DIR/daemon.sock
+	// path, so --socket is still correctly omitted unless c.socketPath was
+	// explicitly customized to something else (e.g. in tests).
+	if c.socketPath != defaultDaemonSocketPath() {
 		args = append(args, "--socket", c.socketPath)
 	}
 
 	cmd := exec.Command(self, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // SPAWN-2
 
-	// Redirect stdout/stderr to daemon log file.
-	logFile, err := os.OpenFile(core.DefaultDaemonLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	// Redirect stdout/stderr to daemon log file. Resolved via
+	// core.GetStateDir() at call time so HOOKWISE_STATE_DIR is honored, rather
+	// than the frozen core.DefaultDaemonLogPath package var.
+	logFile, err := os.OpenFile(defaultDaemonLogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open daemon log: %w", err)
 	}

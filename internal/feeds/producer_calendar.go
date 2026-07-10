@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -174,10 +175,13 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	// Resolve token path.
+	// Resolve token path. Fallback computed at call time via
+	// core.GetStateDir() (not the frozen core.DefaultCalendarTokenPath var)
+	// so a config with an empty TokenPath still honors HOOKWISE_STATE_DIR
+	// even if it was set after the config default was frozen in.
 	tokenPath := cfg.TokenPath
 	if tokenPath == "" {
-		tokenPath = core.DefaultCalendarTokenPath
+		tokenPath = filepath.Join(core.GetStateDir(), "calendar-token.json")
 	}
 
 	lookahead := cfg.LookaheadMinutes

@@ -251,6 +251,62 @@ func TestCalendarProducer_MissingTokenFile_FailOpen(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Empty TokenPath fallback honors HOOKWISE_STATE_DIR at call time.
+// ---------------------------------------------------------------------------
+
+// TestCalendarProducer_TokenPathFallback_HonorsStateDirOverride verifies that
+// when cfg.TokenPath is empty, Produce falls back to
+// $HOOKWISE_STATE_DIR/calendar-token.json (resolved at call time), not the
+// frozen core.DefaultCalendarTokenPath package var. Proven end-to-end: a
+// token file written only at the override path is found and used to fetch
+// events.
+func TestCalendarProducer_TokenPathFallback_HonorsStateDirOverride(t *testing.T) {
+	mock := &calendarMockServer{eventSummary: "Override Meeting"}
+	srv := httptest.NewServer(mock)
+	defer srv.Close()
+
+	overrideDir := t.TempDir()
+	t.Setenv("HOOKWISE_STATE_DIR", overrideDir)
+
+	// Write the token file only at the override location — the frozen
+	// ~/.hookwise/calendar-token.json path is never touched by this test.
+	tokenPath := filepath.Join(overrideDir, "calendar-token.json")
+	pastExpiry := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+	tok := map[string]interface{}{
+		"token":         "expired-access-token",
+		"refresh_token": "valid-refresh-token",
+		"token_uri":     srv.URL + "/token",
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"expiry":        pastExpiry,
+	}
+	data, err := json.Marshal(tok)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(tokenPath, data, 0600))
+
+	p := newCalendarProducerForTest(srv.URL + "/")
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{
+			Enabled:          true,
+			TokenPath:        "", // empty — must fall back to core.GetStateDir()
+			Calendars:        []string{"primary"},
+			LookaheadMinutes: 120,
+		},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err, "ARCH-1: must not error")
+
+	env := result.(map[string]interface{})
+	data2 := env["data"].(map[string]interface{})
+	events, ok := data2["events"].([]interface{})
+	require.True(t, ok, "data.events must be a slice")
+	assert.Greater(t, len(events), 0,
+		"empty TokenPath must fall back to $HOOKWISE_STATE_DIR/calendar-token.json at call time; "+
+			"an empty events result means the fallback missed the override file")
+}
+
+// ---------------------------------------------------------------------------
 // Token refresh is actually attempted: verify the mock OAuth server is hit.
 // ---------------------------------------------------------------------------
 
