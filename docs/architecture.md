@@ -23,8 +23,8 @@ graph TD
 ### Phase Details
 
 1. **Guards** -- Decide if the tool call should proceed. First block wins (short-circuit). If any guard blocks, phases 2 and 3 are skipped.
-2. **Context Injection** -- Enrich the tool call with additional context (greeting, metacognition prompts). Multiple context handlers merge their output.
-3. **Side Effects** -- Non-blocking operations that observe and respond (analytics, coaching state, sounds, transcript backup).
+2. **Context Injection** -- Enrich the tool call with additional context (greeting). Multiple context handlers merge their output.
+3. **Side Effects** -- Non-blocking operations that observe and respond (analytics, sounds).
 
 ### Fail-Open Guarantee
 
@@ -83,9 +83,8 @@ graph LR
 
 ```
 src/
-  core/           # Dispatcher, config, guards, analytics, coaching
+  core/           # Dispatcher, config, guards, analytics
     analytics/    # SQLite analytics engine
-    coaching/     # Metacognition, builder's trap, communication
     feeds/        # Feed platform: producers, cache bus, registry
     status-line/  # Composable status segments
   cli/            # CLI commands (init, doctor, status, stats, test, migrate)
@@ -100,8 +99,8 @@ tests/            # 1400+ tests across 61 test files
   performance/    # Benchmarks and import boundary tests
   cli/            # CLI command tests
 
-recipes/          # 11 built-in recipes
-examples/         # 4 example configs (minimal, coaching, analytics, full)
+recipes/          # 10 built-in recipes
+examples/         # 3 example configs (minimal, analytics, full)
 ```
 
 ---

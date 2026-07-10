@@ -1,8 +1,8 @@
 # hookwise.yaml -- Minimal Configuration
 # ========================================
 # Guards-only setup. Blocks dangerous commands and requires confirmation
-# for potentially destructive operations. No coaching, analytics, or
-# status line -- just safety rails.
+# for potentially destructive operations. No analytics or status line --
+# just safety rails.
 #
 # Usage: Copy this file to your project root as hookwise.yaml
 #        then run: hookwise init --force

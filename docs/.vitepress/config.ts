@@ -40,8 +40,7 @@ export default defineConfig({
             { text: 'Guards', link: '/features/guards' },
             { text: 'Analytics', link: '/features/analytics' },
             { text: 'Feeds', link: '/features/feeds' },
-            { text: 'Status Line', link: '/features/status-line' },
-            { text: 'Coaching', link: '/features/coaching' }
+            { text: 'Status Line', link: '/features/status-line' }
           ]
         }
       ],

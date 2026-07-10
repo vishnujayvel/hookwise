@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Hookwise
   text: Smart hooks framework for Claude Code
-  tagline: Guards, analytics, coaching, feeds, and an interactive TUI -- all config-driven.
+  tagline: Guards, analytics, feeds, and an interactive TUI -- all config-driven.
   actions:
     - theme: brand
       text: Get Started
@@ -18,8 +18,6 @@ features:
     details: Block, warn, or confirm tool calls with declarative YAML rules. First-match-wins evaluation with picomatch patterns.
   - title: Analytics
     details: Track sessions, tool calls, file edits, and AI authorship in a local SQLite database. View stats from the CLI or TUI.
-  - title: Coaching
-    details: Metacognition prompts, builder's trap detection, and communication coaching to keep you focused and productive.
   - title: Feed Platform
     details: Background daemon with 6 built-in producers (project, news, calendar, weather, memories, insights) plus custom feeds, and a TTL-aware cache bus.
   - title: Status Line

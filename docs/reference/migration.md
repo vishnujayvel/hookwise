@@ -12,7 +12,7 @@ This guide walks you through migrating from the original Python hookwise (v0.1.0
 | Test framework | pytest | `go test` + contract fixtures |
 | Testing API | `GuardTester` (Python) | `hwtesting.GuardTester` (Go) |
 | TUI | Textual | Python Textual (unchanged) |
-| Recipes | 7 built-in | 11 built-in |
+| Recipes | 7 built-in | 10 built-in |
 | Event support | 7 events | All 13 Claude Code events |
 | Analytics | SQLite (TypeScript-era) | SQLite (modernc.org/sqlite, WAL mode, ~19 MB binary) |
 | Distribution | pip/PyPI | Go binary via GitHub Releases |
