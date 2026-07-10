@@ -292,8 +292,16 @@ settings:
 	t.Logf("Config loading avg latency: %.1f us over %d iterations", avgUs, iterations)
 	// Note: YAML parsing can be slower than 500us depending on hardware.
 	// We use a 2ms budget here as a practical limit for CI.
-	assert.Less(t, avgUs, 2000.0,
-		"Config loading should complete in <2ms (got %.1f us)", avgUs)
+	budgetUs := 2000.0
+	if raceEnabled {
+		// Race instrumentation slows file I/O + YAML parsing enough that
+		// full-package runs measured 2.6-5.3ms (solo: ~1.9ms, at 93% of
+		// budget). Scale the budget so the assertion still catches gross
+		// regressions without flaking on instrumentation overhead (hw-ups).
+		budgetUs *= 5
+	}
+	assert.Less(t, avgUs, budgetUs,
+		"Config loading should complete in <%.0fms (got %.1f us)", budgetUs/1000, avgUs)
 }
 
 // =========================================================================
