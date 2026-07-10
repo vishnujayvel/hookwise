@@ -62,7 +62,7 @@ func TestRecordAnalytics_CostStop(t *testing.T) {
 		SessionID:      sid,
 		TranscriptPath: transcriptPath,
 	}
-	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg, nil)
 
 	// Re-open to assert.
 	db = openTestDB(t, dbPath)
@@ -104,10 +104,10 @@ func TestRecordAnalytics_CostStop_Idempotent(t *testing.T) {
 	}
 
 	// First Stop.
-	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg, nil)
 
 	// Second Stop — same transcript, same session.
-	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg, nil)
 
 	db = openTestDB(t, dbPath)
 	defer db.Close()
@@ -143,7 +143,7 @@ func TestRecordAnalytics_CostStop_TranscriptGrows(t *testing.T) {
 	payload := core.HookPayload{SessionID: sid, TranscriptPath: transcriptPath}
 
 	// Turn 1: single line => $18.
-	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg, nil)
 
 	// The transcript grows by one more identical assistant line (another $18)
 	// before the next turn's Stop, exactly as a live session accumulates usage.
@@ -155,7 +155,7 @@ func TestRecordAnalytics_CostStop_TranscriptGrows(t *testing.T) {
 	require.NoError(t, f.Close())
 
 	// Turn 2: two lines => $36 recomputed; delta +$18 applied.
-	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg, nil)
 
 	db = openTestDB(t, dbPath)
 	defer db.Close()
@@ -209,7 +209,7 @@ func TestRecordAnalytics_CostStop_NegativeDelta(t *testing.T) {
 
 	costCfg := core.CostTrackingConfig{Enabled: true}
 	payload := core.HookPayload{SessionID: sid, TranscriptPath: transcriptPath}
-	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg, nil)
 
 	db = openTestDB(t, dbPath)
 	defer db.Close()
@@ -246,7 +246,7 @@ func TestRecordAnalytics_CostStop_Disabled(t *testing.T) {
 		SessionID:      sid,
 		TranscriptPath: transcriptPath,
 	}
-	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg, nil)
 
 	db = openTestDB(t, dbPath)
 	defer db.Close()
@@ -279,7 +279,7 @@ func TestRecordAnalytics_CostStop_NoTranscript(t *testing.T) {
 
 	// Must not panic.
 	require.NotPanics(t, func() {
-		recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+		recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg, nil)
 	})
 
 	db = openTestDB(t, dbPath)
@@ -325,7 +325,7 @@ func TestRecordAnalytics_CostStop_RatesOverride(t *testing.T) {
 		Rates:   map[string]float64{"sonnet.input": 99.0},
 	}
 	payload := core.HookPayload{SessionID: sid, TranscriptPath: transcriptPath}
-	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg)
+	recordAnalytics(context.Background(), core.EventStop, payload, dbPath, costCfg, nil)
 
 	db = openTestDB(t, dbPath)
 	defer db.Close()

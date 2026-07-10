@@ -194,6 +194,15 @@ func (d *DB) initSchema(ctx context.Context) error {
 		return fmt.Errorf("migrate ttl_seconds: %w", err)
 	}
 
+	// Migration: add dispatch_latency_ms to events (gh#37). Nullable, no
+	// default: rows written before this column existed stay NULL so readers
+	// can distinguish "not measured" from a real 0ms dispatch.
+	if _, err := d.db.ExecContext(ctx,
+		"ALTER TABLE events ADD COLUMN dispatch_latency_ms INTEGER"); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate dispatch_latency_ms: %w", err)
+	}
+
 	return nil
 }
 
@@ -223,7 +232,8 @@ var schemaDDL = []string{
 		file_path TEXT,
 		lines_added INTEGER DEFAULT 0,
 		lines_removed INTEGER DEFAULT 0,
-		ai_confidence_score REAL
+		ai_confidence_score REAL,
+		dispatch_latency_ms INTEGER
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`,

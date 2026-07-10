@@ -68,7 +68,7 @@ func TestRunStats_ReadsConfigDBPath(t *testing.T) {
 	recordAnalytics(context.Background(), core.EventStop, core.HookPayload{
 		SessionID:      sid,
 		TranscriptPath: transcriptPath,
-	}, customDB, core.CostTrackingConfig{Enabled: true})
+	}, customDB, core.CostTrackingConfig{Enabled: true}, nil)
 
 	// Run `stats` from the project dir with NO --data-dir flag.
 	t.Chdir(projectDir)

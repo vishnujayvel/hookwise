@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -94,5 +95,27 @@ func runStats(cmd *cobra.Command, dataDir string) error {
 		fmt.Fprintln(w, "\nNo tool usage recorded today.")
 	}
 
+	// Dispatch latency (gh#37). Skipped entirely when no latency data exists
+	// for the day — events written before the dispatch_latency_ms column
+	// (older DBs) are NULL and must not be rendered as fabricated 0ms rows.
+	latency, err := a.LatencyStats(ctx, today)
+	if err != nil {
+		return fmt.Errorf("latency stats: %w", err)
+	}
+	if latency.Overall.Count > 0 {
+		fmt.Fprintln(w, "")
+		fmt.Fprintln(w, "Dispatch latency (ms):")
+		printLatencyBucket(w, "overall", latency.Overall)
+		for _, bucket := range latency.ByEvent {
+			printLatencyBucket(w, bucket.EventType, bucket)
+		}
+	}
+
 	return nil
+}
+
+// printLatencyBucket renders one row of the stats latency section.
+func printLatencyBucket(w io.Writer, label string, b analytics.LatencyBucket) {
+	fmt.Fprintf(w, "  %-16s avg %6.1f  p50 %4d  p95 %4d  p99 %4d  max %4d  (n=%d)\n",
+		label, b.AvgMs, b.P50Ms, b.P95Ms, b.P99Ms, b.MaxMs, b.Count)
 }
