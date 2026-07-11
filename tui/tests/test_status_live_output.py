@@ -7,11 +7,17 @@ written by the TS status-line command, with proper freshness checks.
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from hookwise_tui.tabs.status import StatusTab, _LAST_STATUS_OUTPUT_PATH, _LIVE_OUTPUT_MAX_AGE
+
+
+def _now_iso() -> str:
+    """A current updated_at: the renderer treats entries past TTL as absent."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class TestReadLiveOutput:
@@ -125,7 +131,7 @@ class TestWeatherSegmentFromGoProducer:
                 "weatherCode": 0,
                 "emoji": "\u2600\ufe0f",
                 "description": "Clear",
-                "updated_at": "2026-03-07T10:00:00Z",
+                "updated_at": _now_iso(),
                 "ttl_seconds": 300,
             }
         }
@@ -146,7 +152,7 @@ class TestWeatherSegmentFromGoProducer:
                 "weatherCode": 1,
                 "emoji": "\u26c5",
                 "description": "Partly Cloudy",
-                "updated_at": "2026-03-07T10:00:00Z",
+                "updated_at": _now_iso(),
                 "ttl_seconds": 300,
             }
         }
@@ -164,7 +170,7 @@ class TestWeatherSegmentFromGoProducer:
                 "weatherCode": 61,
                 "emoji": "\U0001f327\ufe0f",
                 "description": "Rain",
-                "updated_at": "2026-03-07T10:00:00Z",
+                "updated_at": _now_iso(),
                 "ttl_seconds": 300,
             }
         }
@@ -178,7 +184,7 @@ class TestWeatherSegmentFromGoProducer:
                 "temperatureUnit": "fahrenheit",
                 "windSpeed": 0,
                 "emoji": "\U0001f324\ufe0f",
-                "updated_at": "2026-03-07T10:00:00Z",
+                "updated_at": _now_iso(),
                 "ttl_seconds": 300,
             }
         }
