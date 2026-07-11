@@ -158,6 +158,9 @@ func calendarEvents(t *testing.T, result interface{}) []interface{} {
 func TestCalendarProducer_Pinned_Genuine200EmptyItems_OverwritesGoodCache(t *testing.T) {
 	mock := &pinnedCalendarMock{totalEvents: 1}
 	srv := httptest.NewServer(mock)
+	// Poll 3 closes srv mid-test on purpose; this defer only covers early
+	// require failures (Close is idempotent).
+	defer srv.Close()
 
 	p := newPinnedCalendarProducer(t, srv.URL)
 
