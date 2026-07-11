@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/googleapi"
 
 	"github.com/vishnujayvel/hookwise/internal/core"
@@ -75,8 +76,8 @@ func TestWriteBackToken_AtomicAndSecure(t *testing.T) {
 //	POST /token             → fresh access token JSON (forces refresh when expiry is past)
 //	GET  /calendars/*/events → minimal events.list response with one event
 type calendarMockServer struct {
-	tokenCalls  int // counts how many token refresh calls were made
-	eventCalls  int // counts how many events list calls were made
+	tokenCalls   int // counts how many token refresh calls were made
+	eventCalls   int // counts how many events list calls were made
 	eventSummary string
 	// tokenError, when non-empty, makes POST /token fail with HTTP 400 and
 	// this RFC 6749 error code (e.g. "invalid_grant" = revoked refresh token).
@@ -109,7 +110,7 @@ func (m *calendarMockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			summary = "Mock Standup"
 		}
 		resp := map[string]interface{}{
-			"kind":  "calendar#events",
+			"kind": "calendar#events",
 			"items": []interface{}{
 				map[string]interface{}{
 					"kind":    "calendar#event",
@@ -569,4 +570,261 @@ func TestCalendarProducer_NoPriorSuccess_EmptyFallbackTimestampFrozen(t *testing
 		assert.Equal(t, ts1, result.(map[string]interface{})["timestamp"],
 			"empty fallback envelope must not be re-stamped on failing poll %d", i)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Timezone + malformed-date fixtures (hw-8d9k): every earlier calendar test
+// used uniform time.UTC, leaving parseGoogleEventTime's non-UTC-offset
+// handling and its malformed-date silent-drop path unpinned. Google returns
+// event times in the calendar's own timezone (e.g. +05:30), so these are the
+// timestamps the producer actually sees in the wild.
+// ---------------------------------------------------------------------------
+
+// TestParseGoogleEventTime_OffsetsAndMalformed pins parseGoogleEventTime
+// directly: non-UTC offsets must parse to the correct instant with the offset
+// preserved, and malformed values must yield zero-time without claiming
+// all-day.
+func TestParseGoogleEventTime_OffsetsAndMalformed(t *testing.T) {
+	cases := []struct {
+		name       string
+		edt        *calendar.EventDateTime
+		wantZero   bool
+		wantAllDay bool
+		wantUTC    time.Time // instant the parsed value must equal (when !wantZero)
+		wantOffset int       // expected zone offset in seconds (when !wantZero)
+	}{
+		{
+			name:       "dateTime with +05:30 offset",
+			edt:        &calendar.EventDateTime{DateTime: "2026-06-15T15:30:00+05:30"},
+			wantUTC:    time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC),
+			wantOffset: 5*3600 + 30*60,
+		},
+		{
+			name:       "dateTime with -08:00 offset",
+			edt:        &calendar.EventDateTime{DateTime: "2026-06-15T02:00:00-08:00"},
+			wantUTC:    time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC),
+			wantOffset: -8 * 3600,
+		},
+		{
+			name:       "dateTime with Z suffix",
+			edt:        &calendar.EventDateTime{DateTime: "2026-06-15T10:00:00Z"},
+			wantUTC:    time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC),
+			wantOffset: 0,
+		},
+		{
+			name:       "all-day date parses as UTC midnight",
+			edt:        &calendar.EventDateTime{Date: "2026-06-15"},
+			wantAllDay: true,
+			wantUTC:    time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
+			wantOffset: 0,
+		},
+		{
+			name:     "nil EventDateTime",
+			edt:      nil,
+			wantZero: true,
+		},
+		{
+			name:     "empty EventDateTime",
+			edt:      &calendar.EventDateTime{},
+			wantZero: true,
+		},
+		{
+			name:     "garbage dateTime",
+			edt:      &calendar.EventDateTime{DateTime: "not-a-timestamp"},
+			wantZero: true,
+		},
+		{
+			name:     "non-RFC3339 dateTime (space separator)",
+			edt:      &calendar.EventDateTime{DateTime: "2026-06-15 10:00:00"},
+			wantZero: true,
+		},
+		{
+			name:     "out-of-range dateTime components",
+			edt:      &calendar.EventDateTime{DateTime: "2026-13-45T99:99:99Z"},
+			wantZero: true,
+		},
+		{
+			name:     "garbage all-day date must not claim all-day",
+			edt:      &calendar.EventDateTime{Date: "not-a-date"},
+			wantZero: true,
+		},
+		{
+			name:     "impossible calendar date (Feb 30)",
+			edt:      &calendar.EventDateTime{Date: "2026-02-30"},
+			wantZero: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, allDay := parseGoogleEventTime(tc.edt)
+			if tc.wantZero {
+				assert.True(t, got.IsZero(), "malformed/empty input must yield zero-time")
+				assert.False(t, allDay, "malformed input must never claim all-day")
+				return
+			}
+			assert.True(t, got.Equal(tc.wantUTC),
+				"parsed instant %v must equal %v", got, tc.wantUTC)
+			_, off := got.Zone()
+			assert.Equal(t, tc.wantOffset, off, "source offset must be preserved")
+			assert.Equal(t, tc.wantAllDay, allDay)
+		})
+	}
+}
+
+// TestCalendarProducer_OffsetEvents_WindowFiltering runs the producer
+// end-to-end against events whose timestamps carry a +05:30 offset while the
+// producer's "now" is time.Now().UTC(). is_current and next_event selection
+// compare instants, so an in-progress offset event must still be flagged
+// current and the upcoming offset event must still win next_event.
+func TestCalendarProducer_OffsetEvents_WindowFiltering(t *testing.T) {
+	ist := time.FixedZone("UTC+05:30", 5*3600+30*60)
+	now := time.Now()
+
+	// In-progress event (started 10m ago, ends in 20m) expressed in +05:30.
+	currentStart := now.Add(-10 * time.Minute).In(ist).Format(time.RFC3339)
+	currentEnd := now.Add(20 * time.Minute).In(ist).Format(time.RFC3339)
+	// Upcoming event (starts in 45m) expressed in +05:30.
+	upcomingStart := now.Add(45 * time.Minute).In(ist).Format(time.RFC3339)
+	upcomingEnd := now.Add(75 * time.Minute).In(ist).Format(time.RFC3339)
+
+	apiResp := fakeCalendarAPIResponse([]map[string]interface{}{
+		{
+			"summary": "IST Current Meeting",
+			"start":   map[string]string{"dateTime": currentStart},
+			"end":     map[string]string{"dateTime": currentEnd},
+		},
+		{
+			"summary": "IST Next Meeting",
+			"start":   map[string]string{"dateTime": upcomingStart},
+			"end":     map[string]string{"dateTime": upcomingEnd},
+		},
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, apiResp)
+	}))
+	defer srv.Close()
+
+	tokenPath := writeFakeToken(t, t.TempDir())
+	p := &CalendarProducer{baseURL: srv.URL}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{TokenPath: tokenPath},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	events := data["events"].([]interface{})
+	require.Len(t, events, 2)
+
+	first := events[0].(map[string]interface{})
+	assert.True(t, first["is_current"].(bool),
+		"offset event spanning UTC-now must be flagged current")
+	assert.True(t, strings.HasSuffix(first["start"].(string), "+05:30"),
+		"formatted start must keep the source offset, got %q", first["start"])
+
+	second := events[1].(map[string]interface{})
+	assert.False(t, second["is_current"].(bool))
+
+	nextEvent := data["next_event"].(map[string]interface{})
+	assert.Equal(t, "IST Next Meeting", nextEvent["name"],
+		"upcoming offset event must be selected as next_event")
+
+	// The stored absolute start must round-trip to the correct instant.
+	parsed, err := time.Parse(time.RFC3339, nextEvent["start"].(string))
+	require.NoError(t, err)
+	assert.WithinDuration(t, now.Add(45*time.Minute), parsed, 2*time.Second,
+		"next_event start must be the same instant regardless of offset")
+}
+
+// TestCalendarProducer_MalformedDates_SilentDrop pins the silent-drop
+// contract for unparseable event times: the event still appears in the events
+// list but with empty start/end strings, is never flagged current, and is
+// skipped for next_event selection in favor of the first valid event
+// (ARCH-1: no error, no crash).
+func TestCalendarProducer_MalformedDates_SilentDrop(t *testing.T) {
+	now := time.Now()
+	validStart := now.Add(30 * time.Minute).UTC().Format(time.RFC3339)
+	validEnd := now.Add(60 * time.Minute).UTC().Format(time.RFC3339)
+
+	apiResp := fakeCalendarAPIResponse([]map[string]interface{}{
+		{
+			"summary": "Broken Meeting",
+			"start":   map[string]string{"dateTime": "not-a-timestamp"},
+			"end":     map[string]string{"dateTime": "2026-13-45T99:99:99Z"},
+		},
+		{
+			"summary": "Valid Meeting",
+			"start":   map[string]string{"dateTime": validStart},
+			"end":     map[string]string{"dateTime": validEnd},
+		},
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, apiResp)
+	}))
+	defer srv.Close()
+
+	tokenPath := writeFakeToken(t, t.TempDir())
+	p := &CalendarProducer{baseURL: srv.URL}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{TokenPath: tokenPath},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err, "ARCH-1: malformed event times must not error")
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	events := data["events"].([]interface{})
+	require.Len(t, events, 2, "malformed event stays in the list, not removed")
+
+	broken := events[0].(map[string]interface{})
+	assert.Equal(t, "Broken Meeting", broken["name"])
+	assert.Equal(t, "", broken["start"], "zero-time start renders as empty string")
+	assert.Equal(t, "", broken["end"], "zero-time end renders as empty string")
+	assert.False(t, broken["all_day"].(bool), "malformed dateTime must not claim all-day")
+	assert.False(t, broken["is_current"].(bool), "zero-time event can never be current")
+
+	nextEvent := data["next_event"].(map[string]interface{})
+	assert.Equal(t, "Valid Meeting", nextEvent["name"],
+		"next_event selection must skip the malformed event")
+}
+
+// TestCalendarProducer_OnlyMalformedDates_NoNextEvent covers the degenerate
+// window where every event has unparseable times: the list is served as-is
+// (fail-open) but nothing qualifies as next_event.
+func TestCalendarProducer_OnlyMalformedDates_NoNextEvent(t *testing.T) {
+	apiResp := fakeCalendarAPIResponse([]map[string]interface{}{
+		{
+			"summary": "Only Broken Meeting",
+			"start":   map[string]string{"dateTime": "garbage"},
+			"end":     map[string]string{"dateTime": "garbage"},
+		},
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, apiResp)
+	}))
+	defer srv.Close()
+
+	tokenPath := writeFakeToken(t, t.TempDir())
+	p := &CalendarProducer{baseURL: srv.URL}
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{TokenPath: tokenPath},
+	})
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err, "ARCH-1: malformed-only window must not error")
+
+	data := result.(map[string]interface{})["data"].(map[string]interface{})
+	events := data["events"].([]interface{})
+	require.Len(t, events, 1)
+	assert.Equal(t, "", events[0].(map[string]interface{})["start"])
+	assert.Nil(t, data["next_event"],
+		"a zero-time event must never be promoted to next_event")
 }

@@ -12,10 +12,23 @@ Python renderer adapts to it here.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
 
 from hookwise_tui.tabs.status import StatusTab
+
+# Shared with internal/bridge's TestCalendarFeedContractFixture_FlattenForTUI:
+# the Go side proves envelope -> expected_flattened, this file proves
+# expected_flattened -> rendered segment.
+_CALENDAR_FIXTURE = (
+    Path(__file__).resolve().parents[2]
+    / "testdata"
+    / "contracts"
+    / "feeds"
+    / "calendar.json"
+)
 
 
 def _fresh() -> dict[str, Any]:
@@ -34,6 +47,44 @@ def _stale() -> dict[str, Any]:
         "%Y-%m-%dT%H:%M:%SZ"
     )
     return {"updated_at": old, "ttl_seconds": 300}
+
+
+def _iso_in(minutes: float) -> str:
+    """An ISO-8601 UTC timestamp `minutes` from now (negative = past)."""
+    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
+class TestCalendarContractFixture:
+    """Python half of the shared calendar feed contract fixture
+    (testdata/contracts/feeds/calendar.json). The Go side (internal/bridge)
+    pins producer envelope -> flattened entry; this pins flattened entry ->
+    rendered segment, so a field rename cannot pass one side silently."""
+
+    @staticmethod
+    def _fixture_entry() -> dict[str, Any]:
+        with _CALENDAR_FIXTURE.open() as f:
+            return cast("dict[str, Any]", json.load(f)["expected_flattened"])
+
+    def test_fixture_fresh_stamped_renders_producer_event_name(self) -> None:
+        # The fixture's updated_at is frozen in the past; re-stamp it fresh
+        # (keeping ttl_seconds and every data field as-written) the way a live
+        # daemon write would, since post-#249 the renderer gates on freshness.
+        entry = {**self._fixture_entry(), "updated_at": _fresh()["updated_at"]}
+        out = StatusTab._render_segment("calendar", {"calendar": entry})
+        assert "Standup" in out, (
+            "the shared contract fixture must render its event 'name'; a "
+            "producer field rename that updates the fixture must fail here"
+        )
+
+    def test_fixture_as_written_is_stale_and_renders_absent(self) -> None:
+        # As-written, the fixture's frozen updated_at is far past ttl_seconds:
+        # the freshness gate must treat the entire entry as absent.
+        entry = self._fixture_entry()
+        assert entry["ttl_seconds"] == 300, "fixture must carry the default TTL"
+        out = StatusTab._render_segment("calendar", {"calendar": entry})
+        assert out == "", "a past-TTL fixture entry must render as absent"
 
 
 class TestCalendarSegment:
@@ -207,3 +258,114 @@ class TestFreshnessGating:
     def test_segment_has_data_false_for_stale_insights(self) -> None:
         cache = {"insights": {"total_sessions": 5, **_stale()}}
         assert StatusTab._segment_has_data("insights_pace", cache) is False
+
+
+class TestCalendarFormattingBranches:
+    """Pins every formatting branch of the calendar renderer (status.py
+    _render_segment 'calendar'): the current-event path with its ends-in and
+    (+N more) suffixes and ValueError/KeyError parse fallbacks, and the
+    next-event NOW / in-Xmin / Free-for-Xh bucketing (scout hw-xthx #9).
+    Offsets sit mid-bucket so second-level test jitter can't cross an edge."""
+
+    @staticmethod
+    def _cache(
+        events: list[dict[str, Any]], next_event: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        entry: dict[str, Any] = {"events": events, **_fresh()}
+        if next_event is not None:
+            entry["next_event"] = next_event
+        return {"calendar": entry}
+
+    # -- current-event path --
+
+    def test_current_event_shows_ends_in_suffix(self) -> None:
+        events = [
+            {"name": "Standup", "start": _iso_in(-30), "end": _iso_in(30), "is_current": True}
+        ]
+        out = StatusTab._render_segment("calendar", self._cache(events))
+        assert "Standup" in out
+        assert "ends in" in out, "a parseable 'end' must render the ends-in suffix"
+
+    def test_current_event_missing_end_renders_without_suffix(self) -> None:
+        # KeyError fallback: no 'end' key must drop the suffix, not crash.
+        events = [{"name": "Standup", "start": _iso_in(-30), "is_current": True}]
+        out = StatusTab._render_segment("calendar", self._cache(events))
+        assert "Standup" in out
+        assert "ends in" not in out
+
+    def test_current_event_malformed_end_renders_without_suffix(self) -> None:
+        # ValueError fallback: an unparseable 'end' must drop the suffix.
+        events = [{"name": "Standup", "end": "not-a-timestamp", "is_current": True}]
+        out = StatusTab._render_segment("calendar", self._cache(events))
+        assert "Standup" in out
+        assert "ends in" not in out
+
+    def test_current_event_counts_additional_events(self) -> None:
+        events = [
+            {"name": "Standup", "end": _iso_in(30), "is_current": True},
+            {"name": "Review", "start": _iso_in(60), "is_current": False},
+            {"name": "1:1", "start": _iso_in(120), "is_current": False},
+        ]
+        out = StatusTab._render_segment("calendar", self._cache(events))
+        assert "(+2 more)" in out
+
+    # -- next-event path: fallbacks --
+
+    def test_no_events_renders_free(self) -> None:
+        out = StatusTab._render_segment("calendar", self._cache([]))
+        assert out == "\U0001f4c5 Free"
+
+    def test_next_event_without_name_renders_free(self) -> None:
+        out = StatusTab._render_segment(
+            "calendar", self._cache([], next_event={"start": _iso_in(30)})
+        )
+        assert out == "\U0001f4c5 Free"
+
+    def test_next_event_malformed_start_falls_back_to_bare_name(self) -> None:
+        # ValueError fallback: name still renders, without any time bucket.
+        out = StatusTab._render_segment(
+            "calendar",
+            self._cache([], next_event={"name": "Standup", "start": "not-a-timestamp"}),
+        )
+        assert out == "\U0001f4c5 Standup"
+
+    def test_next_event_missing_start_falls_back_to_bare_name(self) -> None:
+        # KeyError fallback: no 'start' key at all.
+        out = StatusTab._render_segment(
+            "calendar", self._cache([], next_event={"name": "Standup"})
+        )
+        assert out == "\U0001f4c5 Standup"
+
+    # -- next-event path: time bucketing --
+
+    def test_next_event_within_5min_renders_now(self) -> None:
+        ev = {"name": "Standup", "start": _iso_in(2), "is_current": False}
+        out = StatusTab._render_segment("calendar", self._cache([ev], next_event=ev))
+        assert "Standup NOW" in out
+
+    def test_next_event_within_15min_renders_min_with_bolt(self) -> None:
+        ev = {"name": "Standup", "start": _iso_in(10), "is_current": False}
+        out = StatusTab._render_segment("calendar", self._cache([ev], next_event=ev))
+        assert "in 10min" in out
+        assert "⚡" in out, "5-15min out must carry the imminent bolt"
+
+    def test_next_event_within_hour_renders_min_without_bolt(self) -> None:
+        ev = {"name": "Standup", "start": _iso_in(30), "is_current": False}
+        out = StatusTab._render_segment("calendar", self._cache([ev], next_event=ev))
+        assert "in 30min" in out
+        assert "⚡" not in out, "15-60min out must not carry the bolt"
+
+    def test_next_event_beyond_hour_renders_free_for_hours(self) -> None:
+        ev = {"name": "Standup", "start": _iso_in(180), "is_current": False}
+        out = StatusTab._render_segment("calendar", self._cache([ev], next_event=ev))
+        assert "Free for 3h" in out
+        assert "Standup" not in out, ">60min out shows free time, not the event"
+
+    def test_next_event_path_counts_additional_events(self) -> None:
+        events = [
+            {"name": "Standup", "start": _iso_in(30), "is_current": False},
+            {"name": "Review", "start": _iso_in(90), "is_current": False},
+        ]
+        next_event = {"name": "Standup", "start": _iso_in(30)}
+        out = StatusTab._render_segment("calendar", self._cache(events, next_event))
+        assert "(+1 more)" in out

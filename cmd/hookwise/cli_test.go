@@ -1434,11 +1434,14 @@ func TestDoctorFeedHealthStale(t *testing.T) {
 	os.MkdirAll(cacheDir, 0o700)
 
 	// Feed config lives in the GLOBAL config now — the singleton daemon sources
-	// feeds canonically from there (#89), and doctor reports against that. Weather
-	// interval = 60s.
+	// feeds canonically from there (#89), and doctor reports against that.
+	// Both intervals = 60s, so the stale threshold (2x interval) is 120s.
 	globalYAML := `version: 1
 feeds:
   weather:
+    enabled: true
+    interval_seconds: 60
+  calendar:
     enabled: true
     interval_seconds: 60
 `
@@ -1446,7 +1449,9 @@ feeds:
 	// Minimal project config so Check 1 passes without a project feeds: block.
 	os.WriteFile(filepath.Join(tmpDir, core.ProjectConfigFile), []byte("version: 1\n"), 0o644)
 
-	// Write a stale weather feed (timestamp 5 minutes ago, interval is 60s, threshold is 120s).
+	// Write stale feeds (timestamp 5 minutes ago, past the 120s threshold).
+	// Calendar carries real events so it exercises the staleness WARN, not the
+	// empty-data or zero-liveness paths that run first.
 	staleTime := time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339)
 	writeJSONFile(t, filepath.Join(cacheDir, "weather.json"), map[string]interface{}{
 		"type":      "weather",
@@ -1456,11 +1461,31 @@ feeds:
 			"emoji":       "☀️",
 		},
 	})
+	writeJSONFile(t, filepath.Join(cacheDir, "calendar.json"), map[string]interface{}{
+		"type":      "calendar",
+		"timestamp": staleTime,
+		"data": map[string]interface{}{
+			"events": []interface{}{
+				map[string]interface{}{
+					"name":       "Standup",
+					"start":      "2026-03-07T10:30:00Z",
+					"end":        "2026-03-07T11:00:00Z",
+					"all_day":    false,
+					"is_current": false,
+				},
+			},
+			"next_event": map[string]interface{}{
+				"name":  "Standup",
+				"start": "2026-03-07T10:30:00Z",
+			},
+		},
+	})
 
 	output, err := executeCommand("doctor")
 	require.NoError(t, err, "doctor failed\noutput: %s", output)
 
 	assert.Contains(t, output, "WARN  feed:weather: stale data", "doctor should warn about stale weather feed")
+	assert.Contains(t, output, "WARN  feed:calendar: stale data", "doctor should warn about stale calendar feed")
 }
 
 // A feed whose cache is fresh but whose data payload is empty ({}) is a real
