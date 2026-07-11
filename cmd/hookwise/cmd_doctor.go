@@ -165,6 +165,11 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		warnings += checkFeedConfigDrift(w, effectiveFeeds)
 	}
 
+	// Dead credentials: producers report auth-death (revoked/expired token)
+	// over GET /feeds. Only the daemon's runtime view carries this flag
+	// (feedsFromConfig never sets it), so this is a no-op on config fallback.
+	warnings += checkFeedAuthDead(w, effectiveFeeds)
+
 	// Back-compat: a project-level feeds: block is ignored by the singleton daemon
 	// (#89); tell the user to migrate it to the global config.
 	warnings += checkProjectFeedsIgnored(w, cwd)
@@ -361,6 +366,25 @@ func checkFeedConfigDrift(w io.Writer, daemonFeeds map[string]feeds.FeedStatus) 
 	fmt.Fprintf(w, "WARN  feed-config: daemon is polling a stale feed config (differs for: %s) — restart the daemon (hookwise daemon stop) to apply changes to %s\n",
 		strings.Join(names, ", "), filepath.Join(core.GetStateDir(), "config.yaml"))
 	return 1
+}
+
+// checkFeedAuthDead warns for feeds whose producer reports a dead credential
+// (e.g. the calendar OAuth refresh token was revoked — 401/invalid_grant).
+// Without this, a permanently-broken feed is indistinguishable from a healthy
+// one: the producer fails open with its cached envelope and never errors.
+// Returns the number of warnings emitted.
+func checkFeedAuthDead(w io.Writer, daemonFeeds map[string]feeds.FeedStatus) int {
+	names := make([]string, 0)
+	for name, fs := range daemonFeeds {
+		if fs.AuthDead {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		fmt.Fprintf(w, "WARN  feed:%s: credential dead (revoked/expired token) — re-authenticate; the daemon re-reads the token file on its next poll\n", name)
+	}
+	return len(names)
 }
 
 // checkProjectFeedsIgnored warns when the project hookwise.yaml in cwd carries a

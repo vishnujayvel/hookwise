@@ -3,6 +3,7 @@ package feeds
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/core"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -33,6 +35,55 @@ type CalendarProducer struct {
 	oauthCfg *oauth2.Config
 	origTok  *oauth2.Token
 	svc      *calendar.Service
+
+	// authDead is set when the credential is known-dead (revoked/expired
+	// refresh token, HTTP 401). Cleared on the next successful poll. Read
+	// concurrently by EffectiveFeeds (GET /feeds), so guarded by mu.
+	authDead bool
+}
+
+// AuthDead reports whether the producer's credential is known-dead
+// (AuthReporter interface). Surfaced over GET /feeds so doctor can warn.
+func (p *CalendarProducer) AuthDead() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.authDead
+}
+
+// markAuthDead records a dead credential and drops the cached OAuth client
+// and Calendar service so the NEXT poll re-reads the token file from disk.
+// This is what lets a re-auth (fixed token file) take effect without a
+// daemon restart — ensureClient otherwise short-circuits forever on the
+// cached service built from the dead token.
+func (p *CalendarProducer) markAuthDead() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.authDead = true
+	p.client = nil
+	p.oauthCfg = nil
+	p.origTok = nil
+	p.svc = nil
+}
+
+// isAuthDeadError classifies an events-fetch error as a dead credential: a
+// token refresh rejected with invalid_grant (revoked/expired refresh token)
+// or an HTTP 401 from the token endpoint or the Calendar API. Transient
+// failures (5xx, network errors, timeouts) are NOT auth-dead.
+func isAuthDeadError(err error) bool {
+	var rerr *oauth2.RetrieveError
+	if errors.As(err, &rerr) {
+		if rerr.ErrorCode == "invalid_grant" {
+			return true
+		}
+		if rerr.Response != nil && rerr.Response.StatusCode == http.StatusUnauthorized {
+			return true
+		}
+	}
+	var gerr *googleapi.Error
+	if errors.As(err, &gerr) && gerr.Code == http.StatusUnauthorized {
+		return true
+	}
+	return false
 }
 
 func (p *CalendarProducer) Name() string { return "calendar" }
@@ -217,7 +268,12 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 	// daemon shutdown cancel in-flight requests while the token source remains alive.
 	events, err := eventsCall.Context(ctx).Do()
 	if err != nil {
-		core.Logger().Warn("calendar: API request failed", "error", err)
+		if isAuthDeadError(err) {
+			p.markAuthDead()
+			core.Logger().Error("calendar: credential dead (revoked/expired token) — re-auth required; token file will be re-read next poll", "error", err)
+		} else {
+			core.Logger().Warn("calendar: API request failed", "error", err)
+		}
 		return p.fallbackResult("api error"), nil
 	}
 
@@ -273,26 +329,32 @@ func (p *CalendarProducer) Produce(ctx context.Context) (interface{}, error) {
 
 	p.mu.Lock()
 	p.lastResult = result
+	p.authDead = false
 	p.mu.Unlock()
 
 	return result, nil
 }
 
 // fallbackResult returns cached data or an empty envelope (ARCH-1: fail-open).
+// The returned envelope's timestamp is NEVER re-stamped on failure: repeated
+// failing polls return the same envelope verbatim, so TTL expiry eventually
+// hides the segment instead of a broken producer looking fresh forever.
 func (p *CalendarProducer) fallbackResult(reason string) map[string]interface{} {
 	p.mu.Lock()
-	last := p.lastResult
-	p.mu.Unlock()
+	defer p.mu.Unlock()
 
-	if last != nil {
+	if p.lastResult != nil {
 		core.Logger().Debug("calendar: using cached fallback", "reason", reason)
-		return last
+		return p.lastResult
 	}
 
-	return NewEnvelope("calendar", map[string]interface{}{
+	// No prior success: build the empty envelope ONCE and cache it so its
+	// timestamp stays frozen across consecutive failing polls too.
+	p.lastResult = NewEnvelope("calendar", map[string]interface{}{
 		"events":     []interface{}{},
 		"next_event": nil,
 	})
+	return p.lastResult
 }
 
 // parseGoogleEventTime extracts a time.Time from a Google Calendar EventDateTime.
