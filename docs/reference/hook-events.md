@@ -172,7 +172,6 @@ If a handler returns `{ decision: "block", reason: "..." }`, the tool call is re
 **Common uses:**
 - Session summary
 - Analytics finalization
-- Transcript backup
 - Cost reporting
 
 ---
