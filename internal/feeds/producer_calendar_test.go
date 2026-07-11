@@ -3,9 +3,11 @@ package feeds
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+	"google.golang.org/api/googleapi"
 
 	"github.com/vishnujayvel/hookwise/internal/core"
 )
@@ -75,6 +78,10 @@ type calendarMockServer struct {
 	tokenCalls  int // counts how many token refresh calls were made
 	eventCalls  int // counts how many events list calls were made
 	eventSummary string
+	// tokenError, when non-empty, makes POST /token fail with HTTP 400 and
+	// this RFC 6749 error code (e.g. "invalid_grant" = revoked refresh token).
+	// Set before starting the server; never mutated afterwards.
+	tokenError string
 }
 
 func (m *calendarMockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +89,11 @@ func (m *calendarMockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/token"):
 		m.tokenCalls++
 		w.Header().Set("Content-Type", "application/json")
+		if m.tokenError != "" {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"error":%q}`, m.tokenError)
+			return
+		}
 		fmt.Fprintf(w, `{"access_token":"fresh-token-%d","token_type":"Bearer","expires_in":3600}`, m.tokenCalls)
 
 	case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/calendars/"):
@@ -345,4 +357,216 @@ func TestCalendarProducer_TokenRefresh_IsAttemptedWhenExpired(t *testing.T) {
 
 	first := events[0].(map[string]interface{})
 	assert.Equal(t, "Refresh Check Meeting", first["name"])
+}
+
+// ---------------------------------------------------------------------------
+// Auth-dead detection (hw-b15m): classify 401/invalid_grant, drop the cached
+// service so the token file is re-read, keep the fail-open fallback but never
+// re-stamp its timestamp.
+// ---------------------------------------------------------------------------
+
+// TestIsAuthDeadError_Classification pins which failures count as a dead
+// credential (mark auth-dead, drop client) vs transient (retry next poll).
+func TestIsAuthDeadError_Classification(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"invalid_grant retrieve error", &oauth2.RetrieveError{ErrorCode: "invalid_grant"}, true},
+		{"invalid_grant wrapped in url.Error (real transport shape)",
+			&url.Error{Op: "Get", URL: "https://example.com", Err: &oauth2.RetrieveError{ErrorCode: "invalid_grant"}}, true},
+		{"401 from token endpoint", &oauth2.RetrieveError{Response: &http.Response{StatusCode: http.StatusUnauthorized}}, true},
+		{"503 from token endpoint is transient", &oauth2.RetrieveError{Response: &http.Response{StatusCode: http.StatusServiceUnavailable}}, false},
+		{"401 from calendar API", &googleapi.Error{Code: http.StatusUnauthorized}, true},
+		{"403 from calendar API is not auth-dead", &googleapi.Error{Code: http.StatusForbidden}, false},
+		{"500 from calendar API is transient", &googleapi.Error{Code: http.StatusInternalServerError}, false},
+		{"network error is transient", errors.New("dial tcp: connection refused"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isAuthDeadError(tc.err))
+		})
+	}
+}
+
+// TestCalendarProducer_RefreshFailure_InvalidGrant_MarksAuthDead exercises the
+// refresh-FAILURE path end-to-end: an expired access token forces a refresh,
+// the token endpoint rejects it with invalid_grant (revoked refresh token),
+// and the producer must (a) stay fail-open (no error, fallback envelope) and
+// (b) flag itself auth-dead for the feed-health path (AuthReporter).
+func TestCalendarProducer_RefreshFailure_InvalidGrant_MarksAuthDead(t *testing.T) {
+	mock := &calendarMockServer{tokenError: "invalid_grant"}
+	srv := httptest.NewServer(mock)
+	defer srv.Close()
+
+	tokenPath := writeTempTokenFile(t, srv.URL+"/token")
+
+	p := newCalendarProducerForTest(srv.URL + "/")
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{
+			Enabled:   true,
+			TokenPath: tokenPath,
+			Calendars: []string{"primary"},
+		},
+	})
+
+	assert.False(t, p.AuthDead(), "producer must not start auth-dead")
+
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err, "ARCH-1: auth failure must not propagate as error")
+
+	env := result.(map[string]interface{})
+	data := env["data"].(map[string]interface{})
+	events := data["events"].([]interface{})
+	assert.Empty(t, events, "no prior success: fallback must be the empty envelope")
+
+	assert.True(t, p.AuthDead(),
+		"invalid_grant on refresh must mark the producer auth-dead")
+	assert.GreaterOrEqual(t, mock.tokenCalls, 1, "refresh must have been attempted")
+}
+
+// TestCalendarProducer_TokenRotation_PickedUpWithoutRestart is the re-auth
+// regression test: before the fix, ensureClient short-circuited on the cached
+// service forever, so fixing the token file on disk was invisible until a
+// daemon restart. After an auth-dead failure the cached service is dropped,
+// the token file is re-read on the next poll, and a rotated (valid) token
+// recovers the feed — and clears the auth-dead flag.
+func TestCalendarProducer_TokenRotation_PickedUpWithoutRestart(t *testing.T) {
+	badMock := &calendarMockServer{tokenError: "invalid_grant"}
+	srvBad := httptest.NewServer(badMock)
+	defer srvBad.Close()
+
+	goodMock := &calendarMockServer{eventSummary: "Post-Rotation Meeting"}
+	srvGood := httptest.NewServer(goodMock)
+	defer srvGood.Close()
+
+	// Token file initially points its token_uri at the failing endpoint —
+	// this is the on-disk state while the refresh token is revoked.
+	tokenPath := writeTempTokenFile(t, srvBad.URL+"/token")
+
+	// Events always go to the good server; only the credential is dead.
+	p := newCalendarProducerForTest(srvGood.URL + "/")
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{
+			Enabled:          true,
+			TokenPath:        tokenPath,
+			Calendars:        []string{"primary"},
+			LookaheadMinutes: 120,
+		},
+	})
+
+	// Poll 1: refresh fails with invalid_grant → auth-dead, fallback.
+	_, err := p.Produce(context.Background())
+	require.NoError(t, err)
+	require.True(t, p.AuthDead(), "poll 1 must mark auth-dead")
+
+	// User re-authenticates: the token file is rewritten in place with a
+	// working credential (token_uri now points at the good endpoint).
+	pastExpiry := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
+	rotated := map[string]interface{}{
+		"token":         "expired-access-token",
+		"refresh_token": "fresh-valid-refresh-token",
+		"token_uri":     srvGood.URL + "/token",
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"expiry":        pastExpiry,
+	}
+	data, err := json.Marshal(rotated)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(tokenPath, data, 0600))
+
+	// Poll 2: NO restart, same producer instance. The rotated token file
+	// must be picked up because the dead client was dropped.
+	result, err := p.Produce(context.Background())
+	require.NoError(t, err)
+
+	env := result.(map[string]interface{})
+	events := env["data"].(map[string]interface{})["events"].([]interface{})
+	require.NotEmpty(t, events,
+		"rotated token file must be re-read on the next poll without a daemon restart")
+	assert.Equal(t, "Post-Rotation Meeting", events[0].(map[string]interface{})["name"])
+	assert.False(t, p.AuthDead(), "successful poll must clear the auth-dead flag")
+	assert.GreaterOrEqual(t, goodMock.tokenCalls, 1, "refresh must have hit the rotated token_uri")
+}
+
+// TestCalendarProducer_FallbackTimestampFrozen_AcrossFailingPolls verifies the
+// frozen-timestamp contract: once polls start failing, the fallback envelope
+// keeps the LAST SUCCESSFUL poll's timestamp verbatim across >=3 failing
+// polls. The daemon rewrites the cache file every poll (err is nil, ARCH-1),
+// so a re-stamped timestamp would keep the segment TTL-fresh forever; frozen,
+// TTL expiry eventually hides it.
+func TestCalendarProducer_FallbackTimestampFrozen_AcrossFailingPolls(t *testing.T) {
+	mock := &calendarMockServer{eventSummary: "Freeze Check Meeting"}
+	srv := httptest.NewServer(mock)
+
+	tokenPath := writeTempTokenFile(t, srv.URL+"/token")
+
+	p := newCalendarProducerForTest(srv.URL + "/")
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{
+			Enabled:          true,
+			TokenPath:        tokenPath,
+			Calendars:        []string{"primary"},
+			LookaheadMinutes: 120,
+		},
+	})
+
+	// Poll 1: success — this stamps the envelope.
+	result1, err := p.Produce(context.Background())
+	require.NoError(t, err)
+	env1 := result1.(map[string]interface{})
+	ts1 := env1["timestamp"].(string)
+	require.NotEmpty(t, ts1)
+	events1 := env1["data"].(map[string]interface{})["events"].([]interface{})
+	require.NotEmpty(t, events1, "poll 1 must succeed")
+
+	// Kill the API: every subsequent poll fails (transient network error).
+	srv.Close()
+
+	// Envelope timestamps are RFC3339 at second precision — cross a second
+	// boundary so a re-stamped envelope would provably differ.
+	time.Sleep(1100 * time.Millisecond)
+
+	for i := 2; i <= 4; i++ {
+		result, err := p.Produce(context.Background())
+		require.NoError(t, err, "ARCH-1: failing poll %d must not error", i)
+		env := result.(map[string]interface{})
+		assert.Equal(t, ts1, env["timestamp"],
+			"failing poll %d must return the last successful envelope with its timestamp FROZEN", i)
+		events := env["data"].(map[string]interface{})["events"].([]interface{})
+		assert.NotEmpty(t, events, "failing poll %d must keep serving cached events (fail-open)", i)
+	}
+
+	assert.False(t, p.AuthDead(), "network failure is transient, not auth-dead")
+}
+
+// TestCalendarProducer_NoPriorSuccess_EmptyFallbackTimestampFrozen covers the
+// daemon-restarted-with-broken-auth case: with no cached success, the empty
+// fallback envelope must also keep a frozen timestamp across failing polls,
+// so a permanently-broken producer cannot render an eternally-fresh "Free".
+func TestCalendarProducer_NoPriorSuccess_EmptyFallbackTimestampFrozen(t *testing.T) {
+	p := newCalendarProducerForTest("http://unused.invalid/")
+	p.SetFeedsConfig(core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{
+			Enabled:   true,
+			TokenPath: "/nonexistent/path/calendar-token.json",
+			Calendars: []string{"primary"},
+		},
+	})
+
+	result1, err := p.Produce(context.Background())
+	require.NoError(t, err)
+	ts1 := result1.(map[string]interface{})["timestamp"].(string)
+	require.NotEmpty(t, ts1)
+
+	// Cross a second boundary so a re-stamp would provably differ.
+	time.Sleep(1100 * time.Millisecond)
+
+	for i := 2; i <= 3; i++ {
+		result, err := p.Produce(context.Background())
+		require.NoError(t, err, "ARCH-1: failing poll %d must not error", i)
+		assert.Equal(t, ts1, result.(map[string]interface{})["timestamp"],
+			"empty fallback envelope must not be re-stamped on failing poll %d", i)
+	}
 }

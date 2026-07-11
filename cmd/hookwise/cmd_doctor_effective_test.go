@@ -127,3 +127,25 @@ feeds:
 	assert.True(t, m["weather"].Enabled)
 	assert.Equal(t, 900, m["weather"].IntervalSeconds)
 }
+
+// A producer-reported dead credential (FeedStatus.AuthDead, hw-b15m) must
+// surface as a doctor WARN — without it, a permanently-broken feed fails open
+// with cached data and looks healthy forever.
+func TestCheckFeedAuthDead(t *testing.T) {
+	var buf bytes.Buffer
+	healthy := map[string]feeds.FeedStatus{
+		"calendar": {Name: "calendar", Enabled: true},
+		"weather":  {Name: "weather", Enabled: true},
+	}
+	assert.Equal(t, 0, checkFeedAuthDead(&buf, healthy))
+	assert.Empty(t, buf.String())
+
+	buf.Reset()
+	dead := map[string]feeds.FeedStatus{
+		"calendar": {Name: "calendar", Enabled: true, AuthDead: true},
+		"weather":  {Name: "weather", Enabled: true},
+	}
+	assert.Equal(t, 1, checkFeedAuthDead(&buf, dead))
+	assert.Contains(t, buf.String(), "WARN  feed:calendar: credential dead")
+	assert.NotContains(t, buf.String(), "feed:weather")
+}

@@ -83,6 +83,18 @@ type FeedStatus struct {
 	Name            string `json:"name"`
 	Enabled         bool   `json:"enabled"`
 	IntervalSeconds int    `json:"interval_seconds"`
+	// AuthDead is true when the producer implements AuthReporter and its
+	// credential is known-dead (e.g. revoked/expired OAuth refresh token).
+	// Doctor surfaces this as a WARN so a silently-frozen feed is visible.
+	AuthDead bool `json:"auth_dead,omitempty"`
+}
+
+// AuthReporter is an optional interface producers implement to report a dead
+// credential (revoked/expired token) so the daemon can expose it over
+// GET /feeds. Implementations must be safe for concurrent use — the socket
+// handler calls AuthDead while the poll loop runs the producer.
+type AuthReporter interface {
+	AuthDead() bool
 }
 
 // EffectiveFeeds returns the effective per-feed config the daemon is polling
@@ -98,11 +110,17 @@ func (d *Daemon) EffectiveFeeds() []FeedStatus {
 	out := make([]FeedStatus, 0, len(producers))
 	for _, p := range producers {
 		name := p.Name()
-		out = append(out, FeedStatus{
+		fs := FeedStatus{
 			Name:            name,
 			Enabled:         d.isEnabled(name),
 			IntervalSeconds: int(d.intervalFor(name) / time.Second),
-		})
+		}
+		// Runtime health beyond config: producers that track credential
+		// death report it here (AuthDead locks internally).
+		if ar, ok := p.(AuthReporter); ok {
+			fs.AuthDead = ar.AuthDead()
+		}
+		out = append(out, fs)
 	}
 	return out
 }

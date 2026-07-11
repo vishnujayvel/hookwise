@@ -124,3 +124,34 @@ func TestSocketFeeds_NoProviderReturnsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
+
+// AuthDead must flow from an AuthReporter producer into EffectiveFeeds so
+// doctor can surface a dead credential (hw-b15m). The calendar producer is
+// the real implementation: mark it auth-dead and assert GET /feeds sees it.
+func TestDaemonEffectiveFeeds_SurfacesAuthDead(t *testing.T) {
+	registry := NewRegistry()
+	RegisterBuiltins(registry)
+
+	d := NewDaemon(core.DaemonConfig{}, core.FeedsConfig{
+		Calendar: core.CalendarFeedConfig{Enabled: true},
+	}, registry)
+
+	byName := map[string]FeedStatus{}
+	for _, f := range d.EffectiveFeeds() {
+		byName[f.Name] = f
+	}
+	require.Contains(t, byName, "calendar")
+	assert.False(t, byName["calendar"].AuthDead, "healthy producer must not report auth-dead")
+
+	// Flip the real producer to auth-dead and re-read.
+	for _, p := range registry.All() {
+		if cp, ok := p.(*CalendarProducer); ok {
+			cp.markAuthDead()
+		}
+	}
+	byName = map[string]FeedStatus{}
+	for _, f := range d.EffectiveFeeds() {
+		byName[f.Name] = f
+	}
+	assert.True(t, byName["calendar"].AuthDead, "auth-dead producer must be reported over EffectiveFeeds")
+}
