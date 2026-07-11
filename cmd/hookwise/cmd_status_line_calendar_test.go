@@ -144,7 +144,7 @@ func TestCalendarRelativeTime_NonUTCOffsets(t *testing.T) {
 		{
 			name:  "tomorrow label shows the event's own wall clock",
 			now:   time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC),
-			event: time.Date(2026, 6, 17, 9, 0, 0, 0, ist), // 2026-06-16 03:30 UTC, 41.5h out
+			event: time.Date(2026, 6, 17, 9, 0, 0, 0, ist), // 2026-06-17 03:30 UTC, 41.5h out
 			want:  "tomorrow 9:00am",
 		},
 		{

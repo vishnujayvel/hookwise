@@ -183,6 +183,12 @@ assert "No args → refuses bad commit ahead of github/main" \
     1 "bad type" # no range args
 
 new_repo
+git -C "$REPO" update-ref refs/remotes/origin/main main
+repo_commit "feat: ahead of origin main"
+assert "No args, no github/main → falls back to origin/main" \
+    0 "origin/main..HEAD" # no range args
+
+new_repo
 assert "No github/origin base and no args → exit 2" \
     2 "cannot resolve" # no range args
 
