@@ -13,8 +13,27 @@ Python renderer adapts to it here.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from hookwise_tui.tabs.status import StatusTab
+
+
+def _fresh() -> dict[str, Any]:
+    """Freshness fields FlattenForTUI stamps on every cache entry.
+
+    The renderer treats entries missing these (or past TTL) as absent,
+    mirroring the Go status line's IsEnvelopeFresh gate.
+    """
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {"updated_at": now, "ttl_seconds": 300}
+
+
+def _stale() -> dict[str, Any]:
+    """Freshness fields for an entry whose TTL has expired."""
+    old = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    return {"updated_at": old, "ttl_seconds": 300}
 
 
 class TestCalendarSegment:
@@ -34,6 +53,7 @@ class TestCalendarSegment:
                     }
                 ],
                 "next_event": {"name": "Standup", "start": "2026-03-07T10:30:00Z"},
+                **_fresh(),
             }
         }
         out = StatusTab._render_segment("calendar", cache)
@@ -54,6 +74,7 @@ class TestCalendarSegment:
             "calendar": {
                 "events": [{"name": "Standup", "start": soon, "is_current": False}],
                 "next_event": {"name": "Standup", "start": soon},
+                **_fresh(),
             }
         }
         out = StatusTab._render_segment("calendar", cache)
@@ -75,6 +96,7 @@ class TestProjectSegment:
                 "branch": "main",
                 "last_commit": "abc1234",
                 "dirty": False,
+                **_fresh(),
             }
         }
         out = StatusTab._render_segment("project", cache)
@@ -86,13 +108,17 @@ class TestProjectSegment:
 
     def test_marks_dirty_working_tree(self) -> None:
         # The producer emits 'dirty' (working-tree state), not 'detached'.
-        cache = {"project": {"name": "hookwise", "branch": "main", "dirty": True}}
+        cache = {
+            "project": {"name": "hookwise", "branch": "main", "dirty": True, **_fresh()}
+        }
         out = StatusTab._render_segment("project", cache)
         assert "hookwise" in out
         assert "*" in out, "a dirty working tree must show a '*' marker (issue #155)"
 
     def test_clean_tree_has_no_dirty_marker(self) -> None:
-        cache = {"project": {"name": "hookwise", "branch": "main", "dirty": False}}
+        cache = {
+            "project": {"name": "hookwise", "branch": "main", "dirty": False, **_fresh()}
+        }
         out = StatusTab._render_segment("project", cache)
         assert "*" not in out, "a clean tree must not show the dirty marker"
 
@@ -107,7 +133,77 @@ class TestProjectSegment:
                 "name": "hookwise",
                 "branch": "main",
                 "last_commit_ts": int(time.time()) - 120,  # 2 minutes ago
+                **_fresh(),
             }
         }
         out = StatusTab._render_segment("project", cache)
         assert "ago" in out, "last_commit_ts must render an 'ago' suffix"
+
+
+class TestFreshnessGating:
+    """Stale cache entries must render as absent, matching the Go status line
+    (cmd_status_line.go feedData -> bridge.IsEnvelopeFresh). Without this gate
+    a days-old calendar event renders as current forever (scout hw-xthx #1)."""
+
+    @staticmethod
+    def _calendar_events() -> dict[str, Any]:
+        return {
+            "events": [
+                {
+                    "name": "Standup",
+                    "start": "2026-03-07T10:30:00Z",
+                    "end": "2999-01-01T00:00:00Z",
+                    "all_day": False,
+                    "is_current": True,
+                }
+            ],
+            "next_event": {"name": "Standup", "start": "2026-03-07T10:30:00Z"},
+        }
+
+    def test_stale_calendar_does_not_render(self) -> None:
+        cache = {"calendar": {**self._calendar_events(), **_stale()}}
+        out = StatusTab._render_segment("calendar", cache)
+        assert out == "", (
+            "an expired calendar entry must render as absent, not as a "
+            "current event (and not as 'Free')"
+        )
+
+    def test_fresh_calendar_renders_unchanged(self) -> None:
+        cache = {"calendar": {**self._calendar_events(), **_fresh()}}
+        out = StatusTab._render_segment("calendar", cache)
+        assert "Standup" in out
+
+    def test_entry_missing_freshness_fields_does_not_render(self) -> None:
+        # Go parity: IsEnvelopeFresh fails closed on a missing timestamp.
+        # FlattenForTUI stamps updated_at/ttl_seconds on every entry, so a
+        # bare entry is malformed and must be treated as absent.
+        cache = {"calendar": self._calendar_events()}
+        out = StatusTab._render_segment("calendar", cache)
+        assert out == ""
+
+    def test_stale_weather_does_not_render(self) -> None:
+        cache = {
+            "weather": {
+                "temperature": 72,
+                "temperatureUnit": "fahrenheit",
+                "emoji": "☀️",
+                **_stale(),
+            }
+        }
+        assert StatusTab._render_segment("weather", cache) == ""
+
+    def test_stale_insights_does_not_render(self) -> None:
+        cache = {"insights": {"total_sessions": 5, "friction_total": 0, **_stale()}}
+        assert StatusTab._render_segment("insights_friction", cache) == ""
+
+    def test_segment_has_data_false_for_stale_entry(self) -> None:
+        cache = {"calendar": {**self._calendar_events(), **_stale()}}
+        assert StatusTab._segment_has_data("calendar", cache) is False
+
+    def test_segment_has_data_true_for_fresh_entry(self) -> None:
+        cache = {"calendar": {**self._calendar_events(), **_fresh()}}
+        assert StatusTab._segment_has_data("calendar", cache) is True
+
+    def test_segment_has_data_false_for_stale_insights(self) -> None:
+        cache = {"insights": {"total_sessions": 5, **_stale()}}
+        assert StatusTab._segment_has_data("insights_pace", cache) is False

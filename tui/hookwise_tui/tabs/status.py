@@ -14,7 +14,7 @@ from textual.css.query import NoMatches
 from textual.widget import Widget
 from textual.widgets import Static, Switch
 
-from hookwise_tui.data import read_cache, read_config, write_config
+from hookwise_tui.data import is_fresh, read_cache, read_config, write_config
 from hookwise_tui.tabs.insights import _format_peak_hour
 
 
@@ -203,18 +203,29 @@ class StatusTab(Widget):
                 yield SegmentRow(seg, seg in active_set, has_data)
 
     @staticmethod
+    def _fresh_entry(cache: dict[str, Any], key: str) -> dict[str, Any] | None:
+        """Return the cache entry for key, or None if missing or past its TTL.
+
+        Mirrors the Go status line (feedData/IsEnvelopeFresh): stale feed
+        entries are treated as absent, never rendered from old data.
+        """
+        entry = cache.get(key)
+        if isinstance(entry, dict) and is_fresh(entry):
+            return entry
+        return None
+
+    @staticmethod
     def _segment_has_data(seg: str, cache: dict[str, Any]) -> bool:
         """Check if a segment has real data available in the cache."""
         if seg in STDIN_SEGMENTS:
             # These get data from live stdin; check if live output is fresh
             return StatusTab._read_live_output() is not None
         if seg in ("insights_friction", "insights_pace", "insights_trend"):
-            ins = cache.get("insights")
-            return isinstance(ins, dict) and bool(ins.get("total_sessions"))
+            ins = StatusTab._fresh_entry(cache, "insights")
+            return ins is not None and bool(ins.get("total_sessions"))
         if seg == "clock":
             return True  # Always has data
-        entry = cache.get(seg)
-        return isinstance(entry, dict) and len(entry) > 0
+        return StatusTab._fresh_entry(cache, seg) is not None
 
     def on_mount(self) -> None:
         self._refresh_preview()
@@ -379,8 +390,8 @@ class StatusTab(Widget):
 
         # -- session segment: shows session ID or active session indicator --
         if seg == "session":
-            session_entry = cache.get("session")
-            if isinstance(session_entry, dict):
+            session_entry = StatusTab._fresh_entry(cache, "session")
+            if session_entry is not None:
                 sid = session_entry.get("session_id", "")
                 if sid:
                     return f"\U0001f4bb {sid[:8]}"
@@ -388,8 +399,8 @@ class StatusTab(Widget):
 
         # -- mode_badge reads from builder_trap cache entry (not its own key) --
         if seg == "mode_badge":
-            bt = cache.get("builder_trap")
-            if not isinstance(bt, dict):
+            bt = StatusTab._fresh_entry(cache, "builder_trap")
+            if bt is None:
                 return ""
             mode = bt.get("current_mode", "")
             if not mode or mode == "neutral":
@@ -397,8 +408,8 @@ class StatusTab(Widget):
             return f"[{mode}]"
 
         # -- insights segments read from the shared "insights" cache entry --
-        insights = cache.get("insights")
-        if isinstance(insights, dict):
+        insights = StatusTab._fresh_entry(cache, "insights")
+        if insights is not None:
             if seg == "insights_friction":
                 recent_friction = 0
                 rs = insights.get("recent_session")
@@ -449,8 +460,8 @@ class StatusTab(Widget):
                 return f"\U0001f527 Top: {tool_names} | Peak: {_format_peak_hour(peak_hour)}"
 
         # -- other segments with direct cache entries --
-        entry = cache.get(seg)
-        if not isinstance(entry, dict):
+        entry = StatusTab._fresh_entry(cache, seg)
+        if entry is None:
             return ""
 
         if seg == "mantra":
