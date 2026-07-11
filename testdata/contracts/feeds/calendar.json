@@ -1,0 +1,41 @@
+{
+  "name": "calendar_feed_flatten",
+  "description": "Cross-boundary contract for the calendar feed (ARCH-6 spirit for the Go->JSON->Python boundary): FlattenForTUI must turn the producer envelope (feeds.CalendarTestFixture) into exactly the flat cache entry the Python TUI renders. Consumed by internal/bridge (Go: envelope -> expected_flattened) and tui/tests (Python: expected_flattened -> rendered segment). The frozen updated_at is intentionally in the past: the Python stale-case test consumes the fixture as-written, and the fresh-case test re-stamps updated_at before rendering (post-PR#249 the TUI gates on freshness).",
+  "feed": "calendar",
+  "envelope": {
+    "type": "calendar",
+    "timestamp": "2026-03-07T10:00:00Z",
+    "data": {
+      "events": [
+        {
+          "name": "Standup",
+          "start": "2026-03-07T10:30:00Z",
+          "end": "2026-03-07T11:00:00Z",
+          "all_day": false,
+          "is_current": false
+        }
+      ],
+      "next_event": {
+        "name": "Standup",
+        "start": "2026-03-07T10:30:00Z"
+      }
+    }
+  },
+  "expected_flattened": {
+    "events": [
+      {
+        "name": "Standup",
+        "start": "2026-03-07T10:30:00Z",
+        "end": "2026-03-07T11:00:00Z",
+        "all_day": false,
+        "is_current": false
+      }
+    ],
+    "next_event": {
+      "name": "Standup",
+      "start": "2026-03-07T10:30:00Z"
+    },
+    "updated_at": "2026-03-07T10:00:00Z",
+    "ttl_seconds": 300
+  }
+}

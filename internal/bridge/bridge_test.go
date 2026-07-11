@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"testing"
 	"time"
 
@@ -870,9 +871,13 @@ func TestFlattenForTUI_CalendarFieldNamesForPythonTUI(t *testing.T) {
 	require.True(t, ok, "next_event must be a map")
 	require.Contains(t, next, "name", "next_event must expose 'name', not 'title' (issue #155)")
 
-	// Envelope stripped + freshness added.
+	// Envelope stripped + freshness added. Post-#249 the Python TUI gates
+	// rendering on updated_at+ttl_seconds, so a flattened entry missing either
+	// is invisible in production — pin both here, not just updated_at.
 	assert.NotContains(t, entry, "data")
 	assert.Equal(t, fixture["timestamp"], entry["updated_at"])
+	assert.Equal(t, DefaultTTLSeconds, entry["ttl_seconds"],
+		"flattened calendar must carry ttl_seconds or the TUI freshness gate drops the segment")
 }
 
 func TestFlattenForTUI_ProjectFieldNamesForPythonTUI(t *testing.T) {
@@ -894,6 +899,58 @@ func TestFlattenForTUI_ProjectFieldNamesForPythonTUI(t *testing.T) {
 
 	assert.NotContains(t, entry, "data")
 	assert.Equal(t, fixture["timestamp"], entry["updated_at"])
+}
+
+// ---------------------------------------------------------------------------
+// Test 30e: calendar feed contract fixture (shared with tui/tests)
+// ---------------------------------------------------------------------------
+
+// calendarFeedFixturePath resolves testdata/contracts/feeds/calendar.json
+// relative to the repo root (same walk-up as internal/contract's fixturesDir).
+func calendarFeedFixturePath(t *testing.T) string {
+	t.Helper()
+	_, filename, _, ok := goruntime.Caller(0)
+	require.True(t, ok, "runtime.Caller failed")
+	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(filename)))
+	return filepath.Join(repoRoot, "testdata", "contracts", "feeds", "calendar.json")
+}
+
+// TestCalendarFeedContractFixture_FlattenForTUI is the Go half of the shared
+// calendar feed contract (ARCH-6 spirit for the Go→JSON→Python boundary).
+// The same JSON file is rendered by tui/tests/test_status_segments.py, so the
+// two sides can only pass together: a producer field rename breaks the
+// envelope pin here, and an expected_flattened edit that no longer renders
+// breaks the Python side.
+func TestCalendarFeedContractFixture_FlattenForTUI(t *testing.T) {
+	raw, err := os.ReadFile(calendarFeedFixturePath(t))
+	require.NoError(t, err, "shared calendar feed fixture must exist (tui/tests reads the same file)")
+
+	var fixture struct {
+		Envelope          map[string]interface{} `json:"envelope"`
+		ExpectedFlattened map[string]interface{} `json:"expected_flattened"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &fixture))
+	require.NotEmpty(t, fixture.Envelope, "fixture must carry an envelope")
+	require.NotEmpty(t, fixture.ExpectedFlattened, "fixture must carry expected_flattened")
+
+	// Pin the fixture's envelope to the producer's canonical test fixture so
+	// the shared file can't drift from what the producer actually emits.
+	wantEnvelope, err := json.Marshal(feeds.CalendarTestFixture())
+	require.NoError(t, err)
+	gotEnvelope, err := json.Marshal(fixture.Envelope)
+	require.NoError(t, err)
+	require.JSONEq(t, string(wantEnvelope), string(gotEnvelope),
+		"fixture envelope must match feeds.CalendarTestFixture(); update both together")
+
+	// FlattenForTUI(envelope) must equal the exact flat entry the TUI renders,
+	// including the updated_at/ttl_seconds freshness fields the TUI gates on.
+	flat := FlattenForTUI(map[string]interface{}{"calendar": fixture.Envelope})
+	gotFlat, err := json.Marshal(flat["calendar"])
+	require.NoError(t, err)
+	wantFlat, err := json.Marshal(fixture.ExpectedFlattened)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(wantFlat), string(gotFlat),
+		"flattened calendar entry must byte-match the fixture's expected_flattened")
 }
 
 // ---------------------------------------------------------------------------
