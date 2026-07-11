@@ -188,7 +188,11 @@ func TestPruneSnapshots_IgnoresNonSnapshotFiles(t *testing.T) {
 }
 
 // TestDefaultSnapshotsDir verifies the default path is under ~/.hookwise.
+// HOOKWISE_STATE_DIR is pinned empty because test harnesses (task test:go:unit)
+// inject it for isolation, which would redirect the default away from ~/.hookwise.
 func TestDefaultSnapshotsDir(t *testing.T) {
+	t.Setenv("HOOKWISE_STATE_DIR", "")
+
 	got := DefaultSnapshotsDir()
 	assert.True(t, strings.HasSuffix(got, filepath.Join(".hookwise", "snapshots")),
 		"DefaultSnapshotsDir should end in .hookwise/snapshots, got %q", got)
