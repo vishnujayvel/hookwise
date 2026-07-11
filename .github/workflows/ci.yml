@@ -9,6 +9,28 @@ permissions:
   contents: read
 
 jobs:
+  tenet-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Self-test gate script
+        run: bash scripts/test-tenet-gate.sh
+      - name: Tenet gate (bead ref or tenet-exception label)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TENET_PR_TITLE: ${{ github.event.pull_request.title }}
+          TENET_PR_BODY: ${{ github.event.pull_request.body }}
+          TENET_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          TENET_CHANGED_FILES="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename')"
+          export TENET_CHANGED_FILES
+          bash scripts/tenet-gate.sh
+
   pipeline:
     runs-on: ubuntu-latest
     timeout-minutes: 20
