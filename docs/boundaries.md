@@ -198,7 +198,7 @@ This document defines what hookwise controls and what it does not. It exists for
   | |  status-line, stats, test, |----> All subsystems above                  |
   | |  audit, daemon, snapshot,  |                                            |
   | |  diff, log, notifications, |                                            |
-  | |  upgrade, tui              |                                            |
+  | |  migrate, tui              |                                            |
   | +----------------------------+                                            |
   |                                                                           |
   | +----------------------------+                                            |
