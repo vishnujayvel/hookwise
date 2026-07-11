@@ -87,7 +87,7 @@ func DetectTypeScript(opts MigrationOpts) (sqlitePath, costStatePath string) {
 	if info, err := os.Stat(sqliteCandidate); err == nil && !info.IsDir() {
 		// #218: the Go runtime writes its analytics DB to this same path. Only
 		// treat it as a TypeScript migration source when it is NOT a Go-origin
-		// DB -- otherwise `upgrade` imports the Go DB into itself and hits a
+		// DB -- otherwise `migrate` imports the Go DB into itself and hits a
 		// sessions.id UNIQUE conflict on the first run.
 		if !isGoOriginDB(sqliteCandidate) {
 			sqlitePath = sqliteCandidate
@@ -493,9 +493,9 @@ func Run(opts MigrationOpts) MigrationResult {
 	}
 
 	if opts.DryRun {
-		fmt.Fprintln(w, "hookwise upgrade --dry-run")
+		fmt.Fprintln(w, "hookwise migrate --dry-run")
 	} else {
-		fmt.Fprintln(w, "hookwise upgrade")
+		fmt.Fprintln(w, "hookwise migrate")
 	}
 	fmt.Fprintln(w, "Detecting TypeScript installation...")
 
@@ -542,7 +542,7 @@ func Run(opts MigrationOpts) MigrationResult {
 	}
 
 	if result.AlreadyMigrated {
-		fmt.Fprintln(w, "\n  Already migrated — skipping data import (hookwise upgrade is idempotent).")
+		fmt.Fprintln(w, "\n  Already migrated — skipping data import (hookwise migrate is idempotent).")
 	} else {
 		// Step 3: Migrate SQLite.
 		if result.SQLiteDetected {

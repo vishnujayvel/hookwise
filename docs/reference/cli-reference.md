@@ -216,13 +216,16 @@ hookwise notifications [--limit <n>] [--data-dir <path>]
 
 Shows recent notifications from the budget producer, stored in the analytics database and surfaced via the status line or this command.
 
-## upgrade
+## migrate
 
 Migrate data from a TypeScript hookwise installation.
 
 ```bash
-hookwise upgrade [--dry-run] [--data-dir <path>] [--project-dir <dir>]
+hookwise migrate [--dry-run] [--data-dir <path>] [--project-dir <dir>]
 ```
+
+> `hookwise upgrade` is a deprecated alias for `migrate` — it runs the same
+> code and prints a one-line deprecation notice. Use `migrate` going forward.
 
 | Flag | Description |
 |------|-------------|

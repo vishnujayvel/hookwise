@@ -20,7 +20,7 @@ from Python (TUI) via a JSON file cache rather than a shared process or socket.
 ### Requirement: LayeredArchitecture
 
 The system SHALL maintain separation between:
-- CLI / Entry Points (Cobra command handlers that are the public surface area: dispatch events, doctor, stats, status-line, daemon lifecycle, init/wire, upgrade, notifications, test.)
+- CLI / Entry Points (Cobra command handlers that are the public surface area: dispatch events, doctor, stats, status-line, daemon lifecycle, init/wire, migrate, notifications, test.)
 - Dispatch / Core Engine (Three-phase pipeline (declarative guards → handler guard/context phases → async side effects) with fail-open guarantee. Hub of the entire system.)
 - Domain Services (Self-contained service modules for analytics, feeds, coaching, notifications, pricing, and hook-safety analysis. Each owns its own DB tables or cache files.)
 - Feed Daemon (Background process that polls registered producers on staggered intervals, wraps output in canonical FeedEnvelope, and atomically writes JSON cache files to disk. Never touches the analytics DB (ARCH-3).)
@@ -72,7 +72,7 @@ graph TB
 
 ### CLI / Entry Points
 
-**Purpose**: Cobra command handlers that are the public surface area: dispatch events, doctor, stats, status-line, daemon lifecycle, init/wire, upgrade, notifications, test.
+**Purpose**: Cobra command handlers that are the public surface area: dispatch events, doctor, stats, status-line, daemon lifecycle, init/wire, migrate, notifications, test.
 **Location**: `cmd/hookwise/cmd_dispatch.go, cmd/hookwise/cmd_doctor.go, cmd/hookwise/cmd_status_line.go, cmd/hookwise/cmd_daemon.go, cmd/hookwise/cmd_stats.go, cmd/hookwise/cmd_init.go`
 
 ### Dispatch / Core Engine

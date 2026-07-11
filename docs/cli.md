@@ -42,7 +42,7 @@ hookwise diff <from> <to> Row-count changes between two analytics snapshots
 
 hookwise notifications    Show recent notification history
 
-hookwise upgrade          Migrate data from a TypeScript hookwise installation
+hookwise migrate          Migrate data from a TypeScript hookwise installation
 ```
 
 See the [CLI Reference](reference/cli-reference.md) for per-command flags.

@@ -76,7 +76,7 @@ This document defines what hookwise controls and what it does not. It exists for
 | `hookwise diff` | `cmd/hookwise/cmd_diff.go` | Show row-count changes between two analytics snapshots |
 | `hookwise log` | `cmd/hookwise/cmd_log.go` | Show analytics snapshot history |
 | `hookwise notifications` | `cmd/hookwise/cmd_notifications.go` | Display notification history |
-| `hookwise upgrade` | `cmd/hookwise/cmd_upgrade.go` | Migrate data from a TypeScript hookwise installation |
+| `hookwise migrate` | `cmd/hookwise/cmd_migrate.go` | Migrate data from a TypeScript hookwise installation (`upgrade` is a deprecated alias) |
 | `hookwise tui` | `cmd/hookwise/cmd_tui.go` | Launch the interactive TUI |
 
 ### Testing Utilities

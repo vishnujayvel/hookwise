@@ -9,7 +9,7 @@ import (
 	"github.com/vishnujayvel/hookwise/internal/migration"
 )
 
-func newUpgradeCmd() *cobra.Command {
+func newMigrateCmd() *cobra.Command {
 	var (
 		dryRun     bool
 		dataDir    string
@@ -17,7 +17,7 @@ func newUpgradeCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "upgrade",
+		Use:   "migrate",
 		Short: "Migrate data from TypeScript hookwise installation",
 		Long: `Detects an existing TypeScript hookwise installation (~/.hookwise/analytics.db
 and ~/.hookwise/state/cost-state.json), imports the data into the Go SQLite
@@ -63,5 +63,17 @@ Original files are never modified (non-destructive).`,
 	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Path to the analytics SQLite DB file (defaults to ~/.hookwise/analytics.db)")
 	cmd.Flags().StringVar(&projectDir, "project-dir", "", "Project directory for config validation (defaults to cwd)")
 
+	return cmd
+}
+
+// newUpgradeCmd is the deprecated alias for migrate. "upgrade" read as
+// self-update to most new users, but it performs TS→Go data migration.
+// Cobra hides Deprecated commands from help and completion, and prints a
+// one-line notice before running the identical migrate implementation.
+func newUpgradeCmd() *cobra.Command {
+	cmd := newMigrateCmd()
+	cmd.Use = "upgrade"
+	cmd.Hidden = true
+	cmd.Deprecated = `use "hookwise migrate" instead`
 	return cmd
 }
