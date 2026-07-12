@@ -587,7 +587,7 @@ func TestIntegration_UpgradeFromMockTypeScript_Live(t *testing.T) {
 
 	output := buf.String()
 	assert.Contains(t, output, "Data written to analytics database.")
-	assert.Contains(t, output, "hookwise upgrade")
+	assert.Contains(t, output, "hookwise migrate")
 }
 
 // =========================================================================

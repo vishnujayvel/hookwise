@@ -9,7 +9,7 @@ This document describes the architectural patterns and structure of the system.
 ## Architecture Style
 
 Layered architecture: CLI entry points (cmd/hookwise) → dispatch/core engine (internal/core) →
-domain service layer (analytics, feeds, notifications, coaching) → SQLite persistence. The layering
+domain service layer (analytics, feeds, notifications) → SQLite persistence. The layering
 is justified by the need to keep the hot-path dispatch pipeline (called synchronously by Claude Code
 on every hook event) completely isolated from slower concerns like feed polling, TUI rendering, and
 analytics aggregation. A strict cross-language boundary separates Go (dispatch, daemon, analytics)
@@ -20,13 +20,13 @@ from Python (TUI) via a JSON file cache rather than a shared process or socket.
 ### Requirement: LayeredArchitecture
 
 The system SHALL maintain separation between:
-- CLI / Entry Points (Cobra command handlers that are the public surface area: dispatch events, doctor, stats, status-line, daemon lifecycle, init/wire, upgrade, notifications, test.)
+- CLI / Entry Points (Cobra command handlers that are the public surface area: dispatch events, doctor, stats, status-line, daemon lifecycle, init/wire, migrate, notifications, test.)
 - Dispatch / Core Engine (Three-phase pipeline (declarative guards → handler guard/context phases → async side effects) with fail-open guarantee. Hub of the entire system.)
-- Domain Services (Self-contained service modules for analytics, feeds, coaching, notifications, pricing, and hook-safety analysis. Each owns its own DB tables or cache files.)
+- Domain Services (Self-contained service modules for analytics, feeds, notifications, pricing, and hook-safety analysis. Each owns its own DB tables or cache files.)
 - Feed Daemon (Background process that polls registered producers on staggered intervals, wraps output in canonical FeedEnvelope, and atomically writes JSON cache files to disk. Never touches the analytics DB (ARCH-3).)
 - Cross-Language Bridge (Translates Go daemon feed envelopes into the flat JSON schema the Python TUI expects. FeedEnvelope is the canonical boundary type; TUIBridgeService handles the transformation and atomic write.)
-- Python TUI (Textual-based terminal dashboard that reads the flat JSON cache file written by the Go bridge and renders live status, feeds, analytics, and coaching state.)
-- Persistence (SQLite database (WAL mode, single-writer via SetMaxOpenConns(1)) for analytics events, sessions, authorship ledger, coaching state, cost state, notifications, and feed cache. Snapshot service manages VACUUM INTO copies.)
+- Python TUI (Textual-based terminal dashboard that reads the flat JSON cache file written by the Go bridge and renders live status, feeds, and analytics state.)
+- Persistence (SQLite database (WAL mode, single-writer via SetMaxOpenConns(1)) for analytics events, sessions, authorship ledger, cost state, notifications, and feed cache. Snapshot service manages VACUUM INTO copies.)
 - Testing Infrastructure (Multi-tier testing: contract fixtures (byte-identical stdout), architecture linting, property-based tests, chaos/integration tests, mutation tests, and a terminal harness for E2E TUI testing.)
 - CI Pipeline (Dagger-based containerized pipeline that runs vet, compile, lint, unit, contract, arch, PBT, TUI, integration, mutation, and snapshot tests — identical locally and in GitHub Actions.)
 
@@ -72,7 +72,7 @@ graph TB
 
 ### CLI / Entry Points
 
-**Purpose**: Cobra command handlers that are the public surface area: dispatch events, doctor, stats, status-line, daemon lifecycle, init/wire, upgrade, notifications, test.
+**Purpose**: Cobra command handlers that are the public surface area: dispatch events, doctor, stats, status-line, daemon lifecycle, init/wire, migrate, notifications, test.
 **Location**: `cmd/hookwise/cmd_dispatch.go, cmd/hookwise/cmd_doctor.go, cmd/hookwise/cmd_status_line.go, cmd/hookwise/cmd_daemon.go, cmd/hookwise/cmd_stats.go, cmd/hookwise/cmd_init.go`
 
 ### Dispatch / Core Engine
@@ -82,7 +82,7 @@ graph TB
 
 ### Domain Services
 
-**Purpose**: Self-contained service modules for analytics, feeds, coaching, notifications, pricing, and hook-safety analysis. Each owns its own DB tables or cache files.
+**Purpose**: Self-contained service modules for analytics, feeds, notifications, pricing, and hook-safety analysis. Each owns its own DB tables or cache files.
 **Location**: `internal/analytics/, internal/feeds/, internal/notifications/, internal/migration/, internal/perf/`
 
 ### Feed Daemon
@@ -97,12 +97,12 @@ graph TB
 
 ### Python TUI
 
-**Purpose**: Textual-based terminal dashboard that reads the flat JSON cache file written by the Go bridge and renders live status, feeds, analytics, and coaching state.
+**Purpose**: Textual-based terminal dashboard that reads the flat JSON cache file written by the Go bridge and renders live status, feeds, and analytics state.
 **Location**: `tui/hookwise_tui/app.py, tui/hookwise_tui/data.py, tui/tests/`
 
 ### Persistence
 
-**Purpose**: SQLite database (WAL mode, single-writer via SetMaxOpenConns(1)) for analytics events, sessions, authorship ledger, coaching state, cost state, notifications, and feed cache. Snapshot service manages VACUUM INTO copies.
+**Purpose**: SQLite database (WAL mode, single-writer via SetMaxOpenConns(1)) for analytics events, sessions, authorship ledger, cost state, notifications, and feed cache. Snapshot service manages VACUUM INTO copies.
 **Location**: `internal/analytics/db.go, internal/analytics/state.go, internal/analytics/snapshot.go`
 
 ### Testing Infrastructure
@@ -138,6 +138,6 @@ through NotificationProducerService → SQLite notifications table → surfaced 
 | Hacker News API (news feed — public, concurrent story fetch) | External integration |
 | Google Calendar API (OAuth2, token refresh, persisted in Python-compatible format) | External integration |
 | Anthropic Claude Haiku API (LLM-generated daily insights narrative, cached to disk) | External integration |
-| SQLite via modernc.org/sqlite (pure-Go, CGO-free, WAL mode — analytics, coaching, cost, notifications) | External integration |
+| SQLite via modernc.org/sqlite (pure-Go, CGO-free, WAL mode — analytics, cost, notifications) | External integration |
 | Unix domain sockets (daemon IPC for health probe and graceful shutdown) | External integration |
 | Git CLI (project feed shells out to git for branch/commit/dirty-state context) | External integration |

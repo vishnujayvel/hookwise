@@ -42,7 +42,7 @@ class RecipesTab(Widget):
         recipes = read_recipes(config)
 
         yield Static(
-            "Recipes are reusable YAML configs for guards, coaching, and handlers. "
+            "Recipes are reusable YAML configs for guards and handlers. "
             "Include them in hookwise.yaml with the includes: directive.",
             classes="recipes-intro",
         )

@@ -226,7 +226,7 @@ func TestDetectTypeScript_OnlySQLite(t *testing.T) {
 // Test 3b: DetectTypeScript must NOT treat a Go-origin analytics DB as a TS
 // source (#218). The Go runtime writes its analytics.db to the same path a
 // TypeScript install would, so a presence-only check imports the Go DB into
-// itself → sessions.id UNIQUE conflict on the first `upgrade`.
+// itself → sessions.id UNIQUE conflict on the first `migrate`.
 // ---------------------------------------------------------------------------
 
 func TestDetectTypeScript_GoOriginSkipped(t *testing.T) {
@@ -606,10 +606,10 @@ func TestRun_LiveMigration(t *testing.T) {
 
 	output := buf.String()
 	assert.Contains(t, output, "Data written to analytics database.")
-	assert.Contains(t, output, "hookwise upgrade")
+	assert.Contains(t, output, "hookwise migrate")
 }
 
-// TestRun_Idempotent_SecondRunSkipsImport proves `hookwise upgrade` is safe to
+// TestRun_Idempotent_SecondRunSkipsImport proves `hookwise migrate` is safe to
 // re-run: the first run imports, the second is a no-op. Without the idempotency
 // marker the second run errored on duplicate session PKs (sessions.id is a TEXT
 // PK) and double-imported events (AUTOINCREMENT, no natural key).
@@ -645,15 +645,15 @@ func TestRun_Idempotent_SecondRunSkipsImport(t *testing.T) {
 	var buf2 bytes.Buffer
 	opts.Writer = &buf2
 	r2 := Run(opts)
-	assert.Empty(t, r2.Errors, "second upgrade must not error on duplicate session PKs")
-	assert.Equal(t, 0, r2.SessionsImported, "second upgrade must not re-import sessions")
-	assert.Equal(t, 0, r2.EventsImported, "second upgrade must not re-import events")
-	assert.True(t, r2.AlreadyMigrated, "second upgrade must report already-migrated")
+	assert.Empty(t, r2.Errors, "second migration run must not error on duplicate session PKs")
+	assert.Equal(t, 0, r2.SessionsImported, "second migration run must not re-import sessions")
+	assert.Equal(t, 0, r2.EventsImported, "second migration run must not re-import events")
+	assert.True(t, r2.AlreadyMigrated, "second migration run must report already-migrated")
 	assert.Contains(t, buf2.String(), "Already migrated")
 
 	// Events must not be duplicated.
 	assert.Equal(t, eventsAfter1, countRows(t, dataDir, "events"),
-		"a second upgrade must not duplicate events")
+		"a second migration run must not duplicate events")
 }
 
 // countRows opens the target analytics DB and returns the row count of a table.

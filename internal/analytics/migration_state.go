@@ -9,7 +9,7 @@ import (
 
 // metaKeyTSMigration marks that the one-time TypeScript->Go data migration has
 // been applied to this database. It is stored in the generic schema_meta
-// key-value table so `hookwise upgrade` can short-circuit on re-run, rather than
+// key-value table so `hookwise migrate` can short-circuit on re-run, rather than
 // erroring on duplicate session primary keys and double-importing events.
 const metaKeyTSMigration = "ts_migration_done"
 
@@ -29,7 +29,7 @@ func (d *DB) TSMigrationDone(ctx context.Context) (bool, error) {
 }
 
 // MarkTSMigrationDone records the TypeScript->Go migration as complete, so a
-// subsequent `hookwise upgrade` is a no-op. Upserts on the meta_key so repeated
+// subsequent `hookwise migrate` is a no-op. Upserts on the meta_key so repeated
 // marks are harmless.
 func (d *DB) MarkTSMigrationDone(ctx context.Context, at time.Time) error {
 	_, err := d.Exec(ctx,

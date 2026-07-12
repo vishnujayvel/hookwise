@@ -49,8 +49,11 @@ go build -ldflags "-X main.version=$(git describe --tags)" -o /usr/local/bin/hoo
 hookwise includes an automated data-migration tool:
 
 ```bash
-hookwise upgrade
+hookwise migrate
 ```
+
+(`hookwise upgrade` still works as a deprecated alias — it runs the same code
+and prints a pointer to `migrate`.)
 
 This will:
 - Detect an existing pre-Go hookwise installation (`~/.hookwise/analytics.db` and `~/.hookwise/state/cost-state.json`)
@@ -60,7 +63,7 @@ This will:
 Original files are never modified (the migration is non-destructive). Use `--dry-run` to preview what would be migrated without making changes:
 
 ```bash
-hookwise upgrade --dry-run
+hookwise migrate --dry-run
 ```
 
 To point hookwise at Claude Code's `settings.json`, use `hookwise init --wire` (see the [CLI Reference](cli-reference.md)).

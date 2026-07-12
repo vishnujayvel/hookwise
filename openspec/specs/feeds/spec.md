@@ -420,8 +420,6 @@ The system SHALL return a safe default description (e.g. 'unknown') for any wmo 
 
 #### Requirement: Name
 
-> Implementation: `generateFilename` in `recipes/productivity/transcript-backup/handler.ts` · confidence: heuristic
-
 The system SHALL returns the canonical name identifier for this producer, used by the feed registry to route configuration and cache entries.
 
 #### Scenario: ReturnsStableIdentifier
@@ -798,8 +796,6 @@ The system SHALL return a map with exactly three top-level keys — 'type' (feed
 > `internal/feeds/producer_insights.go`
 
 #### Requirement: Name
-
-> Implementation: `generateFilename` in `recipes/productivity/transcript-backup/handler.ts` · confidence: heuristic
 
 The system SHALL returns the canonical string identifier for this producer, used for feed registry lookup and cache keying.
 
@@ -2073,8 +2069,6 @@ The system SHALL return the input string with the leading '# ' prefix removed an
 > `internal/feeds/custom.go`
 
 #### Requirement: Name
-
-> Implementation: `generateFilename` in `recipes/productivity/transcript-backup/handler.ts` · confidence: heuristic
 
 The system SHALL returns the logical name of this custom feed producer, used to identify the feed in the registry and output envelope.
 
@@ -4039,8 +4033,6 @@ The system SHALL computes a human-friendly relative time label (e.g. 'in 15m', '
 - **THEN** Returns a weekday+time string (e.g. 'wednesday 2pm')
 
 #### Requirement: Name
-
-> Implementation: `generateFilename` in `recipes/productivity/transcript-backup/handler.ts` · confidence: heuristic
 
 The system SHALL returns the canonical feed identifier string used to register and look up this producer in the feed registry.
 
